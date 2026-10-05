@@ -46,6 +46,9 @@ MASTS = list(MAST_IDS["mast_ids"])
 ARM_PACKAGES = ["openarm", "so101", "none"]
 HARDWARE_PROFILES = ["mock", "gazebo", "real"]
 MATRIX = list(itertools.product(MASTS, ARM_PACKAGES))
+# xacro arg defaults of combined_robot.xacro (what an expansion with no override uses)
+ARG_DEFAULTS = {"mast_id": MAST_IDS["default"], "arm_package": "openarm", "hardware_profile": "mock",
+                "enable_planar_base": "false"}
 
 
 def expand_xml(**mappings):

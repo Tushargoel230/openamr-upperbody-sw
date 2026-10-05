@@ -6,9 +6,12 @@
       -> mast_base_link -> mast_mount_link                      (mast.xacro, datums + mast_ids)
            -> mast_{left,right}_arm_mount_link                  (declared by the upstream macro, see below)
                 -> openarm_{left,right}_* arms + grippers        (upstream openarm_v20_robot, one call per arm)
+                     -> {left,right}_wrist_camera_*              (upper_sensors.xacro)
+           -> head_camera_link / head_camera_optical_frame       (upper_sensors.xacro, on mast_mount_link)
+           -> so101_mount_link                                   (arm_package == so101: stub, A9 owns the rest)
+    world -> base_planar_joint -> base_link                      (only with enable_planar_base:=true)
 
-  Not here yet: ros2_control, sensors, the planar base joint. hardware_profile and enable_planar_base are
-  validated but have no effect until those land.
+  Not here yet: ros2_control. hardware_profile is validated but has no effect until it lands.
 
   Args: an unknown value for any arg fails expansion with the list of accepted values.
 -->
@@ -49,19 +52,36 @@
     <xacro:property name="openamr_hardware_profile_inert" lazy_eval="false"
                     value="${xacro.warning('hardware_profile:=' + hardware_profile + ' is accepted but has no effect yet: no ros2_control is emitted')}"/>
   </xacro:unless>
-  <xacro:if value="${enable_planar_base == 'true'}">
-    <xacro:property name="openamr_planar_base_inert" lazy_eval="false"
-                    value="${xacro.warning('enable_planar_base:=true is accepted but has no effect yet: no planar joint is emitted')}"/>
-  </xacro:if>
 
   <!-- Base: a full <robot> file from platform-sw, included unchanged; xacro merges its content. -->
   <xacro:include filename="$(find openamrobot_description)/urdf/robo_urdf.urdf.xacro"/>
+
+  <!-- A6: planar base joint — present, DISABLED by default (AD-30: base and arm never move together in OpenAMRobot 2.0). Enable only for future whole-body planning experiments. -->
+  <xacro:if value="${enable_planar_base == 'true'}">
+    <link name="world"/>
+    <!-- A planar joint moves in the plane normal to its axis; the URDF default axis is x, so z is set explicitly. -->
+    <joint name="base_planar_joint" type="planar">
+      <parent link="world"/>
+      <child link="base_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+    </joint>
+  </xacro:if>
 
   <xacro:include filename="$(find openamrobot_upperbody_description)/urdf/mast.xacro"/>
   <xacro:openamr_mast mast_id="${mast_id}" datums="${datums}" mast_ids="${mast_ids}"
                       arm_mounts="${arm_package == 'openarm'}"/>
 
-  <!-- so101: A9 owns it and nothing is emitted here. none: mast only. -->
+  <!-- so101: stub only. A9 (Jonathan) owns everything below so101_mount_link; nothing else is emitted for it here.
+       none: mast only. -->
+  <xacro:if value="${arm_package == 'so101'}">
+    <link name="so101_mount_link"/>
+    <joint name="so101_mount_joint" type="fixed">
+      <parent link="mast_mount_link"/>
+      <child link="so101_mount_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+  </xacro:if>
   <xacro:if value="${arm_package == 'openarm'}">
     <xacro:include filename="$(find openarm_description)/assets/robot/openarm_v2.0/urdf/utils/openarm_v20_robot.xacro"/>
     <xacro:property name="openarm_config_root" value="$(find openarm_description)/assets/robot/openarm_v2.0/config"/>
@@ -74,6 +94,10 @@
                              collapse_internal_empty_links="true" emit_grasp_frame="true"/>
     <xacro:openarm_v20_robot config_root="${openarm_config_root}" robot_preset="${xacro.load_yaml(right_preset_file)}"
                              collapse_internal_empty_links="true" emit_grasp_frame="true"/>
+
+    <!-- Needs the openarm_*_ee_base_link links the two calls above emit. -->
+    <xacro:include filename="$(find openamrobot_upperbody_description)/urdf/upper_sensors.xacro"/>
+    <xacro:openamr_upper_sensors datums="${datums}"/>
   </xacro:if>
 
 </robot>
