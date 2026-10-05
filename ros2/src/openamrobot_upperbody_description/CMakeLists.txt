@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 project(openamrobot_upperbody_description)
 find_package(ament_cmake REQUIRED)
-install(DIRECTORY urdf meshes config launch DESTINATION share/openamrobot_upperbody_description)
+install(DIRECTORY urdf meshes config launch test DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
@@ -21,6 +21,10 @@ if(BUILD_TESTING)
   # Every buildable combination published by robot_state_publisher and read back from TF.
   ament_add_ros_isolated_pytest_test(test_upperbody_tf test/test_upperbody_tf.py
     ENV ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST TIMEOUT 900)
+
+  ament_add_pytest_test(t01_expansion test/test_t01_expansion.py TIMEOUT 600)
+  ament_add_pytest_test(t03_tree test/test_t03_tree.py TIMEOUT 600)
+  ament_add_pytest_test(t06_arg_validation test/test_t06_arg_validation.py TIMEOUT 600)
 endif()
 
 ament_package()
