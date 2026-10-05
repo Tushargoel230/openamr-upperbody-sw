@@ -2,7 +2,7 @@
 # Schema v1, see 10_architecture/DATUMS.md. Values may change; names and the frame structure may not.
 # Computed values (e.g. mast_offset) are NOT stored here; upstream-owned values are read from upstream YAML.
 schema_version: 1
-revision: "2026-10-08.a"          # bump on every value change; goes into config_id
+revision: "2026-10-08.b"          # bump on every change to this file; goes into config_id (test_datums_revision.py enforces it)
 units: {length: m, angle: rad, mass: kg}
 
 # Datums that are reported but never feed the model (DATUMS.md rule 1).
@@ -12,6 +12,13 @@ report_only:
   - envelope_max_width
   - envelope_max_depth
   - gross_mass_limit
+
+# Datums whose xacro consumer has not been written yet: <datum>: <step that will consume it>.
+# The step that adds the consumer deletes the entry in the same commit; T13 fails if it does not.
+pending_reference:
+  head_camera_pose: S4
+  left_wrist_camera_pose: S4
+  right_wrist_camera_pose: S4
 
 datums:
   base_link_height_above_floor:
