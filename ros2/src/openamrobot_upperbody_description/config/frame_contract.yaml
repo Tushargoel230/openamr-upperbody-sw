@@ -7,11 +7,17 @@
 #   type       joint: the URDF joint type.
 #              link: the type of the joint that attaches it to its parent; `root` for a link with no parent joint.
 #   parent     parent link (for a joint: the link it connects from). null for a root link.
+#   variants   instead of type + parent, for an entry whose type and parent depend on an arg: a list of
+#              {when, type, parent}. `when` has the same form as `condition`. Exactly one variant must match every
+#              expansion (T04 fails on none or on several), so the contract cannot be silently wrong in one of the
+#              model's own expansions.
 #   req        R  required in every expansion
 #              C  conditional on `condition`
 #              W  expected but provided by another owner; missing is a WARN, not a FAIL
-#   condition  null, or `<arg> == <value>` over the xacro args
+#   condition  null, or `<arg> == <value>` over the xacro args (string comparison, as xacro stores the args)
 #   owner      who may change the name or parent
+#   collision_free        true: the link carries a visual at most and no <collision> (T04 checks it)
+#   collision_free_reason why
 #   note       optional, for humans
 # Only names FRAMES.md gives are listed: base joints other than the drive-wheel joints, and the joints of the
 # optical, so101 and grasp frames, are not part of the contract.
@@ -19,7 +25,15 @@ schema_version: 1
 entries:
 
   # Base - owned by openamr-platform-sw. Existing names, unchanged (ADR-005).
-  - {name: base_link, kind: link, type: root, parent: null, req: R, condition: null, owner: platform-sw, note: "Root of the tree and Nav2 robot_base_frame. Origin is not on the floor. When enable_planar_base == true its parent is world."}
+  - name: base_link
+    kind: link
+    variants:
+      - {when: "enable_planar_base == false", type: root, parent: null}
+      - {when: "enable_planar_base == true", type: planar, parent: world}
+    req: R
+    condition: null
+    owner: platform-sw
+    note: "Nav2 robot_base_frame (ADR-005). Origin is not on the floor. The root of the tree by default; with enable_planar_base == true the root is world and base_link hangs from base_planar_joint."
   - {name: left_wheel_joint, kind: joint, type: continuous, parent: base_link, req: R, condition: null, owner: platform-sw}
   - {name: left_wheel_link, kind: link, type: continuous, parent: base_link, req: R, condition: null, owner: platform-sw}
   - {name: right_wheel_joint, kind: joint, type: continuous, parent: base_link, req: R, condition: null, owner: platform-sw}
@@ -52,13 +66,13 @@ entries:
   - {name: right_arm_mount_joint, kind: joint, type: fixed, parent: mast_mount_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)"}
   - {name: mast_right_arm_mount_link, kind: link, type: fixed, parent: mast_mount_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)", note: "J1_A plate. The link is emitted by the upstream macro as its root_frame (ADR-008); we declare only the joint."}
   - {name: head_camera_joint, kind: joint, type: fixed, parent: mast_mount_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)"}
-  - {name: head_camera_link, kind: link, type: fixed, parent: mast_mount_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)", note: "Plain frame in A6; the ZED wrapper is deferred."}
+  - {name: head_camera_link, kind: link, type: fixed, parent: mast_mount_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)", note: "Plain frame in A6; the ZED wrapper is deferred.", collision_free: true, collision_free_reason: "Marker box visual only: no collision, no inertial. The box shows where the frame is; it is not a model of the sensor, so nothing may plan around it."}
   - {name: head_camera_optical_frame, kind: link, type: fixed, parent: head_camera_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)", note: "REP-103 optical convention."}
   - {name: left_wrist_camera_joint, kind: joint, type: fixed, parent: openarm_left_ee_base_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)"}
-  - {name: left_wrist_camera_link, kind: link, type: fixed, parent: openarm_left_ee_base_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)", note: "Placeholder pose until the kit datum is known."}
+  - {name: left_wrist_camera_link, kind: link, type: fixed, parent: openarm_left_ee_base_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)", note: "Placeholder pose until the kit datum is known.", collision_free: true, collision_free_reason: "Marker box visual only: no collision, no inertial. The box shows where the frame is; it is not a model of the sensor, so nothing may plan around it."}
   - {name: left_wrist_camera_optical_frame, kind: link, type: fixed, parent: left_wrist_camera_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)", note: "REP-103 optical convention."}
   - {name: right_wrist_camera_joint, kind: joint, type: fixed, parent: openarm_right_ee_base_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)"}
-  - {name: right_wrist_camera_link, kind: link, type: fixed, parent: openarm_right_ee_base_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)", note: "Placeholder pose until the kit datum is known."}
+  - {name: right_wrist_camera_link, kind: link, type: fixed, parent: openarm_right_ee_base_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)", note: "Placeholder pose until the kit datum is known.", collision_free: true, collision_free_reason: "Marker box visual only: no collision, no inertial. The box shows where the frame is; it is not a model of the sensor, so nothing may plan around it."}
   - {name: right_wrist_camera_optical_frame, kind: link, type: fixed, parent: right_wrist_camera_link, req: C, condition: "arm_package == openarm", owner: "A6 (openamr-upperbody-sw)", note: "REP-103 optical convention."}
   - {name: so101_mount_link, kind: link, type: fixed, parent: mast_mount_link, req: C, condition: "arm_package == so101", owner: "A6 (openamr-upperbody-sw)", note: "Stub only. A9 (Jonathan) owns everything below it."}
   - {name: world, kind: link, type: root, parent: null, req: C, condition: "enable_planar_base == true", owner: "A6 (openamr-upperbody-sw)", note: "Becomes the root only when the planar base joint is enabled."}

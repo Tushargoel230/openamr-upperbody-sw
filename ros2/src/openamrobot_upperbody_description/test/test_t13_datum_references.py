@@ -101,12 +101,13 @@ def test_t13_extractor_finds_the_known_references():
             "mast_section", "mast_mass"} <= keys
 
 
-def test_t13_pending_entries_are_the_expected_s4_sensors_and_unreferenced():
+def test_t13_camera_poses_are_consumed_since_s4():
+    """S4 references the three camera poses, so it must have deleted their pending_reference entries."""
     doc = load_datums()
     referenced = referenced_in_package()
     for key in ("head_camera_pose", "left_wrist_camera_pose", "right_wrist_camera_pose"):
-        if key in doc.get("pending_reference", {}):
-            assert key not in referenced
+        assert key in referenced, f"{key} should be consumed by upper_sensors.xacro"
+        assert key not in doc.get("pending_reference", {}), f"{key} is referenced: delete its pending_reference entry"
 
 
 # --- the checker and the extractor themselves ---------------------------------------------------------------

@@ -12,6 +12,9 @@ the arms and base as missing geometry.
 Args
   mast_id      mast_1300 | mast_1350 | mast_1400 | mast_1450   (default mast_1350, the release configuration)
   arm_package  openarm | so101 | none                           (default openarm)
+  enable_planar_base  true | false                              (default false; AD-30: base and arm never move together.
+               With true a `world` link and base_planar_joint sit above base_link, which is then no longer the root.
+               robot_state_publisher / joint_state_publisher_gui may not drive a planar joint: it is for experiments.)
 An unknown value stops xacro with the list of accepted values.
 """
 from launch import LaunchDescription
@@ -27,6 +30,7 @@ PKG = "openamrobot_upperbody_description"
 def generate_launch_description():
     mast_id = LaunchConfiguration("mast_id")
     arm_package = LaunchConfiguration("arm_package")
+    enable_planar_base = LaunchConfiguration("enable_planar_base")
 
     robot_description = ParameterValue(
         Command([
@@ -34,6 +38,7 @@ def generate_launch_description():
             PathJoinSubstitution([FindPackageShare(PKG), "urdf", "combined_robot.xacro"]),
             " mast_id:=", mast_id,
             " arm_package:=", arm_package,
+            " enable_planar_base:=", enable_planar_base,
         ]),
         value_type=str,
     )
@@ -43,6 +48,8 @@ def generate_launch_description():
                               description="mast_1300 | mast_1350 | mast_1400 | mast_1450"),
         DeclareLaunchArgument("arm_package", default_value="openarm",
                               description="openarm | so101 | none"),
+        DeclareLaunchArgument("enable_planar_base", default_value="false",
+                              description="true | false. Emits world + base_planar_joint above base_link (experiments only)"),
         Node(package="robot_state_publisher", executable="robot_state_publisher",
              parameters=[{"robot_description": robot_description}], output="screen"),
         Node(package="joint_state_publisher_gui", executable="joint_state_publisher_gui", output="screen"),
