@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 project(openamrobot_upperbody_description)
 find_package(ament_cmake REQUIRED)
-install(DIRECTORY urdf meshes config launch test DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY urdf meshes config test DESTINATION share/${PROJECT_NAME})
 install(PROGRAMS
   scripts/datums_report.py
   scripts/print_config_id.py

@@ -2,7 +2,11 @@
 
 Starts robot_state_publisher, joint_state_publisher_gui and RViz2 for combined_robot.xacro.
 
-    ros2 launch openamrobot_upperbody_description view.launch.py mast_id:=mast_1350 arm_package:=openarm
+    ros2 launch openamrobot_upperbody_bringup view.launch.py mast_id:=mast_1350 arm_package:=openarm
+
+The description (xacro, RViz config) stays in openamrobot_upperbody_description; this launch file moved here with the
+rest of the bringup. Nothing is controlled here: joint_state_publisher_gui drives the joints. For controllers see
+mock.launch.py.
 
 Overlay: the OpenArm meshes are referenced as package://openarm_description/..., and the base meshes as
 package://openamrobot_description/.... They only resolve once the workspace overlay that contains our build is
