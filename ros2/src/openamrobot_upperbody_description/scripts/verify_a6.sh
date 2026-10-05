@@ -7,10 +7,13 @@
 #   ros2 run openamrobot_upperbody_description verify_a6.sh        # or run this file directly
 #
 # Run `colcon build` first: the tests and this report describe the INSTALLED package (check I01 fails if it is stale).
+# The tests of openamrobot_upperbody_control and openamrobot_upperbody_bringup run too: L01 is the bringup launch test.
 # OPENAMR_EVIDENCE_DIR overrides where evidence goes; OPENAMR_WS overrides the workspace root.
 set -u
 
 PKG=openamrobot_upperbody_description
+BRINGUP=openamrobot_upperbody_bringup
+CONTROL=openamrobot_upperbody_control
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 workspace_root() {
@@ -36,12 +39,14 @@ START="$(date +%s.%N)"
 echo "== verify_a6: workspace $WS"
 EVIDENCE_DIR="$(python3 "$HERE/build_evidence.py" --clear)" || exit 2
 echo "== evidence directory: $EVIDENCE_DIR (previous sidecars cleared)"
-rm -f "$WS/build/$PKG/test_results/$PKG/"*.xunit.xml 2>/dev/null
+rm -f "$WS/build/$PKG/test_results/$PKG/"*.xunit.xml "$WS/build/$BRINGUP/test_results/$BRINGUP/"*.xunit.xml 2>/dev/null
 
-echo; echo "== colcon test ($PKG)"
-( cd "$WS" && colcon test --packages-select "$PKG" --event-handlers console_cohesion+ )
+echo; echo "== colcon test ($PKG, $CONTROL, $BRINGUP)"
+( cd "$WS" && colcon test --packages-select "$PKG" "$CONTROL" "$BRINGUP" --event-handlers console_cohesion+ )
 RC_COLCON=$?
-( cd "$WS" && colcon test-result --test-result-base "build/$PKG" --verbose 2>&1 | tail -n 25 )
+for p in "$PKG" "$CONTROL" "$BRINGUP"; do
+  ( cd "$WS" && colcon test-result --test-result-base "build/$p" --verbose 2>&1 | tail -n 25 )
+done
 
 echo; echo "== T02: check_urdf on every T01 expansion"
 python3 "$HERE/check_urdf_matrix.py"
