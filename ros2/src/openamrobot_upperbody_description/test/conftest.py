@@ -7,6 +7,7 @@ import functools
 import itertools
 import json
 import os
+import sys
 import xml.etree.ElementTree as ET
 from collections import Counter
 
@@ -14,6 +15,11 @@ import pytest
 import xacro
 import yaml
 from ament_index_python.packages import get_package_share_directory
+
+# scripts/ holds the evidence helpers (evidence_common.py ...), which the tests share with the commands.
+SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "scripts")
+sys.path.insert(0, SCRIPTS)
+import evidence_common  # noqa: E402
 
 PKG = "openamrobot_upperbody_description"
 SHARE = get_package_share_directory(PKG)
@@ -25,6 +31,13 @@ with open(os.path.join(SHARE, "config", "mast_ids.yaml")) as _f:
 DATUMS_FILE = os.path.join(SHARE, "config", "datums.yaml")
 SCHEMA_FILE = os.path.join(SHARE, "config", "datums.schema.json")
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+
+
+def write_sidecar(check_id, slug, name, result, details):
+    """Record a check's result and details in the evidence directory (`$OPENAMR_EVIDENCE_DIR`, else
+    `<workspace>/evidence`, never a temp dir) for build_evidence.py. Returns the path."""
+    return evidence_common.write_sidecar(check_id, slug, name, result, details,
+                                         directory=evidence_common.evidence_dir(SHARE))
 
 
 def load_yaml(path):

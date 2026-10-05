@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import pytest
 
-from urdf_utils import fixed_fk, position, rpy_to_matrix
+from urdf_utils import fixed_fk, position, rpy_to_matrix, zero_pose_poses
 
 
 def _urdf(*joints):
@@ -59,3 +59,19 @@ def test_non_ancestor_is_an_error():
     root = _urdf(("j1", "fixed", "a", "b", ""), ("j2", "fixed", "a", "c", ""))
     with pytest.raises(ValueError, match="not an ancestor"):
         fixed_fk(root, "b", "c")
+
+
+def test_zero_pose_poses_treat_movable_joints_as_their_origin_only():
+    root = ET.fromstring(
+        "<robot><link name='a'/><link name='b'/><link name='c'/><link name='d'/>"
+        "<joint name='ab' type='fixed'><parent link='a'/><child link='b'/><origin xyz='1 0 0' rpy='0 0 1.5707963267948966'/></joint>"
+        "<joint name='bc' type='revolute'><parent link='b'/><child link='c'/><origin xyz='1 0 0'/><axis xyz='0 0 1'/></joint>"
+        "<joint name='cd' type='continuous'><parent link='c'/><child link='d'/><origin xyz='0 0 2'/></joint></robot>")
+    poses = zero_pose_poses(root)
+    assert set(poses) == {"a", "b", "c", "d"}
+    assert np.allclose(position(poses["a"]), [0, 0, 0])
+    # b is yawed 90 deg, so c's x offset of 1 lands on world y; the revolute joint adds no rotation at q = 0
+    assert np.allclose(position(poses["c"]), [1, 1, 0])
+    assert np.allclose(position(poses["d"]), [1, 1, 2])
+    # fixed_fk, which refuses movable joints, agrees where it is allowed to answer
+    assert np.allclose(poses["b"], fixed_fk(root, "a", "b"))

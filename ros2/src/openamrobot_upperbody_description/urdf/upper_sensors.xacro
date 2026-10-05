@@ -16,8 +16,9 @@
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <!-- Marker box edge, metres. A drawing aid like the 1/2 and 1/12 of a cuboid inertia, not a hardware dimension: no
-       collision, no inertial and no datum depends on it. -->
+  <!-- Visualization constant (DATUMS.md): edge, in metres, of the marker box drawn for each camera frame. It describes
+       how the model is drawn, not the robot, so it is not a datum. It may appear only inside a <visual>: no collision,
+       no inertial, no joint origin and no datum depends on it (T13 enforces this). -->
   <xacro:property name="openamr_sensor_marker_edge" value="0.04"/>
 
   <xacro:macro name="openamr_camera_frames" params="name parent pose">
