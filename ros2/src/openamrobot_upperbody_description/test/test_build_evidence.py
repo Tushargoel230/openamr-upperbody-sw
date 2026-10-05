@@ -18,7 +18,7 @@ def test_every_a6_check_id_in_verification_md_is_in_the_report():
     ids = [i for i, _ in be.A6_CHECKS]
     assert ids == [f"T{n:02d}" for n in range(1, 17)] + ["L01", "E01"]
     assert len(set(i for i, _ in be.A6_CHECKS + be.EXTRA_CHECKS)) == len(be.A6_CHECKS + be.EXTRA_CHECKS)
-    assert set(be.NOT_IMPLEMENTED) == {"T14", "T15", "T16", "L01"} and set(be.NOT_IMPLEMENTED) <= set(ids)
+    assert set(be.NOT_IMPLEMENTED) <= set(ids)
     assert be.SIDECAR_REQUIRED <= {i for i, _ in be.A6_CHECKS + be.EXTRA_CHECKS}
 
 
@@ -57,14 +57,19 @@ def _sidecar(result, **details):
     ("T10", GOOD, None, "FAIL"),                                           # sidecar required, test did not complete
     ("E01", None, None, "FAIL"),
     ("T05", None, None, "FAIL"),                                           # no result is not a pass
-    ("T14", None, None, "SKIP"),                                           # explicitly not implemented
-    ("L01", None, None, "SKIP"),
+    ("T14", None, None, "FAIL"),                                           # implemented since P06: no result is a FAIL
+    ("L01", None, None, "FAIL"),
     ("T01", {**GOOD, "skipped": 5}, None, "SKIP"),                         # every test skipped
     ("T01", {**GOOD, "skipped": 2}, None, "PASS"),                         # some ran and passed
     ("C01", {**GOOD, "skipped": 2}, _sidecar("PASS"), "PASS"),
 ])
 def test_combine(check_id, counts, sidecar, expected):
     assert be.combine(check_id, counts, sidecar)[0] == expected
+
+
+def test_a_check_listed_as_not_implemented_is_a_skip_with_the_reason(monkeypatch):
+    monkeypatch.setitem(be.NOT_IMPLEMENTED, "T14", "no test yet")
+    assert be.combine("T14", None, None) == ("SKIP", {"reason": "no test yet"})
 
 
 def test_combine_keeps_the_sidecar_details_and_the_test_counts():
@@ -114,6 +119,19 @@ def test_read_xunit_counts_per_id_and_ignores_stale_files(tmp_path):
     assert "T03" not in counts and stale == ["old.xunit.xml"]
 
 
+def test_read_xunit_dirs_merges_a_second_package_and_adds_counts_for_one_id(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    _xunit(tmp_path / "a" / "a.xunit.xml", [("test_t01_expansion", "test_t01_ok", "")])
+    _xunit(tmp_path / "b" / "launch.xunit.xml", [("TestMockControllers", "test_l01_1_all_five_controllers_active", ""),
+                                                 ("TestShutdown", "test_l01_processes_exit_cleanly", "<failure message='x'/>")])
+    counts, stale = be.read_xunit_dirs([str(tmp_path / "a"), str(tmp_path / "b"), str(tmp_path / "missing")],
+                                       since=time.time() - 3600)
+    assert counts["T01"]["tests"] == 1 and stale == []
+    assert counts["L01"]["tests"] == 2 and counts["L01"]["failures"] == 1
+    assert be.combine("L01", counts["L01"], None)[0] == "FAIL"        # one failing L01 test fails L01
+
+
 def test_a_stale_sidecar_is_not_used(tmp_path):
     ev.write_sidecar("T99", "probe", "probe", "PASS", {}, directory=str(tmp_path))
     old = next(p for p in tmp_path.iterdir())
@@ -134,7 +152,7 @@ def test_summary_and_exit_status_follow_the_checks(tmp_path, monkeypatch):
     doc = json.loads(reports[0].read_text())
     assert doc["schema"] == "openamr.evidence.v1" and doc["evidence_class"] == "static+mock" and doc["profile"] == "dev"
     by_id = {c["id"]: c["result"] for c in doc["checks"]}
-    assert by_id["T01"] == "FAIL" and by_id["T14"] == "SKIP" and by_id["V01"] == "WARN"
+    assert by_id["T01"] == "FAIL" and by_id["T14"] == "FAIL" and by_id["L01"] == "FAIL" and by_id["V01"] == "WARN"
     assert by_id["AUX"] == "FAIL"                                          # the three steps were never run
     assert set(doc["config_ids"]) and all(ev.SHA256_RE.match(v) for v in doc["config_ids"].values())
     assert len(doc["config_ids"]) == 14 and "mast_1350/openarm/mock" in doc["config_ids"]

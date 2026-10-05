@@ -2,12 +2,14 @@
 """Assemble the A6 evidence report. Called by verify_a6.sh after `colcon test` and check_urdf_matrix.py have run.
 
     build_evidence.py --since EPOCH [--step name=returncode ...] [--repo PATH] [--results-dir PATH]
+                      [--bringup-results-dir PATH]
 
 Writes `<evidence dir>/<UTC timestamp>_dev.json` in the openamr.evidence.v1 shape of VERIFICATION.md and prints a
 summary. Exit code is non-zero iff any check is FAIL.
 
 Where each result comes from
-  - pytest results (colcon's xunit files) are mapped to a check ID by the `test_<id>_` prefix of the test function, else of
+  - pytest results (colcon's xunit files, from this package and from openamrobot_upperbody_bringup, whose launch test
+    is L01) are mapped to a check ID by the `test_<id>_` prefix of the test function, else of
     its module. A failing or erroring test fails its ID.
   - a check's sidecar (`<ID>_<slug>.json` in the evidence directory, written by the test or by check_urdf_matrix.py) adds
     its details and can raise a WARN. Sidecars and xunit files older than --since are ignored, so a stale result from an
@@ -51,8 +53,8 @@ A6_CHECKS = [
     ("T13", "datum references; visualization constants"),
     ("T14", "mock profile has no OpenArmHW plugin"),
     ("T15", "gazebo profile uses GazeboSimSystem for arm joints"),
-    ("T16", "real profile expands"),
-    ("L01", "launch test: controllers reach active on mock"),
+    ("T16", "real profile expands with OpenArmHW and its CAN parameters"),
+    ("L01", "launch test: five controllers active on mock, one trajectory followed"),
     ("E01", "assembled envelope height, width, depth (lower bound)"),
 ]
 EXTRA_CHECKS = [
@@ -64,12 +66,9 @@ EXTRA_CHECKS = [
     ("I01", "installed package matches the source the tests and this report describe"),
     ("AUX", "supporting tests and steps (urdf_utils, datums_report, s4_sensors, evidence_dir, build_evidence, scripts)"),
 ]
-NOT_IMPLEMENTED = {
-    "T14": "ros2_control profiles are S7 (P06): combined_robot.xacro emits no ros2_control block yet, hardware_profile has no effect",
-    "T15": "ros2_control profiles are S7 (P06): combined_robot.xacro emits no ros2_control block yet, hardware_profile has no effect",
-    "T16": "ros2_control profiles are S7 (P06): the `real` profile expands, but nothing profile-specific exists to check",
-    "L01": "arm ros2_control profiles and the mock bringup are S7 (P06); openamrobot_upperbody_bringup is a scaffold",
-}
+# A check that has no test yet is listed here with the reason, and reports SKIP. Empty since P06 landed T14-T16 and L01.
+NOT_IMPLEMENTED = {}
+BRINGUP_PKG = "openamrobot_upperbody_bringup"
 # Checks whose sidecar is where their details (and any WARN) live: no sidecar means the test did not complete.
 SIDECAR_REQUIRED = {"T02", "T04", "T07", "T08", "T09", "T10", "T13", "E01", "C01", "W01", "W02"}
 # Test modules with no check ID in their name.
@@ -110,6 +109,22 @@ def read_xunit(results_dir, since):
             elif case.find("skipped") is not None:
                 row["skipped"] += 1
     return dict(counts), stale
+
+
+def read_xunit_dirs(results_dirs, since):
+    """read_xunit over several result directories; counts for the same ID add up."""
+    merged, stale = {}, []
+    for results_dir in results_dirs:
+        counts, old = read_xunit(results_dir, since)
+        stale += old
+        for cid, row in counts.items():
+            if cid in merged:
+                for key in ("tests", "failures", "skipped"):
+                    merged[cid][key] += row[key]
+                merged[cid]["failed_tests"] += row["failed_tests"]
+            else:
+                merged[cid] = row
+    return merged, stale
 
 
 def combine(check_id, counts, sidecar):
@@ -186,8 +201,11 @@ def limitations(datums, sidecars):
         "real envelope. A4 decides",
         "T10 reports what the description models. The battery, hub motors, electronics and the mast structure are not "
         "modelled (all F2S), so the total is not the gross mass of the robot",
-        "T14, T15, T16 and L01 are SKIP, not passed: ros2_control profiles and the mock bringup are S7. hardware_profile "
-        "has no effect on the expansion yet",
+        "T14, T15 and T16 are expansion checks: nothing loads the gazebo or the real plugin. gz_ros2_control's handling of "
+        "the finger_joint2 mimic is a TODO (upstream leaves it out of ros2_control), and the real profile cannot even be "
+        "built here (openarm_hardware needs OpenArmCAN)",
+        "L01 launches mock.launch.py only: controller_manager on mock_components/GenericSystem, which reflects its command "
+        "back as state, so it shows the controller wiring and not tracking performance",
         "T02 check_urdf parses the XML and builds the link tree; it does not resolve package:// mesh URIs",
         "W01: KDL consumers (robot_state_publisher, MoveIt in A7) do not see base_link's inertia",
         "W02: with enable_planar_base:=true KDL consumers see world -> base_link as static; planar base motion can "
@@ -195,8 +213,8 @@ def limitations(datums, sidecars):
         "V01: no human has looked at an RViz window; nothing in this report is a visual inspection",
         "config ids are hashes of xacro's output text: a different xacro version that formats a number differently "
         "gives a different id for the same sources",
-        "nothing was launched on mock hardware: `static+mock` names the evidence class and the hardware_profile of the "
-        "expansions. The only runtime step is the robot_state_publisher observation for W02",
+        "`static+mock` names the evidence class: expansions of every hardware_profile, plus a headless launch of the mock "
+        "bringup (L01) and the robot_state_publisher observation for W02. Nothing ran on Gazebo or real hardware",
         "no physical evidence; static expansion and zero-pose FK only",
     ]
     return out
@@ -211,7 +229,8 @@ def build(args):
     results_dir = args.results_dir or os.path.join(workspace, "build", ev.PKG, "test_results", ev.PKG)
     steps = dict(s.split("=", 1) for s in args.step)
 
-    counts, stale_xunit = read_xunit(results_dir, args.since)
+    bringup_results_dir = args.bringup_results_dir or os.path.join(workspace, "build", BRINGUP_PKG, "test_results", BRINGUP_PKG)
+    counts, stale_xunit = read_xunit_dirs([results_dir, bringup_results_dir], args.since)
     sidecars = fresh_sidecars(edir, args.since)
 
     differ = trees_differ(pkg_src, share)
@@ -329,6 +348,8 @@ def main(argv=None):
                         help="return code of a step verify_a6.sh ran: " + ", ".join(EXPECTED_STEPS))
     parser.add_argument("--repo", default=None, help=f"the {REPO} checkout (default <workspace>/src/{REPO})")
     parser.add_argument("--results-dir", default=None, help="colcon's xunit directory for the package")
+    parser.add_argument("--bringup-results-dir", default=None,
+                        help=f"colcon's xunit directory for {BRINGUP_PKG} (L01); default <workspace>/build/...")
     args = parser.parse_args(argv)
     if args.clear:
         directory = ev.evidence_dir()
