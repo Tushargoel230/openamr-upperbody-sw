@@ -2,10 +2,10 @@
 
 Upper-body software for OpenAMRobot 2.0: the combined mobile base, fixed mast and OpenArm 2.0 arms. An actuated lift is deferred to OpenAMRobot 3.0.
 
-> **Status:** Development scaffold. The ROS 2 packages contain manifests and empty directories; the combined model and integration are not yet implemented.
+> **Status:** Development. The combined robot description is implemented and verified statically (xacro expansion, `check_urdf`, zero-pose kinematics, unit tests); the evidence is static and mock only, and several datums are placeholders. The control, bringup, Gazebo and MoveIt packages are still manifests and empty directories.
 
 ## What lives here
-- **Combined description:** base + custom fixed mast + arms in one URDF/Xacro, using the official OpenArm arm-mount frames.
+- **Combined description:** base + custom fixed mast + arms in one URDF/Xacro, using the official OpenArm arm-mount frames. Implemented in [`openamrobot_upperbody_description`](ros2/src/openamrobot_upperbody_description/README.md): arguments, datums, how to view and verify it, and its known limitations.
 - **MoveIt:** arm planning groups and collision configuration on the combined model. No actuated lift planning group in OpenAMRobot 2.0.
 - **Bringup:** launch files composing the base, fixed mast and arm integration from `openamrobot-manipulation`.
 - **Configuration metadata:** selected mast position, model/configuration identity and calibration references.
