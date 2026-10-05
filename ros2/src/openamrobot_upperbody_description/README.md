@@ -4,8 +4,8 @@ The canonical OpenAMRobot 2.0 robot description: the platform base, a fixed MISU
 OpenArm v2.0 arms, expanded from one xacro entry point.
 
 > **Evidence class: static + mock.** Everything here is verified by xacro expansion, `check_urdf`, zero-pose
-> forward kinematics and unit tests. Nothing has been launched on hardware, nothing has run in Gazebo, and no `ros2_control`
-> is emitted yet. Read [Known limitations](#known-limitations) before relying on any number in the model.
+> forward kinematics and unit tests, plus one headless launch of the mock bringup (L01). Nothing has been launched on
+> hardware or in Gazebo; the `gazebo` and `real` `ros2_control` blocks are checked by expansion only. Read [Known limitations](#known-limitations) before relying on any number in the model.
 
 ## What it is
 
@@ -36,7 +36,7 @@ configuration id (see [Configuration id](#configuration-id)).
 |---|---|---|---|
 | `mast_id` | `mast_1300`, `mast_1350`, `mast_1400`, `mast_1450` | `mast_1350` | Shoulder-axis height above the floor in mm. `mast_1350` is the installed release configuration; the other three are analysis positions, not installed configurations. Mast top is 1500 mm; 1700 mm is the maximum assembled robot height, not a shoulder height. |
 | `arm_package` | `openarm`, `so101`, `none` | `openarm` | `openarm`: two upstream OpenArm v2.0 arms. `so101`: a single `so101_mount_link` stub on `mast_mount_link`, nothing below it. `none`: base and mast only. |
-| `hardware_profile` | `mock`, `gazebo`, `real` | `mock` | Validated and part of the configuration id, but **has no effect on the model yet**: no `ros2_control` block is emitted. Anything other than `mock` prints a warning saying so. |
+| `hardware_profile` | `mock`, `gazebo`, `real` | `mock` | Selects the arm `ros2_control` plugin (ADR-003): `mock` = `mock_components/GenericSystem` and `real` = `openarm_hardware/OpenArmHW`, both through the upstream bimanual macro; `gazebo` = our own block with `gz_ros2_control/GazeboSimSystem`. Part of the configuration id. See [ros2_control](#ros2_control). |
 | `enable_planar_base` | `true`, `false` | `false` | `true` adds a `world` link and `base_planar_joint` (type `planar`, axis `0 0 1`) above `base_link`. Off by default: base and arm never move together in OpenAMRobot 2.0. |
 | `datums_file` | path | `config/datums.yaml` | Alternative datum file, used by the tests. |
 
@@ -64,10 +64,10 @@ The tests and the evidence report describe the **installed** package, so rebuild
 ## View it
 
 ```bash
-ros2 launch openamrobot_upperbody_description view.launch.py mast_id:=mast_1350
+ros2 launch openamrobot_upperbody_bringup view.launch.py mast_id:=mast_1350
 ```
 
-This starts `robot_state_publisher`, `joint_state_publisher_gui` and RViz2 (fixed frame `base_link`). Source the workspace
+The launch file lives in `openamrobot_upperbody_bringup`; the model and the RViz config stay here. It starts `robot_state_publisher`, `joint_state_publisher_gui` and RViz2 (fixed frame `base_link`). Source the workspace
 overlay first: the OpenArm and base meshes are `package://` URIs that only resolve through it, and without it RViz loads
 the model but draws the arms and base as missing geometry. The launch accepts `mast_id`, `arm_package` and
 `enable_planar_base`. With `enable_planar_base:=true` the robot cannot be driven from here: `robot_state_publisher` treats
@@ -75,6 +75,27 @@ the planar joint as fixed (check W02).
 
 The launch has started without xacro or mesh errors, but **no person has looked at the RViz window yet** (check V01 is a
 WARN until someone does).
+
+## ros2_control
+
+`urdf/ros2_control.xacro` defines `openamr_arm_ros2_control(hardware_profile)`, called from `combined_robot.xacro` for
+`arm_package:=openarm` only. The mobile base never gets a `<ros2_control>` block (ADR-003).
+
+| `hardware_profile` | Arm plugin | How |
+|---|---|---|
+| `mock` | `mock_components/GenericSystem` | upstream `openarm_bimanual_ros2_control`, `use_fake_hardware` true |
+| `gazebo` | `gz_ros2_control/GazeboSimSystem` | our block `openamr_arms_gazebo`, the same joints and interfaces |
+| `real` | `openarm_hardware/OpenArmHW` | upstream `openarm_bimanual_ros2_control`, `use_fake_hardware` false (CAN-FD) |
+
+`mock` and `real` call the upstream macro as upstream's own top-level v2.0 file does (same gains file, same finger-mimic
+file, same prefixes); the CAN interfaces are not passed and take upstream's defaults (`can1` left, `can0` right). T14 and
+T16 assert that the two blocks equal that file's expansion. The controllers are in `openamrobot_upperbody_control`
+(`config/arm_controllers.yaml`, one file for all three profiles) and are started by
+`ros2 launch openamrobot_upperbody_bringup mock.launch.py`.
+
+`openarm_*_finger_joint2` is not declared under `ros2_control`, as upstream leaves it out; the URDF `<mimic>` follows
+`finger_joint1`. Whether Gazebo needs a `mimic` parameter there is a TODO in `ros2_control.xacro`. The Gazebo world plugin
+(`gz_ros2_control-system`, with the controller YAML path) is not here: it belongs to the Gazebo package.
 
 ## Add a mast ID
 
@@ -90,7 +111,7 @@ all read this file, so nothing else needs a code change. Then:
 
 1. Only one ID may be `class: release`, and it must be `default`; `analysis` IDs are not installed configurations.
 2. The shoulder height must be compatible with the mast top and the maximum assembled height in the same file.
-3. Update the ID lists in the `view.launch.py` description strings and in this README.
+3. Update the ID lists in the `view.launch.py` and `mock.launch.py` description strings (`openamrobot_upperbody_bringup`) and in this README.
 4. Run `verify_a6.sh`: T05 asserts that `openarm_left_base_link` sits at exactly the new shoulder height, and the
    configuration id of the new mast ID will differ from every existing one.
 
@@ -153,7 +174,7 @@ source /opt/ros/jazzy/setup.bash && source install/setup.bash
 ros2 run openamrobot_upperbody_description verify_a6.sh
 ```
 
-`verify_a6.sh` runs this package's `colcon test`, the `check_urdf` matrix, the datum report and the configuration ids, and
+`verify_a6.sh` runs this package's `colcon test` (and that of `openamrobot_upperbody_control` and `openamrobot_upperbody_bringup`, whose launch test is L01), the `check_urdf` matrix, the datum report and the configuration ids, and
 writes `<workspace>/evidence/<UTC timestamp>_dev.json` (`openamr.evidence.v1`, evidence class `static+mock`). Set
 `OPENAMR_EVIDENCE_DIR` to put it elsewhere. The exit status is non-zero if and only if any check is `FAIL`. It needs
 `colcon`, `xacro`, `check_urdf` (`liburdfdom-tools`) and `numpy` on the machine; they are declared as test dependencies, so
@@ -176,7 +197,8 @@ Result vocabulary: `PASS`, `FAIL`, `WARN`, `SKIP`. **`SKIP` and `WARN` are not `
 | C01 | every configuration id is `sha256:` plus 64 hex characters and matches the C9 dataset schema pattern |
 | I01 | the installed package matches the source tree (catches evidence generated against a stale install) |
 | REV | a datum change carries a revision change |
-| T14, T15, T16, L01 | **SKIP**: these are `ros2_control` checks and no controllers exist yet (see `openamrobot_upperbody_control`) |
+| T14 / T15 / T16 | `ros2_control` per profile, by expansion only: `mock` has `GenericSystem` and no `OpenArmHW`, `gazebo` has `GazeboSimSystem` for the same joints and interfaces, `real` has `OpenArmHW` with its CAN parameters; the base has none in any profile; `mock` and `real` equal upstream's own expansion |
+| L01 | launch test in `openamrobot_upperbody_bringup`: `mock.launch.py` brings all five controllers to `active` within 30 s and a trajectory on `left_arm_controller` moves `/joint_states` to the target |
 | E01 | **WARN, never PASS**: height, width and depth as lower bounds, see below |
 | W01, W02, V01 | **WARN**: see Known limitations |
 
@@ -214,5 +236,7 @@ Nothing in this package is a measured value or a hardware result. In particular:
   present and `check_urdf` accepts it, which is what A6 asks for, but planar base motion can never come from
   `robot_state_publisher`; in simulation it comes from the Gazebo `odom -> base_link` transform.
 - **V01: nobody has looked at the RViz window.** Numeric forward kinematics is not a visual check.
-- **No `ros2_control`, no Gazebo, no MoveIt.** T14-T16 and L01 are SKIP.
+- **`ros2_control` is verified on `mock` only, at runtime.** `gazebo` and `real` are expansions that nothing has loaded:
+  `openarm_hardware` cannot be built here (it needs OpenArmCAN) and Gazebo is not launched. Mock hardware reflects its
+  command back as state, so L01 shows the controller wiring, not tracking performance. No Gazebo world, no MoveIt.
 - **No physical evidence.** Static expansion and zero-pose forward kinematics only.
