@@ -11,7 +11,8 @@
            -> so101_mount_link                                   (arm_package == so101: stub, A9 owns the rest)
     world -> base_planar_joint -> base_link                      (only with enable_planar_base:=true)
 
-  Not here yet: ros2_control. hardware_profile is validated but has no effect until it lands.
+  ros2_control (ros2_control.xacro): arms only, none for the base. hardware_profile picks the arm plugin: mock =
+  mock_components/GenericSystem, gazebo = gz_ros2_control/GazeboSimSystem, real = openarm_hardware/OpenArmHW (ADR-003).
 
   Args: an unknown value for any arg fails expansion with the list of accepted values.
 -->
@@ -47,11 +48,6 @@
   <xacro:openamr_require_one_of arg="arm_package" value="'${arm_package}'" accepted="${['openarm', 'so101', 'none']}"/>
   <xacro:openamr_require_one_of arg="hardware_profile" value="'${hardware_profile}'" accepted="${['mock', 'gazebo', 'real']}"/>
   <xacro:openamr_require_one_of arg="enable_planar_base" value="'${enable_planar_base}'" accepted="${['true', 'false']}"/>
-
-  <xacro:unless value="${hardware_profile == 'mock'}">
-    <xacro:property name="openamr_hardware_profile_inert" lazy_eval="false"
-                    value="${xacro.warning('hardware_profile:=' + hardware_profile + ' is accepted but has no effect yet: no ros2_control is emitted')}"/>
-  </xacro:unless>
 
   <!-- Base: a full <robot> file from platform-sw, included unchanged; xacro merges its content. -->
   <xacro:include filename="$(find openamrobot_description)/urdf/robo_urdf.urdf.xacro"/>
@@ -98,6 +94,10 @@
     <!-- Needs the openarm_*_ee_base_link links the two calls above emit. -->
     <xacro:include filename="$(find openamrobot_upperbody_description)/urdf/upper_sensors.xacro"/>
     <xacro:openamr_upper_sensors datums="${datums}"/>
+
+    <!-- Arms only, and only here: so101 and none get no ros2_control. Needs the arm joints emitted above. -->
+    <xacro:include filename="$(find openamrobot_upperbody_description)/urdf/ros2_control.xacro"/>
+    <xacro:openamr_arm_ros2_control hardware_profile="${hardware_profile}"/>
   </xacro:if>
 
 </robot>
