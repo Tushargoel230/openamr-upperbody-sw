@@ -143,7 +143,7 @@ Rules, enforced by tests T12 and T13 (`config/datums.schema.json` holds the sche
 6. A number that only affects how the model is *drawn* (the camera marker cube edge, `openamr_sensor_marker_edge`) is a
    named visual-only constant in the xacro, not a datum. It may appear only inside a `<visual>`.
 
-Current state (revision `2026-10-08.c`): **14 datums: 9 placeholder, 4 provisional, 1 verified.**
+Current state (revision `2026-10-08.d`): **14 datums: 8 placeholder, 5 provisional, 1 verified.**
 `ros2 run openamrobot_upperbody_description datums_report.py` lists them with their owners.
 
 ## Verify
@@ -193,8 +193,9 @@ Nothing in this package is a measured value or a hardware result. In particular:
 
 - **Base inertials are platform-sw CAD placeholders.** The base comes from `openamr-platform-sw` unchanged; its masses and
   inertias are CAD-export values. The mast mass is a placeholder and the arm masses are upstream nominal values.
-- **Mast and plate transforms are placeholders.** `mast_base_pose`, `left/right_arm_mount_pose`, `mast_mass` and
-  `mast_section` are placeholder datums awaiting the general-arrangement and mast drawings. **T05 asserts that the
+- **Mast and plate transforms are placeholders.** `mast_base_pose`, `left/right_arm_mount_pose` and `mast_mass`
+  are placeholder datums awaiting the general-arrangement and mast drawings. `mast_section` is provisional: the MISUMI
+  HFS6-60120 profile is 60 x 120 mm, but which axis carries the 120 mm is unconfirmed. **T05 asserts that the
   shoulder height equals `shoulder_height(mast_id)`, which holds for any datum values; it does not validate the datums.**
 - **The head camera sits above the end of the mast at the two highest IDs.** `head_camera_pose` is a guess, +0.10 m above
   the shoulder plate. At `mast_1400` and `mast_1450` the head-camera marker is the highest point on the robot, and at
