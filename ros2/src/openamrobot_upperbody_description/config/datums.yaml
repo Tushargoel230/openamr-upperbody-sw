@@ -2,7 +2,7 @@
 # Schema v1, see 10_architecture/DATUMS.md. Values may change; names and the frame structure may not.
 # Computed values (e.g. mast_offset) are NOT stored here; upstream-owned values are read from upstream YAML.
 schema_version: 1
-revision: "2026-10-08.c"          # bump on every change to this file; goes into config_id (test_datums_revision.py enforces it)
+revision: "2026-10-08.d"          # bump on every change to this file; goes into config_id (test_datums_revision.py enforces it)
 units: {length: m, angle: rad, mass: kg}
 
 # Datums that are reported but never feed the model (DATUMS.md rule 1).
@@ -65,11 +65,13 @@ datums:
     owner: "Alex (F2S)"
 
   mast_section:
-    value: [0.08, 0.08]
-    source: placeholder
-    status: placeholder
-    ref: "Placeholder square section (x, y) for the mast visual/collision box. MECH-006 'exact mast section'"
-    owner: "mechanical contractor via Alex"
+    value: [0.060, 0.120]
+    source: plan
+    status: provisional
+    ref: "MISUMI HFS6-60120, named in the repo README and P-03 Decision Addendum rev 18.2. The HFS suffix is the
+          cross-section in mm. Orientation unconfirmed: x = 60 fore-aft, y = 120 lateral, because a 120 mm lateral
+          width puts the side faces at y = +/-0.060, where left/right_arm_mount_pose already places the J1_A plates"
+    owner: "Alex (mast drawing)"
 
   head_camera_pose:
     value: {xyz: [0.12, 0.0, 0.10], rpy: [0.0, 0.35, 0.0]}
