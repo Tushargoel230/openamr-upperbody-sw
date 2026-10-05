@@ -9,19 +9,18 @@
 Entries with `variants` (base_link) give type and parent per arg value; exactly one variant must match each expansion.
 The checker is a pure function of (URDF root, args, contract) so that it is itself tested on synthetic URDFs below.
 
-Sidecar: $OPENAMR_EVIDENCE_DIR/T04_frame_contract.json (default: the system temp dir).
+Sidecar: T04_frame_contract.json in the evidence directory ($OPENAMR_EVIDENCE_DIR, default <workspace>/evidence;
+never a temp dir, see evidence_common.evidence_dir).
 """
 import fnmatch
-import json
 import os
 import re
-import tempfile
 import warnings
 import xml.etree.ElementTree as ET
 
 import pytest
 
-from conftest import ARG_DEFAULTS, ARM_PACKAGES, MAST_IDS, MATRIX, SHARE, expand, load_yaml
+from conftest import ARG_DEFAULTS, ARM_PACKAGES, MAST_IDS, MATRIX, SHARE, expand, load_yaml, write_sidecar
 
 OUR_NAMESPACES = ["mast_*", "head_camera_*", "*_wrist_camera_*", "so101_*"]
 _COND = re.compile(r"^\s*(\w+)\s*==\s*(\S+)\s*$")
@@ -126,17 +125,10 @@ def test_t04_missing_w_frames_are_a_warning_with_a_sidecar():
         _, warns = check_contract(root, full_args(*e), CONTRACT)
         for w in warns:
             missing.setdefault(w.split()[1].rstrip(":"), []).append(label(*e))
-    directory = os.environ.get("OPENAMR_EVIDENCE_DIR") or tempfile.gettempdir()
-    path = os.path.join(directory, "T04_frame_contract.json")
-    sidecar = {
-        "id": "T04", "name": "frame contract",
-        "result": "WARN" if missing else "PASS",
-        "details": {"expansions": len(EXPANSIONS), "missing_W": sorted(missing),
-                    "missing_W_in_expansions": {k: len(v) for k, v in sorted(missing.items())},
-                    "owner": "platform-sw (WP-F5 static TFs into URDF sensor macros)"},
-    }
-    with open(path, "w") as f:
-        json.dump(sidecar, f, indent=2)
+    path = write_sidecar("T04", "frame_contract", "frame contract", "WARN" if missing else "PASS",
+                         {"expansions": len(EXPANSIONS), "missing_W": sorted(missing),
+                          "missing_W_in_expansions": {k: len(v) for k, v in sorted(missing.items())},
+                          "owner": "platform-sw (WP-F5 static TFs into URDF sensor macros)"})
     if missing:
         warnings.warn(f"T04 WARN: W frames missing from every expansion: {', '.join(sorted(missing))} (sidecar: {path})",
                       UserWarning, stacklevel=1)

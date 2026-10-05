@@ -61,3 +61,20 @@ def fixed_fk(root, base, target):
 
 def position(pose):
     return pose[:3, 3].copy()
+
+
+def zero_pose_poses(root):
+    """{link name: 4x4 pose in the root link} with every joint at zero position (movable joints contribute only their
+    <origin>). For flagging, not for kinematics: fixed_fk is the one that refuses movable joints."""
+    by_child = parent_joints(root)
+    poses = {}
+
+    def pose(link):
+        if link not in poses:
+            joint = by_child.get(link)
+            poses[link] = np.eye(4) if joint is None else pose(joint.find("parent").get("link")) @ joint_origin(joint)
+        return poses[link]
+
+    for element in root.findall("link"):
+        pose(element.get("name"))
+    return poses
