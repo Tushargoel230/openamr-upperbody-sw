@@ -188,10 +188,10 @@ def test_summary_and_exit_status_follow_the_checks(tmp_path):
     assert "Result: FAIL" in result.stdout and f"Evidence: {reports[0]}" in result.stdout
 
 
-def _run_gazebo_build(tmp_path, repo):
+def _run_gazebo_build(tmp_path, repo, *steps):
     evidence = tmp_path / "evidence"
     result = subprocess.run([sys.executable, os.path.join(SCRIPTS, "build_evidence.py"), "--profile", "gazebo", "--since",
-                             str(time.time()), "--gazebo-results-dir", str(tmp_path / "none"), "--repo", repo],
+                             str(time.time()), "--gazebo-results-dir", str(tmp_path / "none"), "--repo", repo, *steps],
                             capture_output=True, text=True, env={**os.environ, ev.EVIDENCE_ENV: str(evidence)})
     return result, sorted(p for p in evidence.iterdir() if p.name.endswith("_gazebo.json")) if evidence.is_dir() else []
 
@@ -266,3 +266,14 @@ def test_each_profile_clears_only_its_own_sidecars(tmp_path):
     assert run("--profile", "gazebo").returncode == 0 and sorted(os.listdir(tmp_path)) == ["T99_probe.json"]
     ev.write_sidecar("G01", "probe", "probe", "PASS", {}, directory=str(tmp_path))
     assert run("--profile", "dev").returncode == 0 and sorted(os.listdir(tmp_path)) == ["G01_probe.json"]
+
+
+def test_the_gazebo_aux_check_is_decided_by_its_step_alone(tmp_path):
+    """AUX has no test of its own in this profile: a step that ran and passed is PASS, a step that failed or never ran is FAIL."""
+    def aux(*steps, name):
+        result, reports = _run_gazebo_build(tmp_path / name, _repo(tmp_path / name), *steps)
+        return next(c for c in json.loads(reports[0].read_text())["checks"] if c["id"] == "AUX")
+    (tmp_path / "ran").mkdir(), (tmp_path / "failed").mkdir(), (tmp_path / "missing").mkdir()
+    assert aux("--step", "colcon_test=0", name="ran")["result"] == "PASS"
+    assert aux("--step", "colcon_test=1", name="failed")["result"] == "FAIL"
+    assert aux(name="missing")["result"] == "FAIL"

@@ -329,6 +329,8 @@ def build(args):
         elif check_id == "I01":
             result, details = ("FAIL", {"differing": differ, "hint": "run colcon build, then verify_a6.sh again"}) if differ \
                 else ("PASS", {"compared": ["urdf", "config", "launch", "meshes"]})
+        elif check_id == "AUX" and profile == "gazebo":
+            result, details = "PASS", {}            # only the steps below decide it: no test of this report is filed under AUX
         else:
             result, details = combine(check_id, counts.get(check_id), sidecars.get(check_id))
         if check_id == "T02" and steps.get("check_urdf_matrix") not in (None, "0"):
