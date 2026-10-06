@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # A6 verification. Runs colcon test for this package, the T02 check_urdf matrix, datums_report.py and the config ids,
 # then writes <workspace>/evidence/<UTC timestamp>_dev.json (openamr.evidence.v1, evidence_class static+mock).
-# Exit status is non-zero iff any check is FAIL.
+# Exit status: 1 if any check is FAIL, 3 if every check passed but the tree is dirty (the results print, and no evidence file
+# is written: a report describes a commit and a dirty tree is none), 2 if the evidence cannot be assembled, else 0.
 #
 #   source /opt/ros/jazzy/setup.bash && source install/setup.bash
 #   ros2 run openamrobot_upperbody_description verify_a6.sh        # or run this file directly
