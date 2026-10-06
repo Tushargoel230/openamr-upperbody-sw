@@ -101,8 +101,8 @@ dependency on `openamrobot_upperbody_control` for that `$(find)`: control alread
 dependency back would be a cycle. T15 checks the plugin's names against the installed `gz_ros2_control`.
 
 `openarm_*_finger_joint2` is not declared under `ros2_control`, as upstream leaves it out; the URDF `<mimic>` follows
-`finger_joint1`. Decided in P09 by running it: Gazebo's Bullet-Featherstone engine honours that mimic on its own and its DART
-default does not, and upstream's commented-out declaration cannot load under Jazzy's `ros2_control` ("Activated mimic joints
+`finger_joint1`. Decided in P09 by running it: Gazebo's Bullet-Featherstone engine honours that mimic on its own and DART (the launch's default, platform-sw's engine)
+does not, and upstream's commented-out declaration cannot load under Jazzy's `ros2_control` ("Activated mimic joints
 cannot have command interfaces"). The gazebo package's README has the measurements. The multiplier it follows is read from
 upstream's `joint_mimics.yaml`, never written in `ros2_control.xacro` (`test_t15_finger_mimic_multiplier.py` fails on a
 literal, including one equal to today's value).

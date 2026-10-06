@@ -1,13 +1,16 @@
 """G02: in Gazebo both grippers close, and finger_joint2 follows finger_joint1 in the physics (the P06 mimic question).
 
-Decided in P09, measured with the simulator running:
+Why this test passes `physics_engine` explicitly (P10 task 0, 6 Oct): sim.launch.py defaults to DART, the engine platform-sw
+tuned the base on, and a gripper-mimic convenience is not grounds to re-baseline someone else's physics. The mimic and the
+gripper need the other engine, and that is the limitation this check makes visible instead of hiding behind a default:
 
-  Bullet-Featherstone (what sim.launch.py selects)   the GripperActionController goal is reached and the URDF <mimic> is
-                                                     honoured by the engine: finger_joint2 equals finger_joint1.
-  DART (Gazebo Harmonic's default)                   the fingers do not move under position or velocity commands (effort
-                                                     works), and the engine logs that it has no mimic constraint.
+  Bullet-Featherstone (passed here)   the GripperActionController goal is reached and the URDF <mimic> is honoured by the
+                                      engine: finger_joint2 equals finger_joint1.
+  DART (the launch default)           the fingers do not move under position or velocity commands (effort works), and the
+                                      engine logs that it has no mimic constraint. Launched on DART this test fails at the
+                                      first goal: that is the documented limitation, not a defect of the test.
 
-So this test is the guard on the physics engine as much as on the mimic: launched on DART it fails at the first goal. It reads
+So this test is the guard on the physics engine as much as on the mimic. It reads
 the finger angles from Gazebo's link poses, because /joint_states computes finger_joint2 from finger_joint1 and so could never
 show the follower failing to move. The right gripper's joint range is [-0.7854, 0] (mirrored), so its goal is negative.
 
@@ -36,7 +39,10 @@ from rclpy.action import ActionClient  # noqa: E402
 from rclpy.parameter import Parameter  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sim_test_support import finger_angles, gz_link_poses, write_g_sidecar  # noqa: E402
+from sim_test_support import finger_angles, gz_link_poses, launch_engine_constants, write_g_sidecar  # noqa: E402
+
+# The engine this check REQUIRES, passed to the launch on purpose; sim.launch.py's own default is DART (see the docstring).
+ENGINE_THE_MIMIC_NEEDS = launch_engine_constants()[1]
 
 CONTROLLERS = ("joint_state_broadcaster", "left_arm_controller", "right_arm_controller",
                "left_gripper_controller", "right_gripper_controller")
@@ -51,7 +57,8 @@ def generate_test_description():
     sim = os.path.join(get_package_share_directory("openamrobot_upperbody_gazebo"), "launch", "sim.launch.py")
     return launch.LaunchDescription([
         launch.actions.IncludeLaunchDescription(PythonLaunchDescriptionSource(sim),
-                                                launch_arguments={"headless": "true"}.items()),
+                                                launch_arguments={"headless": "true",
+                                                                                 "physics_engine": ENGINE_THE_MIMIC_NEEDS}.items()),
         launch_testing.actions.ReadyToTest(),
     ]), {}
 
@@ -68,7 +75,7 @@ class TestGripperMimic(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         write_g_sidecar("G02", "gripper_mimic", "grippers close in Gazebo and finger_joint2 follows finger_joint1 in the physics",
-                        cls.record, expected=("left", "right"))
+                        cls.record, expected=("left", "right"), physics_engine=ENGINE_THE_MIMIC_NEEDS)
         cls.node.destroy_node()
         rclpy.shutdown()
 
@@ -107,7 +114,7 @@ class TestGripperMimic(unittest.TestCase):
         outcome = result.result().result
         self.assertTrue(outcome.reached_goal and not outcome.stalled,
                         f"{side} gripper: reached={outcome.reached_goal} stalled={outcome.stalled} position={outcome.position:+.4f}. "
-                        "On DART the fingers do not move; check the physics engine")
+                        "On DART (the launch default) the fingers do not move; this test passes the engine explicitly")
         self._spin_until(lambda: False, SETTLE_S)
         before_failure = finger_angles(gz_link_poses(), side)
         return outcome, before_failure
