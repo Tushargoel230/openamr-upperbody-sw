@@ -6,7 +6,7 @@
 Plans every named pose of both arms and both grippers, one after the other, offline (moveit_py, no controllers, no simulator), under:
 
   * the limits as they are in config/joint_limits.yaml, with the acceleration scaling factor of the request set to 1.0, 0.1, 0.01 and
-    0.001: the effective acceleration limits span a factor of 1000, down to a few hundredths of a rad/s^2;
+    0.001: the effective acceleration limits span a factor of 1000, down to a few thousandths of a rad/s^2;
   * the limits with `has_acceleration_limits: false` on every joint, which is what upstream's own file says (manipulation#10): MoveIt's
     time parameterisation has nothing to work with.
 

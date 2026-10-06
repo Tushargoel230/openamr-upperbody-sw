@@ -71,6 +71,23 @@ All notable changes to this repository. Evidence for the description is static a
 - Check T15 gains the finger-mimic multiplier test (a hard-coded multiplier, including one equal to the yaml's, fails), and the
   plugin tests. T10 gained a tripwire (a verified mass datum with no base/arm provenance entry fails), replaced in P10 by the provenance map below.
 
+- `openamrobot_upperbody_moveit` (A7, part 2): `config/openamrobot.srdf` (the groups, `home` / `hands_up`, end effectors, passive joints and arm-internal
+  pairs imported from `enactic/openarm_ros2` @ `4e837e1` with attribution; a fixed `world -> base_link` virtual joint; `park`, a placeholder
+  copy of `home`; per-hand gripper `open` / `closed`; the self-collision matrix generated with the Setup Assistant's `collisions_updater` at
+  `mast_1350`, 10000 samples, never/adjacent/default on, always off, reproducible with `scripts/regenerate_acm.sh`); `kinematics.yaml` (KDL),
+  `pilz_cartesian_limits.yaml` (upstream's, inert), `ompl_planning.yaml` (MoveIt's defaults), `joint_limits.yaml` (our acceleration entries,
+  tagged `engineering_default` / `placeholder`, naming manipulation#10 and the upstream file, ADR-009), `moveit_controllers.yaml` for our
+  controller names (option 1 of the gripper fork, `GripperCommand`; the controller type is unchanged); `launch/move_group.launch.py`, built with
+  `MoveItConfigsBuilder` over the combined xacro and its args.
+- Checks M03 (the collision matrix validated by sampling, `scripts/validate_acm.py`), M04 (a goal inside a base-side volume is rejected by
+  planning, not merely unsuccessful), and the proposed M05 (per-hand gripper values, the single-number version fails) and M06 (the plans need
+  some acceleration limit and do not depend on its value).
+- `openamrobot_upperbody_bringup`: `moveit.launch.py` (`mast_id`, `sim` mock|gazebo, `rviz`; `headless`, `physics_engine` for Gazebo), a stub for the
+  wheel joints on mock, checks M01 (every named pose on mock at all four mast IDs) and M02 (the same in Gazebo at `mast_1350`, Bullet-Featherstone
+  passed explicitly), `run_a7_regression.sh` and `build_a7_evidence.py` (`evidence/<ts>_a7.json`, `evidence_class: "simulation"`, a dirty tree
+  writes nothing). M01 and M02 skip unless `OPENAMR_A7=1`, so `verify_a6.sh` does not start them.
+- `docs/v01_visual_check.md` has an eighth item (MoveIt: a named pose, preview against execution); V01 stays `WARN`.
+
 ### Changed
 
 - The evidence harness writes no report from a dirty tree: it prints the results, says `Evidence: NOT WRITTEN`, and exits 3 if
@@ -120,6 +137,13 @@ All notable changes to this repository. Evidence for the description is static a
 - `config/lift/`: an empty scaffold directory. An actuated lift is OpenAMRobot 3.0 scope.
 
 ### Known limitations
+
+- **M03 FAILS** (A7): the collision matrix disables `openarm_left_ee_link1` / `openarm_left_link2` as `Never` and they collide at sample 1112 of 2000 at every mast ID.
+  The pair is not re-enabled. A 20000-sample diagnostic found 14 of the 458 `Never` pairs colliding, all arm-against-arm. The matrix is not certified.
+- MoveIt never sees `base_link`'s inertial (W01); `park` is a placeholder copy of `home`; the acceleration limits are engineering defaults, not vendor
+  data; the gripper fork is open on manipulation#11 (option 1 is used; option 2 was driven on mock, not in Gazebo); MoveIt 2.12.4 refuses a start state
+  1e-7 rad past a joint limit, so planning from `home` in Gazebo is intermittently refused (M01/M02 retry and count); `move_group` exits with SIGSEGV when
+  stopped. Everything A7 shows is `simulation` class.
 
 - Base inertials are platform-sw CAD placeholders; the mast mass, mast and plate transforms and all camera poses are
   placeholder datums. No physical evidence.
