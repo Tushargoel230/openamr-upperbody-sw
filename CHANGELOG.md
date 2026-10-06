@@ -109,6 +109,12 @@ All notable changes to this repository. Evidence for the description is static a
   carry no inertial (zero mass is a figure chosen so the model expands), that group is a placeholder, so the caveat now needs the
   cameras weighed as well as the mast.
 
+- Gazebo README: the DART finger finding (P10 task 0, a ten-minute check). The position command moves a finger on DART once
+  `position_proportional_gain` is raised (0.1 and 1.0: no motion; 5.0: `finger_joint1` reaches the goal and oscillates), so the
+  missing finger motion is a gain and not an engine fault; why the threshold is where it is was not isolated, the gain is
+  plugin-wide and was not tried on the arms, and `finger_joint2` still does not follow on DART, so G02 stays on
+  Bullet-Featherstone. A tuning note for platform-sw's owner; nothing is filed upstream.
+
 ### Removed
 
 - `config/lift/`: an empty scaffold directory. An actuated lift is OpenAMRobot 3.0 scope.

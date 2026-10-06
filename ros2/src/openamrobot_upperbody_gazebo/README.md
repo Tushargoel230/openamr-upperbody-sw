@@ -106,10 +106,32 @@ behind a default: with the default engine the arms and the base work and the gri
 | DART (Gazebo Harmonic's default) | **not reached**: `stalled`, both fingers stay at 0 | does not follow | `Attempting to create a mimic constraint for joint [...] but the chosen physics engine does not support mimic constraints` |
 | Bullet-Featherstone | reached; both fingers at the goal (0.4 and -0.4 rad) | equals `finger_joint1`, read from the link poses | nothing |
 
-Under DART the finger joints do not respond to position or velocity commands at all (an effort command moves them freely, and
-arm joints respond to position commands normally), which is why this is not just a missing mimic. The cause was not isolated.
-What was ruled out: whether `finger_joint2` is declared in `ros2_control`, whether the URDF `<mimic>` is present, the gripper
-controller type (a `JointTrajectoryController` on the finger behaves the same), `hold_joints`, and the left/right side.
+Under DART the finger joints do not respond to the position command at the default gain (an effort command moves them freely,
+and arm joints respond to position commands normally). **Tuning finding (P10, a ten-minute check, 6 Oct):** this is a gain, not
+a missing capability. `gz_ros2_control`'s position interface is a velocity servo whose gain is the plugin's
+`position_proportional_gain` (logged by the `gz_ros_control` node: "The position_proportional_gain has been set to: 0.1";
+default 0.1, read from the installed library's strings). Measured on DART with the same gripper goal (0.4 rad, left hand,
+finger angle read from Gazebo's link poses):
+
+| `position_proportional_gain` | Left `GripperCommand` goal 0.4 | `finger_joint1` (link poses) |
+|---|---|---|
+| 0.1 (default) | `stalled`, not reached | 0, exactly |
+| 1.0 | `stalled`, not reached | 0, exactly |
+| 5.0 | `reached_goal`, controller position 0.392 | tracks the goal but oscillates around it (readings 0.37, 0.40, 0.37 rad) |
+
+The gain was set for the experiment by a `position_proportional_gain` parameter under `/**:` in a scratch copy of the controllers
+file handed to the plugin; nothing in the repository sets it. What this says: the position command does move a finger on DART
+once the velocity command is large enough, which is the hypothesis P09 left open. What it does not say: **why** the threshold
+sits between 1 and 5 (a velocity command too small for DART's solver, or a finger resting on its lower joint limit at 0 that
+small velocities cannot leave, were not told apart), whether 5.0 is a good value (the gain is plugin-wide, so it applies to the
+arm joints too, which were not tried at it, and the finger oscillated), or anything about `finger_joint2`: with no mimic
+constraint on DART it is not driven and drifted freely (0.38 to 0.13 rad over about nine seconds), so the two-finger gripper still
+does not close symmetrically on DART and **G02 stays on Bullet-Featherstone**. The fingers' joints carry no `<dynamics>` element in
+the URDF (no damping or friction is declared; what the SDF conversion or DART adds was not looked at), so "high damping" is not a
+property of the description. This is a tuning finding for Kunal, who tuned platform-sw's DART setup; nothing is filed upstream, and
+sdformat's missing DART mimic constraint is documented behaviour. What was ruled out earlier (P09): whether `finger_joint2` is
+declared in `ros2_control`, whether the URDF `<mimic>` is present, the gripper controller type (a `JointTrajectoryController` on the
+finger behaves the same), `hold_joints`, and the left/right side.
 Under Bullet-Featherstone the URDF `<mimic>` (turned into an SDF mimic constraint by `sdformat`) is honoured on its own, so:
 
 - **nothing is declared for `finger_joint2` in `ros2_control`.** Upstream's commented-out block cannot be enabled: Jazzy's
