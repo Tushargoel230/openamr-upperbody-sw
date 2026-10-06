@@ -7,8 +7,14 @@ case, that it did not.
 
 ## Start the simulator and RViz
 
+    export ROS_DOMAIN_ID=42 GZ_PARTITION=v01          # in every terminal you use below (see the note)
     source /opt/ros/jazzy/setup.bash && source ~/openamr_ws/install/setup.bash
     ros2 launch openamrobot_upperbody_gazebo sim.launch.py rviz:=true
+
+*Note:* if `ros2 node list` already shows a `robot_state_publisher` from an earlier session (the `oa_*` helpers leave one
+running), RViz would draw two models and `/tf` would carry two sources. A separate `ROS_DOMAIN_ID` and `GZ_PARTITION` keep
+this run to itself. The launch was checked with the Gazebo window and RViz both starting under WSLg, with no errors and five
+controllers `active`; nobody has looked at either window yet, which is what this is for.
 
 That opens the Gazebo window and RViz beside it (fixed frame `odom`, RobotModel and TF displays). The first start takes about a
 minute; wait until `ros2 control list_controllers` in another terminal shows five controllers `active`.
