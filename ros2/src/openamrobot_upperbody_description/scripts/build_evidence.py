@@ -204,6 +204,9 @@ def limitations(datums, sidecars):
         "T14, T15 and T16 are expansion checks: nothing loads the gazebo or the real plugin. gz_ros2_control's handling of "
         "the finger_joint2 mimic is a TODO (upstream leaves it out of ros2_control), and the real profile cannot even be "
         "built here (openarm_hardware needs OpenArmCAN)",
+        "the gripper controllers are the deprecated position_controllers/GripperActionController on purpose: the "
+        "replacement serves ParallelGripperCommand instead of GripperCommand, which would decide manipulation#11 / "
+        "ADR-009 point 4 (open)",
         "L01 launches mock.launch.py only: controller_manager on mock_components/GenericSystem, which reflects its command "
         "back as state, so it shows the controller wiring and not tracking performance",
         "T02 check_urdf parses the XML and builds the link tree; it does not resolve package:// mesh URIs",

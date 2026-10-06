@@ -185,7 +185,7 @@ Result vocabulary: `PASS`, `FAIL`, `WARN`, `SKIP`. **`SKIP` and `WARN` are not `
 | Check | What it proves |
 |---|---|
 | T01 | all four `mast_id` x three `arm_package` on `mock`, plus `openarm` on `gazebo` and `real` at `mast_1350`, expand |
-| T02 | `check_urdf` accepts every T01 expansion and the planar-flag expansions |
+| T02 | `check_urdf` accepts every T01 expansion, the planar-flag expansions and `openarm` on `gazebo` and `real` at `mast_1300` (the last two groups are labelled extra) |
 | T03 | exactly one root and no duplicate link names |
 | T04 | the frame contract: required frames and parents, conditional frames, the expected-from-other-owner frames |
 | T05 | `openarm_left_base_link` is at the shoulder height of its `mast_id`, within 1 mm, for all four IDs |
@@ -208,6 +208,10 @@ Result vocabulary: `PASS`, `FAIL`, `WARN`, `SKIP`. **`SKIP` and `WARN` are not `
 `sha256:` followed by the SHA-256 (64 hex characters) of the canonicalised expanded URDF, the three args, the datum revision
 and the pinned upstream commit. A 12-character prefix is for log lines only and is labelled as a prefix wherever it is
 shown. `hardware_profile` is part of the id because the id names the configuration, not just the geometry.
+The upstream commit is read from the git checkout of `openarm_description` in the workspace. With no checkout (CI, an
+installed package without sources) it falls back to the pin in `config/upstream_pins.yaml`, and the report says so in its
+limitations; a checkout with local changes is an error, never replaced by the pin. A test fails if the pin disagrees with
+the checkout or with the `openamrobot-manipulation` baseline pin, so it moves in the same commit as the checkout does.
 
 ## Known limitations
 
