@@ -33,7 +33,7 @@ from openamrobot_upperbody_moveit.move_group_client import MoveGroupClient  # no
 from openamrobot_upperbody_moveit.named_poses import GRIPPER_JOINT, SIDES  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from a7_support import (ACCELERATION_SCALING, TOLERANCE, VELOCITY_SCALING, named_pose_plan, run_sequence,  # noqa: E402
+from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, named_pose_plan, run_sequence,  # noqa: E402
                         write_run_sidecar)
 
 MAST_ID = "mast_1350"
@@ -44,6 +44,8 @@ READY_WITHIN_S = 150.0
 
 @pytest.mark.launch_test
 def generate_test_description():
+    if not A7_ENABLED:
+        return launch.LaunchDescription([launch_testing.actions.ReadyToTest()]), {}
     moveit = os.path.join(get_package_share_directory("openamrobot_upperbody_bringup"), "launch", "moveit.launch.py")
     return launch.LaunchDescription([
         launch.actions.IncludeLaunchDescription(
@@ -54,6 +56,7 @@ def generate_test_description():
     ]), {}
 
 
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
 class TestNamedPosesInGazebo(unittest.TestCase):
     record = {}
 
