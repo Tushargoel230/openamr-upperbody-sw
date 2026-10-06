@@ -36,7 +36,7 @@ Args
 """
 import os
 
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (AppendEnvironmentVariable, DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription,
                             RegisterEventHandler)
@@ -82,6 +82,14 @@ def generate_launch_description():
     for package in MESH_PACKAGES:
         resource_paths.append(AppendEnvironmentVariable(
             "GZ_SIM_RESOURCE_PATH", os.path.dirname(get_package_share_directory(package))))
+
+    # platform-sw's walled_world.sdf <include>s model://apriltag_dock, which openamrobot_docking ships; platform-sw's own launch
+    # adds that directory too. Without the package the empty world and any world that does not need it are unaffected.
+    try:
+        resource_paths.append(AppendEnvironmentVariable(
+            "GZ_SIM_RESOURCE_PATH", os.path.join(get_package_share_directory("openamrobot_docking"), "models")))
+    except PackageNotFoundError:
+        pass
 
     robot_description = ParameterValue(
         Command([
