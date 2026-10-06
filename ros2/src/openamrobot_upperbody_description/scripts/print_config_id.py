@@ -16,6 +16,9 @@ definition (`^sha256:[0-9a-f]{64}$`). A truncated id fails that validator, so th
            openarm_description_commit  full commit hash of the pinned upstream checkout
     enable_planar_base is not a separate member: it changes the expanded URDF, so it is already in canonical_urdf.
 
+The upstream commit is read from the git checkout in the workspace; with no checkout it falls back to the pin in
+config/upstream_pins.yaml (and --explain says which); a checkout with local changes is an error.
+
 --explain also prints the inputs and a 12-character prefix, labelled as one, for human-facing logs.
 """
 import argparse
@@ -90,7 +93,8 @@ def main(argv=None):
     ns, values = _parse(argv)
     try:
         share = ev.share_dir()
-        commit = ns.upstream_commit or ev.upstream_commit(ev.workspace_root(share))
+        commit, source = ((ns.upstream_commit, "--upstream-commit") if ns.upstream_commit
+                          else ev.upstream_commit_and_source(ev.workspace_root(share)))
         cid = config_id_of(share, commit, **values)
     except ev.EvidenceError as err:
         print(f"print_config_id: {err}", file=sys.stderr)
@@ -105,7 +109,7 @@ def main(argv=None):
         for key in REQUIRED + OPTIONAL:
             if key in values:
                 print(f"  {key} = {values[key]}", file=sys.stderr)
-        print(f"  openarm_description_commit = {commit}", file=sys.stderr)
+        print(f"  openarm_description_commit = {commit}  (from {source})", file=sys.stderr)
     return 0
 
 

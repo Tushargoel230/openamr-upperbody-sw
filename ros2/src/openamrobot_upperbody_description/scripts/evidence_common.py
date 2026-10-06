@@ -98,6 +98,7 @@ def planar_extras(mast_ids_doc):
     return [(mast_ids_doc["default"], a, "mock") for a in ("openarm", "so101", "none")]
 
 
+
 def expansion_label(mast_id, arm_package, hardware_profile):
     return f"{mast_id}/{arm_package}/{hardware_profile}"
 
@@ -136,16 +137,40 @@ def upstream_checkout(workspace, name):
     return os.path.join(workspace, UPSTREAM_DIR, name)
 
 
-def upstream_commit(workspace, name="openarm_description"):
-    """The commit the pinned upstream checkout is at. A dirty checkout is not 'the pinned commit', so it raises."""
+GIT_SOURCE = "git checkout"
+METADATA_SOURCE = "package metadata (config/upstream_pins.yaml)"
+
+
+def pinned_commit_in_metadata(name="openarm_description", pins_file=None):
+    """The commit config/upstream_pins.yaml pins for `name` (a full hash for openarm_description), or None."""
+    import yaml
+    pins_file = pins_file or os.path.join(share_dir(), "config", "upstream_pins.yaml")
+    if not os.path.isfile(pins_file):
+        return None
+    with open(pins_file) as f:
+        return (yaml.safe_load(f).get("pins") or {}).get(name)
+
+
+def upstream_commit_and_source(workspace, name="openarm_description", pins_file=None):
+    """(commit, where it came from). The git checkout wins. With no checkout at all, the pin in the package metadata is
+    used and labelled as such. A checkout with local changes is not 'the pinned commit' and raises: it is never replaced
+    by the metadata, because that would hide the change."""
     path = upstream_checkout(workspace, name)
     head = git_head(path) if os.path.isdir(path) else None
     if head is None:
-        raise EvidenceError(f"no git checkout of {name} at {path}: pass the pinned commit explicitly")
+        pinned = pinned_commit_in_metadata(name, pins_file)
+        if pinned is None:
+            raise EvidenceError(f"no git checkout of {name} at {path} and no pin in config/upstream_pins.yaml: "
+                                "pass the pinned commit explicitly")
+        return pinned, METADATA_SOURCE
     dirty, files = git_dirty(path)
     if dirty:
         raise EvidenceError(f"{path} has local changes ({', '.join(files[:3])}): its HEAD is not the pinned commit")
-    return head
+    return head, GIT_SOURCE
+
+
+def upstream_commit(workspace, name="openarm_description", pins_file=None):
+    return upstream_commit_and_source(workspace, name, pins_file)[0]
 
 
 def pinned_commit_in_baseline(workspace, name="openarm_description"):
