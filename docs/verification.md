@@ -21,7 +21,7 @@ a check is `FAIL`. `OPENAMR_EVIDENCE_DIR` moves the output; `OPENAMR_WS` names t
 | Field | Meaning |
 |---|---|
 | `schema`, `repo`, `profile` | `openamr.evidence.v1`, `openamr-upperbody-sw`, `dev` |
-| `git_hash`, `dirty` | The commit the report describes. `dirty: true` means uncommitted changes; `dirty_files` lists them. Evidence from a dirty tree describes no commit |
+| `git_hash`, `dirty` | The commit the report describes. `dirty` is always `false` in a written file: the harness refuses to write evidence from a dirty tree (it prints the results, says `Evidence: NOT WRITTEN` and names the files, and exits 3 if nothing failed), because a report from uncommitted changes describes no commit and a file that exists gets read |
 | `timestamp` | UTC, when the report was built |
 | `evidence_class` | Always `static+mock`; see below |
 | `upstream` | Commits of `openarm_description`, `openarm_ros2` and `openamrobot-manipulation`. Without a git checkout of `openarm_description` its commit is the pin in `config/upstream_pins.yaml`, and `limitations` says so |
@@ -67,6 +67,6 @@ Current result: 20 `PASS`, 6 `WARN`, 0 `SKIP`, 0 `FAIL` with the upstream checko
 
 ## Reading a report
 
-Check `dirty` and `git_hash` first, then `limitations`, then every non-`PASS` row. T10 prints the modelled mass beside the
+Check `git_hash` first (every file in `evidence/` is from a clean commit), then `limitations`, then every non-`PASS` row. T10 prints the modelled mass beside the
 120 kg limit and the F2S vehicle estimate (93 kg); the modelled total is what the description contains, not what the robot
 weighs.

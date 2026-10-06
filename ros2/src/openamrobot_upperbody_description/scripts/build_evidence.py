@@ -5,7 +5,14 @@
                       [--bringup-results-dir PATH]
 
 Writes `<evidence dir>/<UTC timestamp>_dev.json` in the openamr.evidence.v1 shape of VERIFICATION.md and prints a
-summary. Exit code is non-zero iff any check is FAIL.
+summary. Exit code is 1 if any check is FAIL, 2 if the evidence cannot be assembled, and 3 if every check passed but the
+working tree is dirty.
+
+A dirty tree writes NO file (decided P09). A report records `git_hash`, and a tree with uncommitted changes is not that
+commit, so a file written from one is an untrustworthy run lying next to the trustworthy ones, and "which one is the
+record" would be something a reviewer has to know rather than something the file says. The summary is still printed so a
+developer iterating before a commit sees every result; it is labelled as not recorded. The evidence directory therefore
+only ever holds runs of a clean commit, with `dirty: false`.
 
 Where each result comes from
   - pytest results (colcon's xunit files, from this package and from openamrobot_upperbody_bringup, whose launch test
@@ -77,6 +84,7 @@ SIDECAR_REQUIRED = {"T02", "T04", "T07", "T08", "T09", "T10", "T13", "E01", "C01
 MODULE_IDS = {"test_datums_revision": "REV"}
 ID_IN_NAME = re.compile(r"^test_([a-z]\d{2})_")
 EXPECTED_STEPS = ("colcon_test", "check_urdf_matrix", "datums_report")
+REFUSED_DIRTY = 3          # exit status: every check passed, but the tree is dirty so no evidence file was written
 
 
 # --- mapping and combining (pure, tested in test_build_evidence.py) --------------------------------------------------
@@ -312,7 +320,8 @@ def build(args):
             if commit_source == ev.METADATA_SOURCE else []),
     }
     if dirty:
-        doc["dirty_files"] = dirty_files
+        doc["dirty_files"] = dirty_files        # for the console summary only: a dirty report is never written
+        return doc, None, sidecars
     path = os.path.join(edir, now.strftime("%Y%m%dT%H%M%SZ") + "_dev.json")
     with open(path, "w") as f:
         json.dump(doc, f, indent=2)
@@ -340,9 +349,15 @@ def summary(doc, path, sidecars):
     counts = defaultdict(int)
     for c in doc["checks"]:
         counts[c["result"]] += 1
-    lines += ["", f"Evidence: {path}",
-              "Result: " + ("FAIL" if counts["FAIL"] else "no FAIL") +
-              "  (" + ", ".join(f"{counts[r]} {r}" for r in ("PASS", "WARN", "SKIP", "FAIL")) + ")"]
+    if path is None:
+        files = doc["dirty_files"]
+        lines += ["", f"Evidence: NOT WRITTEN. {doc['repo']} has uncommitted changes ({len(files)}: "
+                      f"{', '.join(files[:5])}{', ...' if len(files) > 5 else ''}), so a report would describe no commit.",
+                  "          Commit, then run this again. Nothing above is a record; the evidence directory only holds clean-tree runs."]
+    else:
+        lines += ["", f"Evidence: {path}"]
+    lines += ["Result: " + ("FAIL" if counts["FAIL"] else "no FAIL") +
+             "  (" + ", ".join(f"{counts[r]} {r}" for r in ("PASS", "WARN", "SKIP", "FAIL")) + ")"]
     return "\n".join(lines)
 
 
@@ -371,7 +386,9 @@ def main(argv=None):
         print(f"build_evidence: {err}", file=sys.stderr)
         return 2
     print(summary(doc, path, sidecars))
-    return 1 if any(c["result"] == "FAIL" for c in doc["checks"]) else 0
+    if any(c["result"] == "FAIL" for c in doc["checks"]):
+        return 1
+    return REFUSED_DIRTY if path is None else 0
 
 
 if __name__ == "__main__":

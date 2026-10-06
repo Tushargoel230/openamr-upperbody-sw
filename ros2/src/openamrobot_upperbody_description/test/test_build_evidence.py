@@ -145,24 +145,67 @@ def test_a_stale_sidecar_is_not_used(tmp_path):
     assert set(be.fresh_sidecars(str(tmp_path), since=time.time() - 3600)) == {"T98"}
 
 
-def test_summary_and_exit_status_follow_the_checks(tmp_path, monkeypatch):
-    # end to end on the real installed package with an empty results directory: nothing ran, so it must FAIL, and still write
-    monkeypatch.setenv(ev.EVIDENCE_ENV, str(tmp_path))
+def _repo(tmp_path, dirty=False):
+    """A throwaway git repository with one commit, standing in for openamr-upperbody-sw (--repo)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True)  # noqa: E731
+    git("init", "-q")
+    (repo / "tracked.txt").write_text("a")
+    git("add", "tracked.txt")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
+    if dirty:
+        (repo / "tracked.txt").write_text("changed")
+        (repo / "untracked.txt").write_text("new")
+    return str(repo)
+
+
+def _run_build(tmp_path, repo):
+    evidence = tmp_path / "evidence"
     result = subprocess.run([sys.executable, os.path.join(SCRIPTS, "build_evidence.py"), "--since", str(time.time()),
-                             "--results-dir", str(tmp_path / "none")], capture_output=True, text=True,
-                            env={**os.environ, ev.EVIDENCE_ENV: str(tmp_path)})
+                             "--results-dir", str(tmp_path / "none"), "--repo", repo], capture_output=True, text=True,
+                            env={**os.environ, ev.EVIDENCE_ENV: str(evidence)})
+    return result, [p for p in evidence.iterdir() if p.name.endswith("_dev.json")] if evidence.is_dir() else []
+
+
+def test_summary_and_exit_status_follow_the_checks(tmp_path):
+    # end to end on the real installed package with an empty results directory: nothing ran, so it must FAIL, and still write
+    # (the repository it describes is a clean one: a dirty tree writes nothing, see below)
+    result, reports = _run_build(tmp_path, _repo(tmp_path))
     assert result.returncode == 1, result.stdout + result.stderr
-    reports = [p for p in tmp_path.iterdir() if p.name.endswith("_dev.json")]
     assert len(reports) == 1
     doc = json.loads(reports[0].read_text())
     assert doc["schema"] == "openamr.evidence.v1" and doc["evidence_class"] == "static+mock" and doc["profile"] == "dev"
+    assert doc["dirty"] is False and "dirty_files" not in doc
     by_id = {c["id"]: c["result"] for c in doc["checks"]}
     assert by_id["T01"] == "FAIL" and by_id["T14"] == "FAIL" and by_id["L01"] == "FAIL" and by_id["V01"] == "WARN"
     assert by_id["AUX"] == "FAIL"                                          # the three steps were never run
     assert set(doc["config_ids"]) and all(ev.SHA256_RE.match(v) for v in doc["config_ids"].values())
     assert len(doc["config_ids"]) == 14 and "mast_1350/openarm/mock" in doc["config_ids"]
     assert doc["limitations"] and all(isinstance(x, str) for x in doc["limitations"])
-    assert "Result: FAIL" in result.stdout
+    assert "Result: FAIL" in result.stdout and f"Evidence: {reports[0]}" in result.stdout
+
+
+def test_a_dirty_tree_writes_no_evidence_file_and_says_why(tmp_path):
+    """The P08 failure: a dirty-tree run was left beside the clean one and the reviewer had to be told which to trust."""
+    result, reports = _run_build(tmp_path, _repo(tmp_path, dirty=True))
+    assert reports == [], "a report was written from a dirty tree"
+    assert "Evidence: NOT WRITTEN" in result.stdout and "uncommitted changes" in result.stdout
+    assert "tracked.txt" in result.stdout and "untracked.txt" in result.stdout        # names the files, tracked or not
+    assert "(dirty)" in result.stdout                                                  # the console results still print
+    assert result.returncode == 1                                                      # the FAILs of this empty run win
+
+
+def test_a_dirty_tree_with_no_failing_check_exits_3_not_0(monkeypatch, capsys, tmp_path):
+    """Exit 0 would read as 'recorded'. Nothing was, so it is its own status."""
+    doc = {"repo": "openamr-upperbody-sw", "git_hash": "a" * 40, "dirty": True, "dirty_files": ["x.py"],
+           "datums_revision": "r", "evidence_class": "static+mock", "config_ids": {}, "checks": [
+               {"id": "T01", "name": "n", "result": "PASS", "details": {}}]}
+    monkeypatch.setattr(be, "build", lambda args: (doc, None, {}))
+    assert be.main(["--since", "0"]) == be.REFUSED_DIRTY == 3
+    assert "NOT WRITTEN" in capsys.readouterr().out
+    monkeypatch.setattr(be, "build", lambda args: ({**doc, "dirty": False, "dirty_files": []}, str(tmp_path / "r.json"), {}))
+    assert be.main(["--since", "0"]) == 0
 
 
 def test_clear_mode_removes_only_sidecars(tmp_path):
