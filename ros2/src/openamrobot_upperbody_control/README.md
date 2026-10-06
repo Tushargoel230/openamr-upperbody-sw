@@ -12,8 +12,13 @@ profile (`mock`, `gazebo`, `real`; ADR-003): the plugin differs, the controllers
 The controller manager runs at 100 Hz. The file is derived from `enactic/openarm_ros2` (`ros2_controllers.yaml` at
 `4e837e1`, Apache-2.0); the header lists the three changes. The one that matters: the Jazzy `GripperActionController`
 reads `joint:` (a string), and upstream's `joints:` list makes it fail to configure with "Joint name cannot be empty".
-`position_controllers/GripperActionController` is deprecated in Jazzy in favour of the parallel gripper controller; it is
-kept because upstream's MoveIt configuration names it; the gripper controller type is one of the decisions ADR-009 (point 4) leaves to Om and Adnan.
+`position_controllers/GripperActionController` is deprecated in Jazzy and logs a warning at every configure. **It is kept
+on purpose, because its replacement is not a rename:** the deprecated controller serves the `control_msgs/action/GripperCommand`
+action (the one upstream's MoveIt configuration expects), while `parallel_gripper_action_controller/GripperActionController`
+(the warning misspells it as `parallel_gripper_controllers/...`) serves `control_msgs/action/ParallelGripperCommand`, with a
+different goal. Switching would change the gripper interface, which is manipulation#11 and ADR-009 point 4, open with Om and
+Adnan. Checked in the Jazzy 4.42 binaries (`libgripper_action_controller.so` and `libparallel_gripper_action_controller.so`)
+and live: `ros2 action list -t` shows `ParallelGripperCommand` on the parallel controller.
 
 - **The mobile base is not under `ros2_control`.** The base keeps its existing drive plugin and its `/cmd_vel` and `/odom`
   interface; this package must not touch them.
