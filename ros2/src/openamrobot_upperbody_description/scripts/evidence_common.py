@@ -147,14 +147,22 @@ GIT_SOURCE = "git checkout"
 METADATA_SOURCE = "package metadata (config/upstream_pins.yaml)"
 
 
-def pinned_commit_in_metadata(name="openarm_description", pins_file=None):
-    """The commit config/upstream_pins.yaml pins for `name` (a full hash for openarm_description), or None."""
+HEX40_RE = re.compile(r"^[0-9a-f]{40}$")      # a full commit hash: no prefixes, so equality is the only comparison
+
+
+def all_pins(pins_file=None):
+    """{name: value} for every entry of config/upstream_pins.yaml, as YAML read it (so a number stays a number)."""
     import yaml
     pins_file = pins_file or os.path.join(share_dir(), "config", "upstream_pins.yaml")
     if not os.path.isfile(pins_file):
-        return None
+        return {}
     with open(pins_file) as f:
-        return (yaml.safe_load(f).get("pins") or {}).get(name)
+        return dict((yaml.safe_load(f) or {}).get("pins") or {})
+
+
+def pinned_commit_in_metadata(name="openarm_description", pins_file=None):
+    """The commit config/upstream_pins.yaml pins for `name`, or None. Every pin there is a quoted 40-hex string (C02)."""
+    return all_pins(pins_file).get(name)
 
 
 def upstream_commit_and_source(workspace, name="openarm_description", pins_file=None):
@@ -180,17 +188,28 @@ def upstream_commit(workspace, name="openarm_description", pins_file=None):
 
 
 def pin_vs_checkout(workspace, name="openarm_description", pins_file=None):
-    """(result, details) for C02: the commit config/upstream_pins.yaml pins for `name` against the HEAD of its checkout.
+    """(result, details) for one pin of C02: the commit config/upstream_pins.yaml pins for `name` against the HEAD of its
+    checkout.
 
     PASS when they are equal. FAIL when they differ (both hashes named), when the checkout has local changes (its HEAD is
-    then not what anyone pinned), or when the pin file has no pin for `name`. SKIP only when there is no checkout to
-    compare with: then print_config_id.py falls back to the pin, so the two cannot disagree, and the check says so. That is
-    the one SKIP this tree is allowed to have. It compares the pin with the checkout, never with upstream's tip, so a pin
-    held behind upstream on purpose is not drift; moving the pin and the checkout is a change made in one commit.
+    then not what anyone pinned), when the pin file has no pin for `name` but a checkout exists, or when the pin is not a
+    full 40-hex string (a number YAML read from an all-digit hash, a 7-character prefix): that is checked with or without
+    a checkout, because the pin is also what print_config_id.py falls back to. SKIP only when there is no checkout to
+    compare with: then the config id uses the pin, so the two cannot disagree, and the check says so. That is the one SKIP
+    this tree is allowed to have. It compares the pin with the checkout, never with upstream's tip, so a pin held behind
+    upstream on purpose is not drift; moving the pin and the checkout is a change made in one commit.
     """
     path = upstream_checkout(workspace, name)
     pinned = pinned_commit_in_metadata(name, pins_file)
     head = git_head(path) if os.path.isdir(path) else None
+    if pinned is not None and not isinstance(pinned, str):   # YAML read an all-digit hash as a number: quote it
+        return "FAIL", {"reason": f"the pin for {name} in config/upstream_pins.yaml is {pinned!r}, not a string: quote it",
+                        "pin": pinned, "checkout_head": head}
+    if pinned is not None and not HEX40_RE.match(pinned):
+        return "FAIL", {"reason": f"the pin for {name} in config/upstream_pins.yaml is {pinned!r}, not a full 40-hex "
+                                  "commit hash: a prefix cannot be compared exactly and would give the fallback config "
+                                  "id a different value from the checkout's",
+                        "pin": pinned, "checkout_head": head}
     if head is None:
         return "SKIP", {"reason": f"no git checkout of {name} at {path}, so there is nothing to compare the pin with. "
                                   "This is the only legitimate SKIP in this tree: without a checkout the config id "
@@ -199,9 +218,6 @@ def pin_vs_checkout(workspace, name="openarm_description", pins_file=None):
     if pinned is None:
         return "FAIL", {"reason": f"config/upstream_pins.yaml has no pin for {name}, but a checkout exists at {path}",
                         "checkout_head": head}
-    if not isinstance(pinned, str):       # YAML read an all-digit hash as a number: leading zeros are gone, quote it
-        return "FAIL", {"reason": f"the pin for {name} in config/upstream_pins.yaml is {pinned!r}, not a string: quote it",
-                        "pin": pinned, "checkout_head": head}
     dirty, files = git_dirty(path)
     if dirty:
         return "FAIL", {"reason": f"{path} has local changes ({', '.join(files[:3])}): its HEAD is not a pinned commit",
@@ -212,6 +228,25 @@ def pin_vs_checkout(workspace, name="openarm_description", pins_file=None):
                                   "Move the pin and the checkout together, in one commit",
                         "pin": pinned, "checkout_head": head}
     return "PASS", {"pin": pinned, "checkout_head": head, "checkout": path}
+
+
+def pins_vs_checkouts(workspace, pins_file=None, required=("openarm_description",)):
+    """(result, details) for C02 as a whole: pin_vs_checkout for every entry of the pin file, plus the `required` names
+    (openarm_description is what the config id is built from, so a file with no pin for it fails when its checkout is
+    there). FAIL if any pin FAILs, each reason named. SKIP only if no pin had a checkout to compare with. Otherwise PASS,
+    with the pins that had no checkout listed under `not_compared`: a pin nothing checks is a pin that drifts, so the
+    report says which ones those were instead of letting a PASS cover them."""
+    names = list(dict.fromkeys([*all_pins(pins_file), *required]))
+    per_pin = {name: pin_vs_checkout(workspace, name, pins_file) for name in names}
+    rows = {name: {"result": result, **details} for name, (result, details) in per_pin.items()}
+    failed = {name: row["reason"] for name, row in rows.items() if row["result"] == "FAIL"}
+    not_compared = [name for name, row in rows.items() if row["result"] == "SKIP"]
+    details = {"pins": rows, "compared": [n for n, r in rows.items() if r["result"] == "PASS"], "not_compared": not_compared}
+    if failed:
+        return "FAIL", {**details, "reason": "; ".join(f"{name}: {why}" for name, why in failed.items())}
+    if len(not_compared) == len(rows):
+        return "SKIP", {**details, "reason": "; ".join(f"{n}: {rows[n]['reason']}" for n in not_compared)}
+    return "PASS", details
 
 
 def pinned_commit_in_baseline(workspace, name="openarm_description"):
