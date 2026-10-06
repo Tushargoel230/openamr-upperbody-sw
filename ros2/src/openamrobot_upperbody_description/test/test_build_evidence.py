@@ -19,7 +19,7 @@ def test_every_a6_check_id_in_verification_md_is_in_the_report():
     assert ids == [f"T{n:02d}" for n in range(1, 17)] + ["L01", "E01"]
     assert len(set(i for i, _ in be.A6_CHECKS + be.EXTRA_CHECKS)) == len(be.A6_CHECKS + be.EXTRA_CHECKS)
     assert set(be.NOT_IMPLEMENTED) <= set(ids)
-    assert be.SIDECAR_REQUIRED <= {i for i, _ in be.A6_CHECKS + be.EXTRA_CHECKS}
+    assert be.SIDECAR_REQUIRED <= {i for i, _ in be.A6_CHECKS + be.EXTRA_CHECKS + be.GAZEBO_CHECKS}
 
 
 @pytest.mark.parametrize("classname,name,expected", [
@@ -35,6 +35,8 @@ def test_every_a6_check_id_in_verification_md_is_in_the_report():
     ("pkg.test.test_s4_sensors", "test_camera_links_are_visual_only[head]", "AUX"),
     ("pkg.test.test_urdf_utils", "test_rpy_axes_follow_the_urdf_convention", "AUX"),
     ("pkg.test.test_checker_like", "test_checker_without_id", "AUX"),
+    ("pkg.test.test_g01_gazebo_smoke", "test_g01_3_the_nav2_facing_topics_are_platform_sws_by_name_and_type", "G01"),
+    ("pkg.test.test_g02_gripper_mimic", "test_g02_1_both_grippers_close_and_the_mimic_follows", "G02"),
 ])
 def test_check_id_mapping(classname, name, expected):
     assert be.check_id_of(classname, name) == expected
@@ -186,6 +188,43 @@ def test_summary_and_exit_status_follow_the_checks(tmp_path):
     assert "Result: FAIL" in result.stdout and f"Evidence: {reports[0]}" in result.stdout
 
 
+def _run_gazebo_build(tmp_path, repo):
+    evidence = tmp_path / "evidence"
+    result = subprocess.run([sys.executable, os.path.join(SCRIPTS, "build_evidence.py"), "--profile", "gazebo", "--since",
+                             str(time.time()), "--gazebo-results-dir", str(tmp_path / "none"), "--repo", repo],
+                            capture_output=True, text=True, env={**os.environ, ev.EVIDENCE_ENV: str(evidence)})
+    return result, sorted(p for p in evidence.iterdir() if p.name.endswith("_gazebo.json")) if evidence.is_dir() else []
+
+
+def test_the_gazebo_profile_writes_a_simulation_report_and_never_a_physical_claim(tmp_path):
+    result, reports = _run_gazebo_build(tmp_path, _repo(tmp_path))
+    assert len(reports) == 1, result.stdout + result.stderr
+    doc = json.loads(reports[0].read_text())
+    assert doc["profile"] == "gazebo" and doc["evidence_class"] == "simulation" and doc["dirty"] is False
+    assert [c["id"] for c in doc["checks"]] == [i for i, _ in be.GAZEBO_CHECKS]
+    by_id = {c["id"]: c["result"] for c in doc["checks"]}
+    assert by_id["G01"] == "FAIL" and by_id["G02"] == "FAIL"                       # nothing ran: no result is not a pass
+    assert by_id["V01"] == "WARN" and "pending" in next(c for c in doc["checks"] if c["id"] == "V01")["details"]["performed"]
+    assert set(doc["config_ids"]) == {"mast_1350/openarm/gazebo", "mast_1300/openarm/gazebo"}
+    assert set(doc["simulator"]) == {"gz_sim", "gz_ros2_control", "ros_gz_sim"}
+    text = " ".join(doc["limitations"])
+    assert "no physical evidence" in doc["limitations"][-1] and "simulation only" in doc["limitations"][-1]
+    for claim in ("works on hardware", "production-ready", "validated"):
+        assert claim not in text.replace("not validated", "")
+
+
+def test_the_gazebo_profile_refuses_a_dirty_tree_like_the_dev_one(tmp_path):
+    result, reports = _run_gazebo_build(tmp_path, _repo(tmp_path, dirty=True))
+    assert reports == [] and "Evidence: NOT WRITTEN" in result.stdout
+
+
+def test_a_gazebo_check_with_no_sidecar_is_a_fail_not_a_pass():
+    assert {"G01", "G02"} <= be.SIDECAR_REQUIRED
+    assert be.combine("G01", GOOD, None)[0] == "FAIL"
+    assert be.combine("G01", GOOD, _sidecar("PASS"))[0] == "PASS"
+    assert be.combine("G02", GOOD, _sidecar("FAIL"))[0] == "FAIL"
+
+
 def test_a_dirty_tree_writes_no_evidence_file_and_says_why(tmp_path):
     """The P08 failure: a dirty-tree run was left beside the clean one and the reviewer had to be told which to trust."""
     result, reports = _run_build(tmp_path, _repo(tmp_path, dirty=True))
@@ -198,7 +237,7 @@ def test_a_dirty_tree_writes_no_evidence_file_and_says_why(tmp_path):
 
 def test_a_dirty_tree_with_no_failing_check_exits_3_not_0(monkeypatch, capsys, tmp_path):
     """Exit 0 would read as 'recorded'. Nothing was, so it is its own status."""
-    doc = {"repo": "openamr-upperbody-sw", "git_hash": "a" * 40, "dirty": True, "dirty_files": ["x.py"],
+    doc = {"repo": "openamr-upperbody-sw", "profile": "dev", "git_hash": "a" * 40, "dirty": True, "dirty_files": ["x.py"],
            "datums_revision": "r", "evidence_class": "static+mock", "config_ids": {}, "checks": [
                {"id": "T01", "name": "n", "result": "PASS", "details": {}}]}
     monkeypatch.setattr(be, "build", lambda args: (doc, None, {}))
@@ -215,3 +254,15 @@ def test_clear_mode_removes_only_sidecars(tmp_path):
                             text=True, env={**os.environ, ev.EVIDENCE_ENV: str(tmp_path)})
     assert result.returncode == 0 and result.stdout.strip() == str(tmp_path)
     assert sorted(os.listdir(tmp_path)) == ["S4.json"]
+
+
+def test_each_profile_clears_only_its_own_sidecars(tmp_path):
+    """verify_gazebo.sh must not wipe the A6 sidecars the dev report was built from, nor the other way round."""
+    for check_id in ("T99", "G01"):
+        ev.write_sidecar(check_id, "probe", "probe", "PASS", {}, directory=str(tmp_path))
+    env = {**os.environ, ev.EVIDENCE_ENV: str(tmp_path)}
+    run = lambda *a: subprocess.run([sys.executable, os.path.join(SCRIPTS, "build_evidence.py"), *a, "--clear"],  # noqa: E731
+                                    capture_output=True, text=True, env=env)
+    assert run("--profile", "gazebo").returncode == 0 and sorted(os.listdir(tmp_path)) == ["T99_probe.json"]
+    ev.write_sidecar("G01", "probe", "probe", "PASS", {}, directory=str(tmp_path))
+    assert run("--profile", "dev").returncode == 0 and sorted(os.listdir(tmp_path)) == ["G01_probe.json"]
