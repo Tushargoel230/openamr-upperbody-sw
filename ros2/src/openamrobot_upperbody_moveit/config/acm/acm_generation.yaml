@@ -1,0 +1,32 @@
+schema_version: 1
+tool: moveit_setup_assistant collisions_updater
+moveit_version: 2.12.4
+date: '2026-10-06'
+mast_id: mast_1350
+trials: 10000
+xacro_args: mast_id:=mast_1350 arm_package:=openarm hardware_profile:=mock
+command: ros2 run moveit_setup_assistant collisions_updater --urdf /home/slash/openamr_ws/install/openamrobot_upperbody_description/share/openamrobot_upperbody_description/urdf/combined_robot.xacro
+  --xacro-args "mast_id:=mast_1350 arm_package:=openarm hardware_profile:=mock" --srdf /home/slash/openamr_ws/src/openamr-upperbody-sw/ros2/src/openamrobot_upperbody_moveit/config/openamrobot.srdf
+  --output /tmp/tmp.C21xYDFlbk/tool_output.srdf --default --trials 10000
+categories:
+  never_in_collision: true
+  adjacent: true
+  default: true
+  always: false
+min_collision_fraction: the tool's default; unused because the always category is off
+tool_statistics:
+  total_links: 46
+  possible_pairs: 1035
+  always_in_collision: 0
+  never_in_collision: 458
+  default_in_collision: 2
+  adjacent_disabled: 34
+  sometimes_in_collision: 541
+  total_disabled: 494
+written:
+  Never: 458
+  Adjacent: 16
+  Default: 0
+written_total: 474
+imported_before_the_markers: 20
+imported_not_in_the_tool_output: []
