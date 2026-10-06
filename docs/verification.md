@@ -92,6 +92,12 @@ exit status is 1 if a check is `FAIL`, 3 if everything passed but the tree is di
 | M06 | *(proposed by this step)* the named-pose plans need some acceleration limit and do not depend on its value (ADR-009) |
 | L01, I01, V01, AUX | as in the A6 report, for the packages this one touches; V01 now has **eight** checklist items (item 8: an arm executes a named pose in RViz and the preview matches what the robot then does) and stays `WARN` until a person has answered them |
 
+Recorded run: commit `4567b02` (code; later commits are documentation only), from a clean build of the five upper-body packages, evidence
+`20261006T212830Z_a7.json`: **10 `PASS`, 1 `WARN` (V01), 1 `FAIL` (M03)**. M01 passed 12 of 12 poses at each of the four mast IDs (worst final error
+0.001 rad, no start-state retries), M02 12 of 12 at `mast_1350` (0.00096 rad, no retries), M04 rejected the joint goal and timed out on the pose goal.
+M03 fails on one pair, `openarm_left_ee_link1` / `openarm_left_link2`, at every mast ID; the script therefore exits 1. The A6 report is unchanged
+by A7: `verify_a6.sh` at the same commit gives 20 `PASS`, 6 `WARN`, 0 `FAIL` (`20261006T213101Z_dev.json`).
+
 **What `simulation` permits here:** every claim reads *"plans and executes in simulation under declared OpenAMRobot limits"*. The limits
 are engineering defaults (`source: engineering_default`, `status: placeholder`) because upstream declares no acceleration limits
 (manipulation#10, ADR-009); they are not vendor data. **What it does not permit:** any statement about a physical robot, a payload, a
