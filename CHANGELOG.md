@@ -14,7 +14,7 @@ or Gazebo result.
   plugin, see below) and `enable_planar_base`
   (a `planar` joint `world -> base_link`, present and disabled by default, axis `0 0 1`).
 - Head camera and wrist camera frames as plain frames with a visual marker (the ZED wrapper is deferred).
-- `config/datums.yaml` (14 datums with provenance: 8 placeholder, 5 provisional, 1 verified), its JSON schema, and
+- `config/datums.yaml` (15 datums with provenance: 8 placeholder, 6 provisional, 1 verified), its JSON schema, and
   `config/frame_contract.yaml`, the machine-readable frame and joint contract that the tests enforce.
 - Verification suite and `verify_a6.sh`, which writes an `openamr.evidence.v1` report: expansion matrix, `check_urdf`,
   single root, frame contract, shoulder height per mast ID, argument validation, collision and inertia checks, mass report,
@@ -36,10 +36,23 @@ or Gazebo result.
   trajectory on `left_arm_controller` followed within 0.02 rad. Mock hardware reflects commands as state, so this shows the
   wiring, not tracking performance.
 - `verify_a6.sh` also runs the control and bringup tests, and the evidence report reads the bringup results for L01.
+- A6 evidence has no SKIP: T14-T16 and L01 are results, under `mock_components/GenericSystem` (19 PASS, 6 WARN, 0 SKIP,
+  0 FAIL at `2083c76`). That is weaker than hardware, and `evidence_class` stays `static+mock`: no controller has driven a
+  motor.
 - `config/upstream_pins.yaml`: the config id falls back to this pinned `openarm_description` commit when there is no git
   checkout (a checkout with local changes is still an error); a test keeps it equal to the checkout and the baseline pin.
 - T02 also runs `check_urdf` on `gazebo` and `real` at `mast_1300` (labelled extras).
 - `.gitattributes`: `*.sh text eol=lf`, so `verify_a6.sh` cannot pick up CRLF through the `/mnt/c` checkout.
+- T10 reports, after the modelled total, the `gross_mass_limit` it compared against and the F2S vehicle estimate (93 kg), each
+  with its source, and prints "per-link masses still placeholders" if and only if a reported group draws a mass from a datum
+  whose status is `placeholder`. The clause is computed from `datums.yaml` on every run, so it disappears when real masses
+  land. T10 is still report-only: it fails only when the modelled total exceeds `gross_mass_limit`.
+- `f2s_vehicle_mass_estimate` datum (`report_only`, source `f2s`, status `provisional`): Alex's F2S design proposal of 28 Sep,
+  about 93 kg gross against the 120 kg cap. Second-hand: the F2S document itself is not in this repository.
+- Check C02: `config/upstream_pins.yaml` must equal the HEAD of a clean `src/upstream/openarm_description`. A difference is a
+  FAIL naming both hashes. With no checkout it is a SKIP that says so, the only one this tree is allowed to have.
+- `docs/verification.md`: how to run `verify_a6.sh`, the evidence report field by field, what `static+mock` permits, and the
+  six WARNs with what would clear each.
 - READMEs for the description package and, stating their scaffold status, for the control, bringup, Gazebo and MoveIt
   packages.
 - Test dependencies `python3-numpy` and `liburdfdom-tools` declared in the description package, so
@@ -52,6 +65,11 @@ or Gazebo result.
   `status: provisional`; which axis carries the 120 mm is unconfirmed). Datums revision `2026-10-08.d`, so every
   configuration id changed.
 - `package.xml` descriptions of the bringup, control and MoveIt packages describe the 2.0 fixed-mast scope instead of a lift.
+- The control README's note on the gripper controller's deprecation warning now states, in order: what is in use, that it is
+  a warning and not a removal, that the replacement serves a different action type, that the warning misspells the
+  replacement's name, and that the choice is manipulation#11, ADR-009 point 4 and P10's. The controller type is unchanged.
+- Datums revision `2026-10-08.e` (the new F2S datum), so every configuration id changed. C01 no longer compares the pin file
+  with a checkout (that is C02); it keeps the format and the baseline-pin comparison.
 
 ### Removed
 
