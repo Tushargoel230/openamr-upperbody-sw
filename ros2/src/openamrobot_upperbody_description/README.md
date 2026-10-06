@@ -39,6 +39,7 @@ configuration id (see [Configuration id](#configuration-id)).
 | `hardware_profile` | `mock`, `gazebo`, `real` | `mock` | Selects the arm `ros2_control` plugin (ADR-003): `mock` = `mock_components/GenericSystem` and `real` = `openarm_hardware/OpenArmHW`, both through the upstream bimanual macro; `gazebo` = our own block with `gz_ros2_control/GazeboSimSystem`. Part of the configuration id. See [ros2_control](#ros2_control). |
 | `enable_planar_base` | `true`, `false` | `false` | `true` adds a `world` link and `base_planar_joint` (type `planar`, axis `0 0 1`) above `base_link`. Off by default: base and arm never move together in OpenAMRobot 2.0. |
 | `datums_file` | path | `config/datums.yaml` | Alternative datum file, used by the tests. |
+| `controllers_file` | absolute path | empty | The controller parameter file the `gazebo` profile hands to `gz_ros2_control`. Empty: no `<parameters>` element. Supplied by the simulation launch; ignored by `mock` and `real`. See [ros2_control](#ros2_control). |
 
 An unknown value for any arg stops expansion with an error that lists the accepted values.
 
@@ -78,7 +79,7 @@ WARN until someone does).
 
 ## ros2_control
 
-`urdf/ros2_control.xacro` defines `openamr_arm_ros2_control(hardware_profile)`, called from `combined_robot.xacro` for
+`urdf/ros2_control.xacro` defines `openamr_arm_ros2_control(hardware_profile, controllers_file)`, called from `combined_robot.xacro` for
 `arm_package:=openarm` only. The mobile base never gets a `<ros2_control>` block (ADR-003).
 
 | `hardware_profile` | Arm plugin | How |
@@ -94,11 +95,15 @@ T16 assert that the two blocks equal that file's expansion. The controllers are 
 `ros2 launch openamrobot_upperbody_bringup mock.launch.py`.
 
 The `gazebo` profile also carries the Gazebo-side plugin, a **model** plugin (`gz_ros2_control-system`,
-`gz_ros2_control::GazeboSimROS2ControlPlugin`) whose `<parameters>` is `arm_controllers.yaml` by installed path
-(`$(find openamrobot_upperbody_control)`). The library refuses to attach anywhere but a model, so it is emitted here with the
-model; the world, the launch and the physics engine are in `openamrobot_upperbody_gazebo`. This package does not declare a
-dependency on `openamrobot_upperbody_control` for that `$(find)`: control already test-depends on this package, and a
-dependency back would be a cycle. T15 checks the plugin's names against the installed `gz_ros2_control`.
+`gz_ros2_control::GazeboSimROS2ControlPlugin`). The library refuses to attach anywhere but a model, so it is emitted here with
+the model; the world, the launch and the physics engine are in `openamrobot_upperbody_gazebo`. Its `<parameters>` (the
+controller parameter file) is the **`controllers_file` xacro arg**, empty by default; with it empty the plugin carries no
+`<parameters>` element at all. This description declares the hardware contract and knows nothing about where a controller
+config lives (ADR-003), so it neither resolves `openamrobot_upperbody_control` nor needs a dependency on it: the launch that
+starts the simulation, which legitimately depends on both packages, supplies the absolute path
+(`openamrobot_upperbody_gazebo/launch/sim.launch.py` passes `arm_controllers.yaml`'s installed path). T15 checks the element
+appears when the arg is given, that the default expansion is still valid URDF, and the plugin's names against the installed
+`gz_ros2_control`.
 
 `openarm_*_finger_joint2` is not declared under `ros2_control`, as upstream leaves it out; the URDF `<mimic>` follows
 `finger_joint1`. Decided in P09 by running it: Gazebo's Bullet-Featherstone engine honours that mimic on its own and DART (the launch's default, platform-sw's engine)

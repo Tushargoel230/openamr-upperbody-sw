@@ -23,6 +23,10 @@
   <xacro:arg name="hardware_profile" default="mock"/>
   <xacro:arg name="enable_planar_base" default="false"/>
   <xacro:arg name="datums_file" default="$(find openamrobot_upperbody_description)/config/datums.yaml"/>
+  <!-- Absolute path of the controller parameter file the gazebo profile hands to gz_ros2_control. Empty by default: the
+       description declares the hardware contract and knows nothing about where a controller config lives (ADR-003); the launch
+       that starts the simulation supplies it. Only the gazebo profile reads it. -->
+  <xacro:arg name="controllers_file" default=""/>
 
   <!-- Args are read as raw strings: xacro would otherwise turn "false"/"true" (any case) and numerals into
        bool/number, and the accepted-value check below compares strings. The quotes + lazy_eval="false" keep them str. -->
@@ -31,6 +35,7 @@
   <xacro:property name="hardware_profile" lazy_eval="false" value="'$(arg hardware_profile)'"/>
   <xacro:property name="enable_planar_base" lazy_eval="false" value="'$(arg enable_planar_base)'"/>
   <xacro:property name="datums_file" lazy_eval="false" value="'$(arg datums_file)'"/>
+  <xacro:property name="controllers_file" lazy_eval="false" value="'$(arg controllers_file)'"/>
   <xacro:property name="mast_ids_file" value="$(find openamrobot_upperbody_description)/config/mast_ids.yaml"/>
 
   <xacro:property name="datums" value="${xacro.load_yaml(datums_file)}"/>
@@ -97,7 +102,7 @@
 
     <!-- Arms only, and only here: so101 and none get no ros2_control. Needs the arm joints emitted above. -->
     <xacro:include filename="$(find openamrobot_upperbody_description)/urdf/ros2_control.xacro"/>
-    <xacro:openamr_arm_ros2_control hardware_profile="${hardware_profile}"/>
+    <xacro:openamr_arm_ros2_control hardware_profile="${hardware_profile}" controllers_file="${controllers_file}"/>
   </xacro:if>
 
 </robot>
