@@ -91,6 +91,10 @@ All notable changes to this repository. Evidence for the description is static a
 - Datums revision `2026-10-08.e` (the new F2S datum), so every configuration id changed. C01 no longer compares the pin file
   with a checkout (that is C02); it keeps the format and the baseline-pin comparison.
 
+- `sim.launch.py`'s `physics_engine` defaults to DART again (`gz-physics-dartsim-plugin`), not Bullet-Featherstone: a
+  gripper-mimic convenience is not grounds to re-baseline platform-sw's physics. G02 passes `gz-physics-bullet-featherstone-plugin`
+  explicitly and its sidecar records which engine each Gazebo check ran on.
+
 ### Removed
 
 - `config/lift/`: an empty scaffold directory. An actuated lift is OpenAMRobot 3.0 scope.
@@ -103,8 +107,9 @@ All notable changes to this repository. Evidence for the description is static a
   `openarm_hardware` cannot be built in the reference workspace (it needs OpenArmCAN). In Gazebo the arms' position interface is
   a velocity servo, so tracking there says nothing about the real arm. `finger_joint2` is not declared under `ros2_control`:
   Gazebo's Bullet-Featherstone engine follows the URDF `<mimic>` on its own, its DART default does not move the fingers at all.
-- The Gazebo launch uses the Bullet-Featherstone engine, not platform-sw's DART. The base was driven on it only far enough to
-  compare distance and yaw with the command; contact behaviour against DART was not compared.
+- The Gazebo launch's `physics_engine` defaults to DART, the engine platform-sw tuned the base on, and the grippers do not close
+  there. G02 passes Bullet-Featherstone explicitly. The base's contact behaviour was compared on neither engine (G01 measures
+  kinematics).
 - The gripper controllers stay `position_controllers/GripperActionController` (deprecated in Jazzy) on purpose: the replacement,
   `parallel_gripper_action_controller`, serves `ParallelGripperCommand` instead of `GripperCommand`, so switching decides the
   gripper interface (manipulation#11, ADR-009 point 4), which is open.

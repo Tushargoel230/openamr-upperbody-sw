@@ -16,7 +16,7 @@ ros2 launch openamrobot_upperbody_gazebo sim.launch.py rviz:=true         # RViz
 | `mast_id` | `mast_1350` | `mast_1300` \| `mast_1350` \| `mast_1400` \| `mast_1450` |
 | `world` | `worlds/empty.sdf` | path to any world; platform-sw's is `$(ros2 pkg prefix --share openamrobot_gazebo)/worlds/walled_world.sdf` |
 | `headless` | `false` | `true` runs `gz sim -s` |
-| `physics_engine` | `gz-physics-bullet-featherstone-plugin` | applied to whatever world is loaded. See [the engine](#the-physics-engine-and-the-gripper-mimic) before changing it |
+| `physics_engine` | `gz-physics-dartsim-plugin` (DART) | applied to whatever world is loaded. DART is the engine platform-sw tuned the base on, and it **cannot close the grippers**: pass `gz-physics-bullet-featherstone-plugin` for that (G02 does). See [the engine](#the-physics-engine-and-the-gripper-mimic) |
 | `rviz` | `false` | RViz2 with `config/sim.rviz` |
 
 Start-up takes about a minute on this machine (software rendering, real-time factor about 0.65). The five arm controllers go
@@ -95,7 +95,11 @@ transform involves the `odom` frame, and `odom` is not a link of the description
 
 ## The physics engine and the gripper mimic
 
-Decided here, measured with the simulator running (the P06 question left open: does `finger_joint2` follow `finger_joint1`?).
+Measured with the simulator running (the P06 question: does `finger_joint2` follow `finger_joint1`?). **The launch defaults to DART**
+(decided 6 Oct, P10 task 0): it is the engine platform-sw tuned the base's DiffDrive on, a gripper-mimic convenience is not grounds
+to re-baseline someone else's physics, and the drive check compared kinematics, not contact. So the limitation is visible, not hidden
+behind a default: with the default engine the arms and the base work and the grippers do not close. G02 passes
+`physics_engine:=gz-physics-bullet-featherstone-plugin` explicitly and says why; anything that needs a gripper to close does the same.
 
 | Engine | Gripper goal (`GripperCommand`) | `finger_joint2` | Gazebo says |
 |---|---|---|---|
@@ -112,14 +116,15 @@ Under Bullet-Featherstone the URDF `<mimic>` (turned into an SDF mimic constrain
   `ros2_control` refuses it ("Activated mimic joints cannot have command interfaces"), and with `<param name="mimic">` and no
   command interface it adds nothing the physics does not already do. This is also why `gz_ros2_control#343`, which upstream cites,
   does not matter here;
-- the launch selects Bullet-Featherstone with `--physics-engine`, a flag that applies to **any world**, including
-  platform-sw's `walled_world.sdf`, which was tried (controllers active, base drives, gripper and mimic track). Platform-sw's
-  own launch still runs DART; nothing of theirs changed;
+- the launch's `physics_engine` argument sets `--physics-engine`, a flag that applies to **any world**, including
+  platform-sw's `walled_world.sdf`, which was tried with Bullet-Featherstone (controllers active, base drives, gripper and mimic
+  track). Platform-sw's own launch runs DART, as this one now does by default; nothing of theirs changed;
 - the gripper controller type (`position_controllers/GripperActionController`) and its `GripperCommand` action are untouched:
   this is a physics-engine setting, not an interface change (ADR-009 point 4 stays with Om and Adnan, P10);
 - the right gripper's joint range is `[-0.7854, 0]`, the mirror of the left's, so its goals are negative.
 
-G02 guards this. Launched on DART it fails at the first gripper goal. The base was driven on Bullet-Featherstone far enough to
+G02 guards this: it passes Bullet-Featherstone explicitly, and launched on DART it fails at the first gripper goal. That failure is
+the documented limitation, not a defect. The base was driven on Bullet-Featherstone far enough to
 compare distance and yaw with the command (0.2 m/s for 4 s gave 0.759 m, 0.5 rad/s for 3 s gave 1.376 rad, which match the
 commanded speed less the plugin's acceleration ramp), and G01 repeats the straight drive. How the base behaves in contact
 against DART, which platform-sw tuned for, was not compared. That is for the base's owner, if it matters.
@@ -131,8 +136,8 @@ which also writes the `gazebo` evidence report. Each test starts a headless serv
 
 | | Budget | Asserts |
 |---|---|---|
-| G01 | 90 s (about 35 s) | five controllers `active`; an arm goal completes and tracks while the other arm and the base stay still; platform-sw's bridge topics exist by name and type; `/cmd_vel` moves the base and `/odom` reports it; one publisher of `odom -> base_link`; `/joint_states` has one publisher carrying wheels and arms once each |
-| G02 | 90 s (about 20 s) | both grippers close, and `finger_joint2` follows `finger_joint1` in the physics (link poses, not `/joint_states`) |
+| G01 | 90 s (about 35 s), default engine (DART) | five controllers `active`; an arm goal completes and tracks while the other arm and the base stay still; platform-sw's bridge topics exist by name and type; `/cmd_vel` moves the base and `/odom` reports it; one publisher of `odom -> base_link`; `/joint_states` has one publisher carrying wheels and arms once each |
+| G02 | 90 s (about 20 s), Bullet-Featherstone passed explicitly | both grippers close, and `finger_joint2` follows `finger_joint1` in the physics (link poses, not `/joint_states`) |
 
 Mutations checked: a second `odom -> base_link` publisher and a second writer on `/joint_states` fail G01; the DART engine
 fails G02.

@@ -19,7 +19,8 @@ def _evidence_common():
 
 def launch_defaults():
     """{name: value} of what sim.launch.py defaults to that a result depends on (the physics engine), read from the launch file
-    itself so a recorded result says what it was measured with and not what a README says."""
+    itself so a recorded result says what it was measured with and not what a README says. A test that passes the engine
+    explicitly records it separately (write_g_sidecar's physics_engine), so this stays "what the launch does by default"."""
     import importlib.util
     from ament_index_python.packages import get_package_share_directory
     path = os.path.join(get_package_share_directory("openamrobot_upperbody_gazebo"), "launch", "sim.launch.py")
@@ -29,19 +30,34 @@ def launch_defaults():
     return {"physics_engine": module.DEFAULT_PHYSICS_ENGINE, "headless": True}
 
 
+def launch_engine_constants():
+    """(default engine, Bullet-Featherstone engine) as sim.launch.py names them, so a test that must pass the second one
+    explicitly does not hard-code a plugin name."""
+    import importlib.util
+    from ament_index_python.packages import get_package_share_directory
+    path = os.path.join(get_package_share_directory("openamrobot_upperbody_gazebo"), "launch", "sim.launch.py")
+    spec = importlib.util.spec_from_file_location("sim_launch_module", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.DEFAULT_PHYSICS_ENGINE, module.BULLET_FEATHERSTONE_ENGINE
+
+
 def ros_type_name(name):
     """A ROS type name as the graph prints it (pkg/msg/Type); platform-sw's bridge file already writes it that way."""
     return name
 
 
-def write_g_sidecar(check_id, slug, name, record, expected=None):
+def write_g_sidecar(check_id, slug, name, record, expected=None, physics_engine=None):
     """Write the sidecar of a Gazebo check. FAIL when the test did not record everything it is meant to (a test that failed
-    part-way leaves holes), which build_evidence combines with the pytest result."""
+    part-way leaves holes), which build_evidence combines with the pytest result. `physics_engine` is the engine a test passed
+    explicitly (G02); without it the check ran on the launch's default, which `launch_defaults` records."""
     ev = _evidence_common()
     expected = expected or ("controllers", "arm_goal", "platform_sw_topics", "drive", "odom_to_base_link", "joint_states")
     missing = [key for key in expected if key not in record]
     result = "FAIL" if missing else "PASS"
     details = {"launch_defaults": launch_defaults(), **record}
+    details["physics_engine_used"] = physics_engine or details["launch_defaults"]["physics_engine"]
+    details["physics_engine_passed_explicitly"] = physics_engine is not None
     if missing:
         details["missing"] = missing
     return ev.write_sidecar(check_id, slug, name, result, details, directory=ev.evidence_dir(ev.share_dir()))

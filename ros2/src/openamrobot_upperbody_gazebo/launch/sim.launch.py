@@ -29,9 +29,11 @@ Args
   world     path to a Gazebo world .sdf                       (default: worlds/empty.sdf in this package; platform-sw's is
             $(ros2 pkg prefix --share openamrobot_gazebo)/worlds/walled_world.sdf)
   headless  true | false     (default false) true runs `gz sim -s`: no Gazebo window, as the smoke test does
-  physics_engine  the gz-physics plugin for whichever world is loaded (default gz-physics-bullet-featherstone-plugin).
-            The Harmonic default, DART, cannot run this model's grippers: its velocity servo does not move the fingers and
-            it has no mimic constraint, so finger_joint2 never follows finger_joint1. See the package README.
+  physics_engine  the gz-physics plugin for whichever world is loaded (default gz-physics-dartsim-plugin: DART, the engine
+            platform-sw tuned the base's DiffDrive on, so this launch does not re-baseline someone else's physics).
+            DART cannot run this model's grippers: its fingers do not follow position commands and it has no mimic
+            constraint, so finger_joint2 never follows finger_joint1. Pass gz-physics-bullet-featherstone-plugin to
+            close the grippers (G02 does). See the package README.
   rviz      true | false     (default false) RViz2 with the fixed frame `odom`, beside the simulator, for a person
 """
 import os
@@ -57,7 +59,10 @@ ARM_AND_GRIPPER_CONTROLLERS = ("left_arm_controller", "right_arm_controller",
 # Packages whose meshes the model references as package://<name>/...; Gazebo resolves that against the parent of the
 # package's share directory (the same trick platform-sw's gz_simulator.launch.py uses for its own description).
 MESH_PACKAGES = ("openamrobot_description", "openarm_description", DESCRIPTION)
-DEFAULT_PHYSICS_ENGINE = "gz-physics-bullet-featherstone-plugin"      # the tests record it; see the README for why not DART
+# DART is the engine platform-sw's DiffDrive was tuned on (their launch runs it), so it is the default here (decided 6 Oct, P10
+# task 0). Gripper motion needs BULLET_FEATHERSTONE_ENGINE, and the launch does not hide that behind the default: pass it.
+DEFAULT_PHYSICS_ENGINE = "gz-physics-dartsim-plugin"          # the tests record it
+BULLET_FEATHERSTONE_ENGINE = "gz-physics-bullet-featherstone-plugin"   # honours the URDF <mimic>; what G02 and M02 pass
 SPAWN_HEIGHT = "0.15"          # m above the ground plane; the model settles onto its wheels and casters in the first second
 CONTROLLER_MANAGER_TIMEOUT = "120"      # s the spawners wait for the controller manager that the simulator hosts
 
@@ -161,7 +166,8 @@ def generate_launch_description():
         DeclareLaunchArgument("headless", default_value="false",
                               description="true | false. gz sim -s: server only, no Gazebo window"),
         DeclareLaunchArgument("physics_engine", default_value=DEFAULT_PHYSICS_ENGINE,
-                              description="gz-physics plugin; the DART default cannot drive the grippers (README)"),
+                              description="gz-physics plugin; default DART (platform-sw's), which cannot close the grippers: "
+                                          "pass gz-physics-bullet-featherstone-plugin for that (README)"),
         DeclareLaunchArgument("rviz", default_value="false",
                               description="true | false. RViz2 beside the simulator, fixed frame odom"),
         *resource_paths,

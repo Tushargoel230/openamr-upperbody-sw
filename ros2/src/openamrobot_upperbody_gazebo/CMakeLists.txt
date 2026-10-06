@@ -8,7 +8,7 @@ if(BUILD_TESTING)
   # G01 starts a real Gazebo server and a controller manager. It picks its own ROS_DOMAIN_ID and GZ_PARTITION (see the test),
   # so it cannot see or be seen by another stack or simulator on the machine. 90 s is the budget for startup and every assertion.
   add_launch_test(test/test_g01_gazebo_smoke.py TIMEOUT 90)
-  # G02 guards the finger-mimic decision (README): it also fails if the simulator is launched on the DART engine.
+  # G02 guards the finger-mimic decision (README). It passes the Bullet-Featherstone engine explicitly: the launch defaults to DART, on which it fails.
   add_launch_test(test/test_g02_gripper_mimic.py TIMEOUT 90)
 endif()
 

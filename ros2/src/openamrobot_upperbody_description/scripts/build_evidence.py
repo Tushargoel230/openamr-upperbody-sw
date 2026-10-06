@@ -248,18 +248,21 @@ def limitations(datums, sidecars):
 def gazebo_limitations(datums, sidecars, simulator):
     """What the `gazebo` report does not say. The last line is the A6 report's own sentence about physical evidence, kept in
     its words on purpose: a simulation result permits no physical claim of any kind."""
-    engine = ((sidecars.get("G01") or {}).get("details", {}).get("launch_defaults") or {}).get("physics_engine", "unknown")
+    def engine_of(check_id):
+        return (sidecars.get(check_id) or {}).get("details", {}).get("physics_engine_used", "unknown")
     return [
-        f"`simulation` names the evidence class: a headless Gazebo Harmonic server ({simulator['gz_sim']}, physics engine "
-        f"{engine}) with gz_ros2_control {simulator['gz_ros2_control']}, run by launch tests. It is a statement about how the "
-        "model behaves in that simulator and about nothing else",
+        f"`simulation` names the evidence class: a headless Gazebo Harmonic server ({simulator['gz_sim']}) with "
+        f"gz_ros2_control {simulator['gz_ros2_control']}, run by launch tests: G01 on the physics engine {engine_of('G01')} "
+        f"(the launch default), G02 on {engine_of('G02')} (passed explicitly). It is a statement about how the model behaves "
+        "in that simulator and about nothing else",
         "the arms' <position> interface in gz_ros2_control is a velocity servo (position_proportional_gain 0.1 per step), so "
         "tracking to 0.02 rad says nothing about the real arm's controller, gains, compliance or latency",
         "arm, mast and base masses are placeholders, upstream nominals or platform-sw's CAD export (T10); the base reaction "
         "to an arm motion, tracking and any torque or payload figure in a simulation are not claims about the robot",
-        "the physics engine is Bullet-Featherstone, chosen because under Gazebo's DART default neither gripper moves and "
-        "finger_joint2 never follows finger_joint1 (G02 fails on DART); platform-sw's own launch runs the base on DART. The base "
-        "was driven on Bullet-Featherstone only far enough to compare distance and yaw with the command (G01)",
+        "the launch defaults to DART, the engine platform-sw tuned the base on; under DART neither gripper moves and "
+        "finger_joint2 never follows finger_joint1, so G02 passes Bullet-Featherstone explicitly (it fails on DART, which is "
+        "the documented limitation and not a defect). The base's contact behaviour was compared on neither engine; G01 "
+        "measures kinematics (distance and yaw against the command)",
         "the base's wheel radius, separation and acceleration limits are the DiffDrive plugin's parameters, platform-sw's, "
         "and were not measured here; /odom here is the simulator's own odometry, not an estimate from sensing",
         "G01's rates and distances are properties of this simulator on this machine (headless, software rendering, real-time "
