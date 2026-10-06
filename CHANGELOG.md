@@ -36,6 +36,10 @@ or Gazebo result.
   trajectory on `left_arm_controller` followed within 0.02 rad. Mock hardware reflects commands as state, so this shows the
   wiring, not tracking performance.
 - `verify_a6.sh` also runs the control and bringup tests, and the evidence report reads the bringup results for L01.
+- `config/upstream_pins.yaml`: the config id falls back to this pinned `openarm_description` commit when there is no git
+  checkout (a checkout with local changes is still an error); a test keeps it equal to the checkout and the baseline pin.
+- T02 also runs `check_urdf` on `gazebo` and `real` at `mast_1300` (labelled extras).
+- `.gitattributes`: `*.sh text eol=lf`, so `verify_a6.sh` cannot pick up CRLF through the `/mnt/c` checkout.
 - READMEs for the description package and, stating their scaffold status, for the control, bringup, Gazebo and MoveIt
   packages.
 - Test dependencies `python3-numpy` and `liburdfdom-tools` declared in the description package, so
@@ -60,4 +64,7 @@ or Gazebo result.
 - `ros2_control` is verified by a runtime launch on `mock` only. The `gazebo` and `real` blocks are checked by expansion;
   `openarm_hardware` cannot be built in the reference workspace (it needs OpenArmCAN). Whether `gz_ros2_control` needs a
   `mimic` parameter for `openarm_*_finger_joint2` is open and is decided with a Gazebo run.
+- The gripper controllers stay `position_controllers/GripperActionController` (deprecated in Jazzy) on purpose: the replacement,
+  `parallel_gripper_action_controller`, serves `ParallelGripperCommand` instead of `GripperCommand`, so switching decides the
+  gripper interface (manipulation#11, ADR-009 point 4), which is open.
 - Issue #7: the description strings it names are fixed here; whether that closes it is for the code owners to judge.
