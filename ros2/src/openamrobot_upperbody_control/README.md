@@ -17,9 +17,7 @@ kept because upstream's MoveIt configuration names it; the gripper controller ty
 
 - **The mobile base is not under `ros2_control`.** The base keeps its existing drive plugin and its `/cmd_vel` and `/odom`
   interface; this package must not touch them.
-- **No lift controller.** OpenAMRobot 2.0 has a fixed mast; an actuated lift is OpenAMRobot 3.0 scope. The `description`
-  field of `package.xml` still says "lift and arm" because it predates that decision (issue #7) and has not been
-  re-worded yet.
+- **No lift controller.** OpenAMRobot 2.0 has a fixed mast; an actuated lift is OpenAMRobot 3.0 scope.
 
 ## Tests
 

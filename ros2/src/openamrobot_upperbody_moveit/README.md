@@ -8,9 +8,7 @@ directories. There is no SRDF, no planning group, no named pose, no collision ma
 ## Intended scope
 
 MoveIt 2 configuration for the combined fixed-mast model: arm planning groups, a collision matrix generated against the
-combined model, named poses and controller mapping. No actuated lift planning group: OpenAMRobot 2.0 has a fixed mast. The
-`description` field of `package.xml` still mentions "arm+lift" because it predates that decision (issue #7) and has not
-been re-worded yet. This is the second pull request of the description work (A7), not the first.
+combined model, named poses and controller mapping. No actuated lift planning group: OpenAMRobot 2.0 has a fixed mast. This is the second pull request of the description work (A7), not the first.
 
 ## Known constraint
 
