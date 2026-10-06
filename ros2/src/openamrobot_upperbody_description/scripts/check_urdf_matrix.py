@@ -3,8 +3,9 @@
 
     check_urdf_matrix.py
 
-Also runs the planar flag at the release mast_id for each arm package (labelled `extra`): the W02 reasoning says
-check_urdf accepts the planar joint, and that should be a thing somebody ran. Prints one line per expansion, writes
+Also runs, labelled `extra`: the planar flag at the release mast_id for each arm package (the W02 reasoning says
+check_urdf accepts the planar joint, and that should be a thing somebody ran), and `openarm` on `gazebo` and `real` at
+mast_1300 (the first non-default mast_id), so the other profiles are checked at a second mast height. Prints one line per expansion, writes
 `T02_check_urdf.json` to the evidence directory, and exits non-zero if any expansion is rejected or check_urdf is
 missing (a check that cannot run is not a pass).
 """
@@ -41,6 +42,7 @@ def run_matrix(share, executable=None):
         mast_ids = yaml.safe_load(f)
     cases = [(c, "false", False) for c in ev.expansion_matrix(mast_ids)]
     cases += [(c, "true", True) for c in ev.planar_extras(mast_ids)]
+    cases += [(c, "false", True) for c in ev.profile_extras(mast_ids)]
     rows = []
     for (mast_id, arm_package, hardware_profile), planar, extra in cases:
         label = ev.expansion_label(mast_id, arm_package, hardware_profile) + (" +planar" if planar == "true" else "")

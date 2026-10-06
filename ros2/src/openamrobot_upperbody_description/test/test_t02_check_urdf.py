@@ -29,10 +29,16 @@ def test_t02_every_t01_expansion_is_accepted():
 
 def test_t02_the_planar_expansions_are_checked_and_accepted():
     # W02 says check_urdf accepts the planar joint; this is where that is run
-    extras = [r for r in t02.run_matrix(SHARE) if r["extra"]]
-    assert len(extras) == 3 and all(r["args"]["enable_planar_base"] == "true" for r in extras)
-    assert all(r["returncode"] == 0 for r in extras)
+    extras = [r for r in t02.run_matrix(SHARE) if r["extra"] and r["args"]["enable_planar_base"] == "true"]
+    assert len(extras) == 3 and all(r["returncode"] == 0 for r in extras)
     assert 'type="planar"' in expand_xml(enable_planar_base="true")
+
+
+def test_t02_gazebo_and_real_are_also_checked_at_mast_1300():
+    rows = {r["id"]: r for r in t02.run_matrix(SHARE)}
+    for profile in ("gazebo", "real"):
+        row = rows[f"mast_1300/openarm/{profile}"]
+        assert row["extra"] and row["returncode"] == 0 and row["args"]["hardware_profile"] == profile
 
 
 @pytest.mark.parametrize("urdf", [
@@ -58,4 +64,4 @@ def test_t02_a_missing_tool_fails_the_command_and_its_sidecar(monkeypatch, tmp_p
     assert rc is None and "check_urdf not found" in output
     assert t02.main() == 1                                               # nothing could be checked, so nothing passed
     sidecar = t02.ev.read_sidecars(str(tmp_path))["T02"]
-    assert sidecar["result"] == "FAIL" and len(sidecar["details"]["failed"]) == 17
+    assert sidecar["result"] == "FAIL" and len(sidecar["details"]["failed"]) == 19         # 14 + 3 planar + 2 profile extras
