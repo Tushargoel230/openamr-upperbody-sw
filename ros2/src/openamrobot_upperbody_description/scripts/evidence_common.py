@@ -98,6 +98,12 @@ def planar_extras(mast_ids_doc):
     return [(mast_ids_doc["default"], a, "mock") for a in ("openarm", "so101", "none")]
 
 
+def profile_extras(mast_ids_doc):
+    """Not in T01's matrix: `openarm` on `gazebo` and `real` at the first non-default mast_id (mast_1300), so T02 has run
+    check_urdf on the other profiles at a second mast height too."""
+    other = next(m for m in mast_ids_doc["mast_ids"] if m != mast_ids_doc["default"])
+    return [(other, "openarm", h) for h in ("gazebo", "real")]
+
 
 def expansion_label(mast_id, arm_package, hardware_profile):
     return f"{mast_id}/{arm_package}/{hardware_profile}"
