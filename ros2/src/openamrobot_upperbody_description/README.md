@@ -211,7 +211,7 @@ Result vocabulary: `PASS`, `FAIL`, `WARN`, `SKIP`. **`SKIP` and `WARN` are not `
 | T05 | `openarm_left_base_link` is at the shoulder height of its `mast_id`, within 1 mm, for all four IDs |
 | T06 | an unknown arg value fails with the accepted values named |
 | T07 / T08 | collision geometry exists or is declared absent; a collision mesh that is the visual mesh is reported |
-| T09 / T10 | every massed link has positive mass and a physically valid inertia; the modelled mass is reported by owner against 120 kg, next to the F2S vehicle estimate (93 kg, `f2s_vehicle_mass_estimate`), with "per-link masses still placeholders" printed while a mass datum is `placeholder` |
+| T09 / T10 | every massed link has positive mass and a physically valid inertia; the modelled mass is reported by owner against 120 kg, next to the F2S vehicle estimate (93 kg, `f2s_vehicle_mass_estimate`), with "per-link masses still placeholders" printed while any mass group is `placeholder` in `config/mass_provenance.yaml` (three states, `placeholder` / `external_nominal` / `verified`, over base, mast, openarm and sensors), and a separate line naming the `external_nominal` groups |
 | T11 | no planar joint by default; with `enable_planar_base:=true` a `planar` joint, parent `world`, child `base_link` |
 | T12 / T13 | datum schema, provenance rules and references |
 | C01 | every configuration id is `sha256:` plus 64 hex characters and matches the C9 dataset schema pattern; every pin equals the `openamrobot-manipulation` baseline pin |
