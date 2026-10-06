@@ -93,9 +93,19 @@ T16 assert that the two blocks equal that file's expansion. The controllers are 
 (`config/arm_controllers.yaml`, one file for all three profiles) and are started by
 `ros2 launch openamrobot_upperbody_bringup mock.launch.py`.
 
+The `gazebo` profile also carries the Gazebo-side plugin, a **model** plugin (`gz_ros2_control-system`,
+`gz_ros2_control::GazeboSimROS2ControlPlugin`) whose `<parameters>` is `arm_controllers.yaml` by installed path
+(`$(find openamrobot_upperbody_control)`). The library refuses to attach anywhere but a model, so it is emitted here with the
+model; the world, the launch and the physics engine are in `openamrobot_upperbody_gazebo`. This package does not declare a
+dependency on `openamrobot_upperbody_control` for that `$(find)`: control already test-depends on this package, and a
+dependency back would be a cycle. T15 checks the plugin's names against the installed `gz_ros2_control`.
+
 `openarm_*_finger_joint2` is not declared under `ros2_control`, as upstream leaves it out; the URDF `<mimic>` follows
-`finger_joint1`. Whether Gazebo needs a `mimic` parameter there is a TODO in `ros2_control.xacro`. The Gazebo world plugin
-(`gz_ros2_control-system`, with the controller YAML path) is not here: it belongs to the Gazebo package.
+`finger_joint1`. Decided in P09 by running it: Gazebo's Bullet-Featherstone engine honours that mimic on its own and its DART
+default does not, and upstream's commented-out declaration cannot load under Jazzy's `ros2_control` ("Activated mimic joints
+cannot have command interfaces"). The gazebo package's README has the measurements. The multiplier it follows is read from
+upstream's `joint_mimics.yaml`, never written in `ros2_control.xacro` (`test_t15_finger_mimic_multiplier.py` fails on a
+literal, including one equal to today's value).
 
 ## Add a mast ID
 
@@ -176,7 +186,12 @@ ros2 run openamrobot_upperbody_description verify_a6.sh
 
 `verify_a6.sh` runs this package's `colcon test` (and that of `openamrobot_upperbody_control` and `openamrobot_upperbody_bringup`, whose launch test is L01), the `check_urdf` matrix, the datum report and the configuration ids, and
 writes `<workspace>/evidence/<UTC timestamp>_dev.json` (`openamr.evidence.v1`, evidence class `static+mock`). Set
-`OPENAMR_EVIDENCE_DIR` to put it elsewhere. The exit status is non-zero if and only if any check is `FAIL`. It needs
+`OPENAMR_EVIDENCE_DIR` to put it elsewhere. **It writes nothing from a dirty tree**: it prints the results, says
+`Evidence: NOT WRITTEN` and names the changed files (untracked ones included), because a report records a commit and a tree
+with uncommitted changes is not one; every file in `evidence/` is a clean-commit run. The exit status is 1 if any check is
+`FAIL`, 3 if all passed but the tree was dirty, 2 if the evidence cannot be assembled. `verify_gazebo.sh` is the Gazebo
+counterpart: it runs the launch tests of `openamrobot_upperbody_gazebo` (G01, G02) and writes `<timestamp>_gazebo.json`
+(evidence class `simulation`). It needs
 `colcon`, `xacro`, `check_urdf` (`liburdfdom-tools`) and `numpy` on the machine; they are declared as test dependencies, so
 `rosdep install --from-paths src` installs them.
 
@@ -194,10 +209,11 @@ Result vocabulary: `PASS`, `FAIL`, `WARN`, `SKIP`. **`SKIP` and `WARN` are not `
 | T09 / T10 | every massed link has positive mass and a physically valid inertia; the modelled mass is reported by owner against 120 kg, next to the F2S vehicle estimate (93 kg, `f2s_vehicle_mass_estimate`), with "per-link masses still placeholders" printed while a mass datum is `placeholder` |
 | T11 | no planar joint by default; with `enable_planar_base:=true` a `planar` joint, parent `world`, child `base_link` |
 | T12 / T13 | datum schema, provenance rules and references |
-| C01 | every configuration id is `sha256:` plus 64 hex characters and matches the C9 dataset schema pattern |
+| C01 | every configuration id is `sha256:` plus 64 hex characters and matches the C9 dataset schema pattern; every pin equals the `openamrobot-manipulation` baseline pin |
+| C02 | every pin in `config/upstream_pins.yaml` is a quoted full 40-hex hash, and equals `HEAD` of its clean checkout under `src/upstream/` when there is one (a pin with no checkout is listed as not compared; SKIP only when no pin has one) |
 | I01 | the installed package matches the source tree (catches evidence generated against a stale install) |
 | REV | a datum change carries a revision change |
-| T14 / T15 / T16 | `ros2_control` per profile, by expansion only: `mock` has `GenericSystem` and no `OpenArmHW`, `gazebo` has `GazeboSimSystem` for the same joints and interfaces, `real` has `OpenArmHW` with its CAN parameters; the base has none in any profile; `mock` and `real` equal upstream's own expansion |
+| T14 / T15 / T16 | `ros2_control` per profile, by expansion only: `mock` has `GenericSystem` and no `OpenArmHW`, `gazebo` has `GazeboSimSystem` for the same joints and interfaces plus the model plugin with the controller yaml, `real` has `OpenArmHW` with its CAN parameters; the base has none in any profile; `mock` and `real` equal upstream's own expansion; the finger-mimic multiplier is read from upstream's yaml (T15) |
 | L01 | launch test in `openamrobot_upperbody_bringup`: `mock.launch.py` brings all five controllers to `active` within 30 s and a trajectory on `left_arm_controller` moves `/joint_states` to the target |
 | E01 | **WARN, never PASS**: height, width and depth as lower bounds, see below |
 | W01, W02, V01 | **WARN**: see Known limitations |
@@ -210,8 +226,10 @@ and the pinned upstream commit. A 12-character prefix is for log lines only and 
 shown. `hardware_profile` is part of the id because the id names the configuration, not just the geometry.
 The upstream commit is read from the git checkout of `openarm_description` in the workspace. With no checkout (CI, an
 installed package without sources) it falls back to the pin in `config/upstream_pins.yaml`, and the report says so in its
-limitations; a checkout with local changes is an error, never replaced by the pin. A test fails if the pin disagrees with
-the checkout or with the `openamrobot-manipulation` baseline pin, so it moves in the same commit as the checkout does.
+limitations; a checkout with local changes is an error, never replaced by the pin. A test fails if a pin disagrees with
+its checkout (C02) or with the `openamrobot-manipulation` baseline pin (C01), so it moves in the same commit as the
+checkout does. Every pin is a full 40-hex hash in quotes: unquoted, YAML reads an all-digit hash as a number, and a prefix
+cannot be compared exactly.
 
 ## Known limitations
 
@@ -239,8 +257,12 @@ Nothing in this package is a measured value or a hardware result. In particular:
 - **W02: `robot_state_publisher` converts the planar joint to fixed**, because KDL has no planar joint. The joint is
   present and `check_urdf` accepts it, which is what A6 asks for, but planar base motion can never come from
   `robot_state_publisher`; in simulation it comes from the Gazebo `odom -> base_link` transform.
-- **V01: nobody has looked at the RViz window.** Numeric forward kinematics is not a visual check.
-- **`ros2_control` is verified on `mock` only, at runtime.** `gazebo` and `real` are expansions that nothing has loaded:
-  `openarm_hardware` cannot be built here (it needs OpenArmCAN) and Gazebo is not launched. Mock hardware reflects its
-  command back as state, so L01 shows the controller wiring, not tracking performance. No Gazebo world, no MoveIt.
-- **No physical evidence.** Static expansion and zero-pose forward kinematics only.
+- **V01: nobody has answered the visual checklist.** Numeric forward kinematics is not a visual check. The checklist is in
+  `docs/v01_visual_check.md` (repository root); the simulator and RViz open beside each other, and "looks fine" does not
+  clear it.
+- **`ros2_control` runs on `mock` (L01) and on `gazebo` (G01, G02, in `openamrobot_upperbody_gazebo`); `real` is an
+  expansion that nothing has loaded:** `openarm_hardware` cannot be built here (it needs OpenArmCAN). Mock hardware reflects
+  its command back as state, so L01 shows the controller wiring, not tracking performance. In Gazebo the arms' position
+  interface is a velocity servo, so G01's tracking says nothing about the real arm. No MoveIt.
+- **No physical evidence.** Static expansion and zero-pose forward kinematics in this package's report; a simulator in the
+  Gazebo report.

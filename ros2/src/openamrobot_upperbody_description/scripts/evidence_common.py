@@ -25,6 +25,11 @@ def share_dir():
     return get_package_share_directory(PKG)
 
 
+def package_share(name):
+    from ament_index_python.packages import get_package_share_directory
+    return get_package_share_directory(name)
+
+
 def workspace_root(share=None):
     """The colcon workspace: the parent of the nearest ancestor of the package share path that is named `install`.
 
@@ -75,9 +80,11 @@ def read_sidecars(directory):
     return out
 
 
-def clear_sidecars(directory):
+def clear_sidecars(directory, only=None):
+    """Delete the sidecars in `directory`; `only(filename)` narrows it (the two profiles' sidecars must not clear each other's:
+    the Gazebo checks are G*, everything else belongs to the A6 report)."""
     for filename in os.listdir(directory):
-        if SIDECAR_RE.match(filename):
+        if SIDECAR_RE.match(filename) and (only is None or only(filename)):
             os.remove(os.path.join(directory, filename))
 
 

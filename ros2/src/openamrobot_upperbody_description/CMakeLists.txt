@@ -9,6 +9,7 @@ install(PROGRAMS
   scripts/build_evidence.py
   scripts/evidence_common.py
   scripts/verify_a6.sh
+  scripts/verify_gazebo.sh
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Assemble the A6 evidence report. Called by verify_a6.sh after `colcon test` and check_urdf_matrix.py have run.
 
-    build_evidence.py --since EPOCH [--step name=returncode ...] [--repo PATH] [--results-dir PATH]
-                      [--bringup-results-dir PATH]
+    build_evidence.py --since EPOCH [--profile dev|gazebo] [--step name=returncode ...] [--repo PATH]
+                      [--results-dir PATH] [--bringup-results-dir PATH] [--gazebo-results-dir PATH]
 
-Writes `<evidence dir>/<UTC timestamp>_dev.json` in the openamr.evidence.v1 shape of VERIFICATION.md and prints a
-summary. Exit code is 1 if any check is FAIL, 2 if the evidence cannot be assembled, and 3 if every check passed but the
+Writes `<evidence dir>/<UTC timestamp>_<profile>.json` in the openamr.evidence.v1 shape of VERIFICATION.md and prints a
+summary. Profile `dev` (default, scripts/verify_a6.sh) is the A6 report, evidence_class `static+mock`. Profile `gazebo`
+(scripts/verify_gazebo.sh) is the Gazebo report, evidence_class `simulation`: G01 and G02 from the launch tests of
+openamrobot_upperbody_gazebo, I01 for that package, and V01, which stays WARN until a person has answered the checklist. Exit code is 1 if any check is FAIL, 2 if the evidence cannot be assembled, and 3 if every check passed but the
 working tree is dirty.
 
 A dirty tree writes NO file (decided P09). A report records `git_hash`, and a tree with uncommitted changes is not that
@@ -74,16 +76,26 @@ EXTRA_CHECKS = [
     ("I01", "installed package matches the source the tests and this report describe"),
     ("AUX", "supporting tests and steps (urdf_utils, datums_report, s4_sensors, evidence_dir, build_evidence, scripts)"),
 ]
+# The `gazebo` profile's checks (scripts/verify_gazebo.sh). Everything static is already covered by the `dev` report.
+GAZEBO_CHECKS = [
+    ("G01", "combined robot in Gazebo: arm controllers, arm goal, Nav2-facing topics unchanged"),
+    ("G02", "grippers close in Gazebo and finger_joint2 follows finger_joint1 in the physics"),
+    ("I01", "installed packages match the source the tests and this report describe"),
+    ("V01", "a person has looked at the simulator and RViz and answered the checklist"),
+    ("AUX", "supporting steps (colcon test of the gazebo package)"),
+]
+GAZEBO_PKG = "openamrobot_upperbody_gazebo"
+PROFILES = {"dev": "static+mock", "gazebo": "simulation"}
 # A check that has no test yet is listed here with the reason, and reports SKIP. Empty since P06 landed T14-T16 and L01.
 # (C02 SKIPs by its own sidecar, only when there is no upstream checkout; that is a result, not a missing test.)
 NOT_IMPLEMENTED = {}
 BRINGUP_PKG = "openamrobot_upperbody_bringup"
 # Checks whose sidecar is where their details (and any WARN) live: no sidecar means the test did not complete.
-SIDECAR_REQUIRED = {"T02", "T04", "T07", "T08", "T09", "T10", "T13", "E01", "C01", "C02", "W01", "W02"}
+SIDECAR_REQUIRED = {"T02", "T04", "T07", "T08", "T09", "T10", "T13", "E01", "C01", "C02", "W01", "W02", "G01", "G02"}
 # Test modules with no check ID in their name.
 MODULE_IDS = {"test_datums_revision": "REV"}
 ID_IN_NAME = re.compile(r"^test_([a-z]\d{2})_")
-EXPECTED_STEPS = ("colcon_test", "check_urdf_matrix", "datums_report")
+EXPECTED_STEPS = {"dev": ("colcon_test", "check_urdf_matrix", "datums_report"), "gazebo": ("colcon_test",)}
 REFUSED_DIRTY = 3          # exit status: every check passed, but the tree is dirty so no evidence file was written
 
 
@@ -211,9 +223,9 @@ def limitations(datums, sidecars):
         "real envelope. A4 decides",
         "T10 reports what the description models. The battery, hub motors, electronics and the mast structure are not "
         "modelled (all F2S), so the total is not the gross mass of the robot",
-        "T14, T15 and T16 are expansion checks: nothing loads the gazebo or the real plugin. gz_ros2_control's handling of "
-        "the finger_joint2 mimic is a TODO (upstream leaves it out of ros2_control), and the real profile cannot even be "
-        "built here (openarm_hardware needs OpenArmCAN)",
+        "T14, T15 and T16 are expansion checks: nothing here loads the gazebo or the real plugin (the gazebo profile report, "
+        "G01 and G02, is where the gazebo one runs), and the real profile cannot even be built here (openarm_hardware needs "
+        "OpenArmCAN)",
         "the gripper controllers are the deprecated position_controllers/GripperActionController on purpose: the "
         "replacement serves ParallelGripperCommand instead of GripperCommand, which would decide manipulation#11 / "
         "ADR-009 point 4 (open)",
@@ -227,10 +239,55 @@ def limitations(datums, sidecars):
         "config ids are hashes of xacro's output text: a different xacro version that formats a number differently "
         "gives a different id for the same sources",
         "`static+mock` names the evidence class: expansions of every hardware_profile, plus a headless launch of the mock "
-        "bringup (L01) and the robot_state_publisher observation for W02. Nothing ran on Gazebo or real hardware",
+        "bringup (L01) and the robot_state_publisher observation for W02. Nothing in this report ran on Gazebo or real hardware",
         "no physical evidence; static expansion and zero-pose FK only",
     ]
     return out
+
+
+def gazebo_limitations(datums, sidecars, simulator):
+    """What the `gazebo` report does not say. The last line is the A6 report's own sentence about physical evidence, kept in
+    its words on purpose: a simulation result permits no physical claim of any kind."""
+    engine = ((sidecars.get("G01") or {}).get("details", {}).get("launch_defaults") or {}).get("physics_engine", "unknown")
+    return [
+        f"`simulation` names the evidence class: a headless Gazebo Harmonic server ({simulator['gz_sim']}, physics engine "
+        f"{engine}) with gz_ros2_control {simulator['gz_ros2_control']}, run by launch tests. It is a statement about how the "
+        "model behaves in that simulator and about nothing else",
+        "the arms' <position> interface in gz_ros2_control is a velocity servo (position_proportional_gain 0.1 per step), so "
+        "tracking to 0.02 rad says nothing about the real arm's controller, gains, compliance or latency",
+        "arm, mast and base masses are placeholders, upstream nominals or platform-sw's CAD export (T10); the base reaction "
+        "to an arm motion, tracking and any torque or payload figure in a simulation are not claims about the robot",
+        "the physics engine is Bullet-Featherstone, chosen because under Gazebo's DART default neither gripper moves and "
+        "finger_joint2 never follows finger_joint1 (G02 fails on DART); platform-sw's own launch runs the base on DART. The base "
+        "was driven on Bullet-Featherstone only far enough to compare distance and yaw with the command (G01)",
+        "the base's wheel radius, separation and acceleration limits are the DiffDrive plugin's parameters, platform-sw's, "
+        "and were not measured here; /odom here is the simulator's own odometry, not an estimate from sensing",
+        "G01's rates and distances are properties of this simulator on this machine (headless, software rendering, real-time "
+        "factor below 1); they are not requirements on the robot",
+        "the gripper controller is still the deprecated position_controllers/GripperActionController on purpose "
+        "(manipulation#11 / ADR-009 point 4, open): nothing here chooses between the gripper interfaces",
+        "V01: no human has answered the visual checklist yet; nothing in this report is a visual inspection",
+        "no physical evidence; simulation only. This report is not a statement about hardware",
+    ]
+
+
+def simulator_versions():
+    """Versions of what the simulation ran on, read from the installed packages and the simulator itself."""
+    import subprocess
+    from ament_index_python.packages import get_package_share_directory
+    import xml.etree.ElementTree as ET
+    try:
+        gz = subprocess.run(["gz", "sim", "--versions"], capture_output=True, text=True, timeout=30).stdout.strip() or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        gz = "unknown"
+    versions = {"gz_sim": gz}
+    for package in ("gz_ros2_control", "ros_gz_sim"):
+        try:
+            root = ET.parse(os.path.join(get_package_share_directory(package), "package.xml")).getroot()
+            versions[package] = root.findtext("version")
+        except (OSError, LookupError, ET.ParseError):
+            versions[package] = "unknown"
+    return versions
 
 
 def build(args):
@@ -242,18 +299,33 @@ def build(args):
     results_dir = args.results_dir or os.path.join(workspace, "build", ev.PKG, "test_results", ev.PKG)
     steps = dict(s.split("=", 1) for s in args.step)
 
+    profile = args.profile
     bringup_results_dir = args.bringup_results_dir or os.path.join(workspace, "build", BRINGUP_PKG, "test_results", BRINGUP_PKG)
-    counts, stale_xunit = read_xunit_dirs([results_dir, bringup_results_dir], args.since)
+    gazebo_results_dir = args.gazebo_results_dir or os.path.join(workspace, "build", GAZEBO_PKG, "test_results", GAZEBO_PKG)
+    result_dirs = [results_dir, bringup_results_dir] if profile == "dev" else [gazebo_results_dir]
+    counts, stale_xunit = read_xunit_dirs(result_dirs, args.since)
     sidecars = fresh_sidecars(edir, args.since)
 
+    gazebo_src = os.path.join(repo, "ros2", "src", GAZEBO_PKG)
+    gazebo_share = ev.package_share(GAZEBO_PKG) if profile == "gazebo" else None
     differ = trees_differ(pkg_src, share)
+    gazebo_differ = trees_differ(gazebo_src, gazebo_share, names=("launch", "config", "worlds")) if gazebo_share else []
     checks = []
-    for check_id, name in A6_CHECKS + EXTRA_CHECKS:
-        if check_id == "V01":
+    for check_id, name in (A6_CHECKS + EXTRA_CHECKS if profile == "dev" else GAZEBO_CHECKS):
+        if check_id == "V01" and profile == "gazebo":
+            result, details = "WARN", {
+                "performed": "pending: the checklist in docs/v01_visual_check.md is printed for a person to run with the simulator "
+                             "open and RViz beside it; no answers are recorded yet, and 'looks fine' would not clear it",
+                "checklist": "docs/v01_visual_check.md"}
+        elif check_id == "V01":
             result, details = "WARN", {
                 "performed": "no human has looked at an RViz window; this report does not launch RViz",
                 "last_launch": "S4: robot_state_publisher + joint_state_publisher_gui + rviz2 started with no xacro or "
                                "mesh errors (evidence/S4.json)"}
+        elif check_id == "I01" and profile == "gazebo":
+            problems = sorted(gazebo_differ + [f"{ev.PKG}/{d}" for d in differ])
+            result, details = ("FAIL", {"differing": problems, "hint": "run colcon build, then verify_gazebo.sh again"}) if problems \
+                else ("PASS", {"compared": [f"{GAZEBO_PKG}: launch, config, worlds", f"{ev.PKG}: urdf, config, launch, meshes"]})
         elif check_id == "I01":
             result, details = ("FAIL", {"differing": differ, "hint": "run colcon build, then verify_a6.sh again"}) if differ \
                 else ("PASS", {"compared": ["urdf", "config", "launch", "meshes"]})
@@ -263,7 +335,7 @@ def build(args):
             result, details["step"] = "FAIL", f"check_urdf_matrix.py exited {steps['check_urdf_matrix']}"
         if check_id == "AUX":
             problems = {}
-            for step in EXPECTED_STEPS:
+            for step in EXPECTED_STEPS[profile]:
                 if steps.get(step) is None:
                     problems[step] = "step was not run"
                 elif steps[step] != "0":
@@ -282,11 +354,13 @@ def build(args):
         mast_ids = yaml.safe_load(f)
     try:
         commit, commit_source = ev.upstream_commit_and_source(workspace)
-        config_ids = {ev.expansion_label(*c): pci.config_id_of(share, commit, *c) for c in ev.expansion_matrix(mast_ids)}
+        matrix = ev.expansion_matrix(mast_ids) if profile == "dev" else \
+            [c for c in ev.expansion_matrix(mast_ids) + ev.profile_extras(mast_ids) if c[2] == "gazebo"]
+        config_ids = {ev.expansion_label(*c): pci.config_id_of(share, commit, *c) for c in matrix}
     except ev.EvidenceError as err:        # no pinned commit means no config id: say so in the report, do not guess
         commit, commit_source, config_ids = None, None, {}
         for c in checks:
-            if c["id"] == "C01":
+            if c["id"] in ("C01", "AUX"):
                 c["result"], c["details"]["config_ids"] = "FAIL", f"not produced: {err}"
 
     provenance = defaultdict(int)
@@ -301,6 +375,7 @@ def build(args):
     if manipulation:
         upstream["openamrobot-manipulation"] = manipulation[:7]
 
+    simulator = simulator_versions() if profile == "gazebo" else None
     now = datetime.datetime.now(datetime.timezone.utc)
     doc = {
         "schema": "openamr.evidence.v1",
@@ -308,21 +383,22 @@ def build(args):
         "git_hash": ev.git_head(repo),
         "dirty": dirty,
         "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "profile": "dev",
-        "evidence_class": "static+mock",
+        "profile": profile,
+        "evidence_class": PROFILES[profile],
+        **({"simulator": simulator} if profile == "gazebo" else {}),
         "upstream": upstream,
         "datums_revision": datums["revision"],
         "checks": checks,
         "config_ids": config_ids,
         "provenance": {k: provenance[k] for k in ("placeholder", "provisional", "verified")},
-        "limitations": limitations(datums, sidecars) + (
+        "limitations": (limitations(datums, sidecars) if profile == "dev" else gazebo_limitations(datums, sidecars, simulator)) + (
             [f"openarm_description commit {commit[:7]} was read from {commit_source}, not from a git checkout"]
             if commit_source == ev.METADATA_SOURCE else []),
     }
     if dirty:
         doc["dirty_files"] = dirty_files        # for the console summary only: a dirty report is never written
         return doc, None, sidecars
-    path = os.path.join(edir, now.strftime("%Y%m%dT%H%M%SZ") + "_dev.json")
+    path = os.path.join(edir, now.strftime("%Y%m%dT%H%M%SZ") + f"_{profile}.json")
     with open(path, "w") as f:
         json.dump(doc, f, indent=2)
         f.write("\n")
@@ -330,7 +406,7 @@ def build(args):
 
 
 def summary(doc, path, sidecars):
-    lines = ["", f"A6 evidence  {doc['repo']} @ {doc['git_hash'][:7]}{' (dirty)' if doc['dirty'] else ''}  "
+    lines = ["", f"{'Gazebo' if doc['profile'] == 'gazebo' else 'A6'} evidence  {doc['repo']} @ {doc['git_hash'][:7]}{' (dirty)' if doc['dirty'] else ''}  "
                  f"datums {doc['datums_revision']}  class {doc['evidence_class']}"]
     for c in doc["checks"]:
         extra = c["details"].get("reason") or ""
@@ -365,9 +441,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--since", type=float, help="epoch seconds: results older than this are stale (required to build)")
     parser.add_argument("--clear", action="store_true",
-                        help="delete the previous run's sidecars from the evidence directory, print it, and stop")
+                        help="delete the previous run's sidecars of the chosen profile (G* for gazebo, the rest for dev) from the evidence "
+                             "directory, print it, and stop")
     parser.add_argument("--step", action="append", default=[], metavar="NAME=RC",
-                        help="return code of a step verify_a6.sh ran: " + ", ".join(EXPECTED_STEPS))
+                        help="return code of a step verify_a6.sh / verify_gazebo.sh ran: colcon_test, check_urdf_matrix, datums_report")
+    parser.add_argument("--profile", choices=sorted(PROFILES), default="dev",
+                        help="dev: the A6 report (static+mock). gazebo: the Gazebo report (simulation)")
+    parser.add_argument("--gazebo-results-dir", default=None,
+                        help=f"colcon's xunit directory for {GAZEBO_PKG} (G01, G02); default <workspace>/build/...")
     parser.add_argument("--repo", default=None, help=f"the {REPO} checkout (default <workspace>/src/{REPO})")
     parser.add_argument("--results-dir", default=None, help="colcon's xunit directory for the package")
     parser.add_argument("--bringup-results-dir", default=None,
@@ -375,7 +456,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.clear:
         directory = ev.evidence_dir()
-        ev.clear_sidecars(directory)
+        ev.clear_sidecars(directory, only=(lambda f: f.startswith("G")) if args.profile == "gazebo"
+                          else (lambda f: not f.startswith("G")))
         print(directory)
         return 0
     if args.since is None:
