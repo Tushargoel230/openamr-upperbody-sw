@@ -29,6 +29,7 @@ def test_every_a6_check_id_in_verification_md_is_in_the_report():
     ("pkg.test.test_w01_kdl_root_inertia", "test_w01_base_link_inertia_not_seen_by_kdl", "W01"),
     ("pkg.test.test_e01_envelope", "test_e01_assembled_height_against_the_envelope", "E01"),
     ("pkg.test.test_c01_config_id", "test_c01_command_prints_exactly_the_full_id", "C01"),
+    ("pkg.test.test_c02_upstream_pin", "test_c02_a_wrong_pin_fails_and_names_both_hashes", "C02"),
     ("pkg.test.test_datums_revision", "test_guard_skips_with_a_single_commit", "REV"),
     ("pkg.test.test_datums_report", "test_report_exits_zero_and_lists_every_placeholder", "AUX"),
     ("pkg.test.test_s4_sensors", "test_camera_links_are_visual_only[head]", "AUX"),
@@ -62,6 +63,10 @@ def _sidecar(result, **details):
     ("T01", {**GOOD, "skipped": 5}, None, "SKIP"),                         # every test skipped
     ("T01", {**GOOD, "skipped": 2}, None, "PASS"),                         # some ran and passed
     ("C01", {**GOOD, "skipped": 2}, _sidecar("PASS"), "PASS"),
+    ("C02", GOOD, _sidecar("PASS"), "PASS"),
+    ("C02", {**GOOD, "skipped": 1}, _sidecar("SKIP", reason="no checkout"), "SKIP"),   # the one legitimate SKIP, by sidecar
+    ("C02", GOOD, _sidecar("FAIL"), "FAIL"),                                           # drift is never softened
+    ("C02", GOOD, None, "FAIL"),                                                       # the recording test did not complete
 ])
 def test_combine(check_id, counts, sidecar, expected):
     assert be.combine(check_id, counts, sidecar)[0] == expected

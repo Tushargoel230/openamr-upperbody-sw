@@ -59,6 +59,7 @@ A6_CHECKS = [
 ]
 EXTRA_CHECKS = [
     ("C01", "config id is sha256:<64 hex> and accepted by the C9 pattern"),
+    ("C02", "upstream pin file agrees with the upstream checkout"),
     ("W01", "base_link inertia not seen by KDL consumers"),
     ("W02", "KDL converts base_planar_joint to a fixed joint"),
     ("REV", "datums.yaml content change carries a revision change"),
@@ -67,10 +68,11 @@ EXTRA_CHECKS = [
     ("AUX", "supporting tests and steps (urdf_utils, datums_report, s4_sensors, evidence_dir, build_evidence, scripts)"),
 ]
 # A check that has no test yet is listed here with the reason, and reports SKIP. Empty since P06 landed T14-T16 and L01.
+# (C02 SKIPs by its own sidecar, only when there is no upstream checkout; that is a result, not a missing test.)
 NOT_IMPLEMENTED = {}
 BRINGUP_PKG = "openamrobot_upperbody_bringup"
 # Checks whose sidecar is where their details (and any WARN) live: no sidecar means the test did not complete.
-SIDECAR_REQUIRED = {"T02", "T04", "T07", "T08", "T09", "T10", "T13", "E01", "C01", "W01", "W02"}
+SIDECAR_REQUIRED = {"T02", "T04", "T07", "T08", "T09", "T10", "T13", "E01", "C01", "C02", "W01", "W02"}
 # Test modules with no check ID in their name.
 MODULE_IDS = {"test_datums_revision": "REV"}
 ID_IN_NAME = re.compile(r"^test_([a-z]\d{2})_")

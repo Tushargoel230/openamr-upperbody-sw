@@ -179,6 +179,41 @@ def upstream_commit(workspace, name="openarm_description", pins_file=None):
     return upstream_commit_and_source(workspace, name, pins_file)[0]
 
 
+def pin_vs_checkout(workspace, name="openarm_description", pins_file=None):
+    """(result, details) for C02: the commit config/upstream_pins.yaml pins for `name` against the HEAD of its checkout.
+
+    PASS when they are equal. FAIL when they differ (both hashes named), when the checkout has local changes (its HEAD is
+    then not what anyone pinned), or when the pin file has no pin for `name`. SKIP only when there is no checkout to
+    compare with: then print_config_id.py falls back to the pin, so the two cannot disagree, and the check says so. That is
+    the one SKIP this tree is allowed to have. It compares the pin with the checkout, never with upstream's tip, so a pin
+    held behind upstream on purpose is not drift; moving the pin and the checkout is a change made in one commit.
+    """
+    path = upstream_checkout(workspace, name)
+    pinned = pinned_commit_in_metadata(name, pins_file)
+    head = git_head(path) if os.path.isdir(path) else None
+    if head is None:
+        return "SKIP", {"reason": f"no git checkout of {name} at {path}, so there is nothing to compare the pin with. "
+                                  "This is the only legitimate SKIP in this tree: without a checkout the config id "
+                                  "falls back to the pin, which therefore cannot disagree with it",
+                        "pin": pinned}
+    if pinned is None:
+        return "FAIL", {"reason": f"config/upstream_pins.yaml has no pin for {name}, but a checkout exists at {path}",
+                        "checkout_head": head}
+    if not isinstance(pinned, str):       # YAML read an all-digit hash as a number: leading zeros are gone, quote it
+        return "FAIL", {"reason": f"the pin for {name} in config/upstream_pins.yaml is {pinned!r}, not a string: quote it",
+                        "pin": pinned, "checkout_head": head}
+    dirty, files = git_dirty(path)
+    if dirty:
+        return "FAIL", {"reason": f"{path} has local changes ({', '.join(files[:3])}): its HEAD is not a pinned commit",
+                        "pin": pinned, "checkout_head": head}
+    if head != pinned:
+        return "FAIL", {"reason": f"config/upstream_pins.yaml pins {name} at {pinned} but the checkout is at {head}: a "
+                                  "config id computed without the checkout would not match the one computed with it. "
+                                  "Move the pin and the checkout together, in one commit",
+                        "pin": pinned, "checkout_head": head}
+    return "PASS", {"pin": pinned, "checkout_head": head, "checkout": path}
+
+
 def pinned_commit_in_baseline(workspace, name="openarm_description"):
     """The commit openamrobot-manipulation's baseline .repos pins for `name`, or None if that file is not there."""
     import yaml
