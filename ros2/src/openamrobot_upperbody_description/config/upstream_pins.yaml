@@ -1,8 +1,9 @@
 # The upstream commits this description is built against (ADR-001). Read by scripts/print_config_id.py ONLY when there is
 # no git checkout of the upstream repository to read the commit from (CI, an installed package without sources); a git
 # checkout always wins, and a checkout with local changes is an error, never a fallback.
-# test_c01_config_id.py fails if this file and a present checkout, or the manipulation baseline pin, disagree, so the
-# constant cannot rot unnoticed. Change it in the same commit that moves the pin.
+# C02 (test_c02_upstream_pin.py) fails if this file and a present checkout disagree, and SKIPs when there is no checkout;
+# C01 fails if it and the manipulation baseline pin disagree. So the constant cannot rot unnoticed. Change it in the same
+# commit that moves the pin.
 schema_version: 1
 pins:
   openarm_description: 14ff67b638ff1c738a1b9a6be8aaa5ce5ed2c831

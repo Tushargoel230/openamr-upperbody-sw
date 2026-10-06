@@ -5,7 +5,7 @@ Format: `sha256:` + 64 lowercase hex. A 12-character truncation (the original s7
 turns red if anyone brings it back. When openamrobot-interfaces is checked out in the workspace, the pattern is also read
 from ITS schema (every field the C9 contract requires a configuration hash in) and the id is validated against that, so
 a change on their side turns our test red instead of leaving us silently different. Without that checkout those two
-tests SKIP with the reason, and C01's evidence says so.
+tests SKIP with the reason, and C01's evidence says so. (That the package pin equals a present upstream checkout is C02.)
 """
 import json
 import os
@@ -255,11 +255,11 @@ def test_c01_no_checkout_and_no_pin_is_an_error_not_a_guess(tmp_path):
         ev.upstream_commit(str(tmp_path), pins_file=str(other))
 
 
-def test_c01_the_package_pin_equals_the_checkout_and_the_baseline_pin():
-    """The fallback constant may not rot: if the pin moves, this fails until upstream_pins.yaml moves with it."""
+def test_c01_the_package_pin_is_a_full_hash_and_equals_the_baseline_pin():
+    """The fallback constant may not rot against the manipulation baseline. Its agreement with a present checkout is C02:
+    here the comparison would pass vacuously with no checkout, because the pin is then what `_commit()` returns."""
     pin = ev.pinned_commit_in_metadata()
     assert pin and re.fullmatch(r"[0-9a-f]{40}", pin)
-    assert pin == _commit(), "config/upstream_pins.yaml disagrees with the upstream checkout"
     baseline = ev.pinned_commit_in_baseline(WORKSPACE)
     if baseline is not None:
         assert pin == baseline
