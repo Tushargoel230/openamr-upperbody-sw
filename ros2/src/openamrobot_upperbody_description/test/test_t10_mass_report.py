@@ -36,6 +36,11 @@ SENSOR_LINKS = ["head_camera_*", "*_wrist_camera_*"]
 # Group -> the datums whose value is a link mass in that group (mast.xacro: mast_m). A group draws a mass from a datum
 # only if it is listed here; test_t10_mass_datums_are_the_ones_the_xacro_reads keeps the list honest.
 MASS_DATUMS = {"mast": ["mast_mass"]}
+# Group -> `placeholder` | `external_nominal` | `verified`: where each group's mass really comes from (DATUMS.md, "Mass
+# reporting", decided 6 Oct). Not built yet. The base and arm masses are not ours to declare as datums (ADR-005, ADR-008),
+# so they need an entry here before the placeholder clause may go quiet; the tripwire below enforces that.
+MASS_PROVENANCE = {}
+PROVENANCE_GROUPS = ("base", "openarm")
 F2S_ESTIMATE = "f2s_vehicle_mass_estimate"
 PLACEHOLDER_CLAUSE = "per-link masses still placeholders"
 
@@ -267,3 +272,36 @@ def test_t10_mass_datums_are_the_ones_the_xacro_reads():
     mast_mass = float(datums["mast_mass"]["value"])
     assert any(abs(float(l.find("inertial/mass").get("value")) - mast_mass) < 1e-9
                for l in root.findall("link") if l.get("name") in links["mast"]), "no mast link carries mast_mass"
+
+
+def mass_provenance_tripwire(datums, provenance):
+    """A message if a mass datum is `verified` while the base and arm groups have no provenance entry, else None.
+
+    The hole it guards (P08): the placeholder clause reads datum status, and only mast_mass is a datum. The day it becomes
+    verified the clause disappears while the base row still says "CAD export, placeholder", so the one-line summary would be
+    weaker than the rows under it. No mass is verified today, so this passes; it exists so that day cannot pass silently."""
+    verified = sorted(name for names in MASS_DATUMS.values() for name in names if datums[name]["status"] == "verified")
+    missing = [g for g in PROVENANCE_GROUPS if g not in provenance]
+    if verified and missing:
+        return (f"mass datum(s) {', '.join(verified)} reached status: verified but MASS_PROVENANCE has no entry for "
+                f"{', '.join(missing)}: the placeholder caveat would go quiet over rows that are still unverified. "
+                "Build the three-state provenance map (DATUMS.md, Mass reporting) first")
+    return None
+
+
+def test_t10_tripwire_no_mass_datum_is_verified_without_provenance_for_the_base_and_arm_groups():
+    assert mass_provenance_tripwire(load_datums()["datums"], MASS_PROVENANCE) is None
+
+
+def test_t10_tripwire_fires_when_a_mass_datum_is_verified_and_the_groups_have_no_provenance():
+    message = mass_provenance_tripwire(_all_mass_datums_verified(), {})
+    assert message and "mast_mass" in message and "base, openarm" in message
+    assert mass_provenance_tripwire(_all_mass_datums_verified(), {"base": "external_nominal"}) is not None   # arms still missing
+
+
+def test_t10_tripwire_is_quiet_with_provenance_present_or_nothing_verified():
+    assert mass_provenance_tripwire(_all_mass_datums_verified(),
+                                    {"base": "external_nominal", "openarm": "external_nominal"}) is None
+    datums = load_datums()["datums"]
+    datums["mast_mass"]["status"] = "provisional"
+    assert mass_provenance_tripwire(datums, {}) is None
