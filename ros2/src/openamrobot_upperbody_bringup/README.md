@@ -35,13 +35,13 @@ ros2 action send_goal /left_arm_controller/follow_joint_trajectory control_msgs/
 `test/test_l01_mock_controllers.py` (verification check **L01**, `launch_testing`) starts `mock.launch.py` headless, waits
 up to 30 s for all five controllers to be `active`, sends one trajectory to `left_arm_controller` and checks that
 `/joint_states` follows it within 0.02 rad while the right arm stays put. It runs in its own random `ROS_DOMAIN_ID`,
-localhost only. Not covered: a Gazebo or real launch (the `gazebo` and `real` profiles are checked by expansion in the
-description package), and tracking performance, which mock hardware cannot show.
+localhost only. Not covered: a real launch (the `real` profile is checked by expansion in the description package), and tracking
+performance, which mock hardware cannot show. The Gazebo launch and its tests (G01, G02) are in `openamrobot_upperbody_gazebo`.
 
 ## Not here
 
-- A Gazebo launch, a MoveIt launch and a base launch: later steps. The `package.xml` still lists the Gazebo and MoveIt
-  packages, which are scaffolds.
+- The Gazebo launch is `ros2 launch openamrobot_upperbody_gazebo sim.launch.py` (the simulator and the base are started
+  there, not here). A MoveIt launch is P10; the `package.xml` still lists the MoveIt package, a scaffold.
 - No lift: OpenAMRobot 2.0 has a fixed mast.
 
 See [`openamrobot_upperbody_description`](../openamrobot_upperbody_description/README.md).
