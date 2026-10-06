@@ -268,10 +268,10 @@ def build(args):
     with open(os.path.join(share, "config", "mast_ids.yaml")) as f:
         mast_ids = yaml.safe_load(f)
     try:
-        commit = ev.upstream_commit(workspace)
+        commit, commit_source = ev.upstream_commit_and_source(workspace)
         config_ids = {ev.expansion_label(*c): pci.config_id_of(share, commit, *c) for c in ev.expansion_matrix(mast_ids)}
     except ev.EvidenceError as err:        # no pinned commit means no config id: say so in the report, do not guess
-        commit, config_ids = None, {}
+        commit, commit_source, config_ids = None, None, {}
         for c in checks:
             if c["id"] == "C01":
                 c["result"], c["details"]["config_ids"] = "FAIL", f"not produced: {err}"
@@ -302,7 +302,9 @@ def build(args):
         "checks": checks,
         "config_ids": config_ids,
         "provenance": {k: provenance[k] for k in ("placeholder", "provisional", "verified")},
-        "limitations": limitations(datums, sidecars),
+        "limitations": limitations(datums, sidecars) + (
+            [f"openarm_description commit {commit[:7]} was read from {commit_source}, not from a git checkout"]
+            if commit_source == ev.METADATA_SOURCE else []),
     }
     if dirty:
         doc["dirty_files"] = dirty_files

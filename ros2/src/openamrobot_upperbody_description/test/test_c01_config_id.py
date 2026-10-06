@@ -213,18 +213,63 @@ def test_c01_the_pinned_upstream_commit_is_a_full_hash_and_matches_the_baseline_
     assert commit == pinned, f"checkout is at {commit}, openarm_v2.dev.repos pins {pinned}"
 
 
-def test_c01_a_dirty_or_missing_upstream_checkout_is_an_error_not_a_guess(tmp_path):
-    with pytest.raises(ev.EvidenceError, match="no git checkout"):
-        ev.upstream_commit(str(tmp_path))
+def _checkout(tmp_path):
     upstream = tmp_path / "src" / "upstream" / "openarm_description"
     upstream.mkdir(parents=True)
     git = lambda *a: subprocess.run(["git", "-C", str(upstream), *a], check=True, capture_output=True)  # noqa: E731
     git("init", "-q")
     git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x")
-    assert re.fullmatch(r"[0-9a-f]{40}", ev.upstream_commit(str(tmp_path)))
+    return upstream
+
+
+def _pins(tmp_path, commit=COMMIT):
+    path = tmp_path / "pins.yaml"
+    path.write_text(f"schema_version: 1\npins:\n  openarm_description: {commit}\n")
+    return str(path)
+
+
+def test_c01_a_git_checkout_wins_over_the_package_pin(tmp_path):
+    upstream = _checkout(tmp_path)
+    commit, source = ev.upstream_commit_and_source(str(tmp_path), pins_file=_pins(tmp_path))
+    assert source == ev.GIT_SOURCE and commit != COMMIT and re.fullmatch(r"[0-9a-f]{40}", commit)
+    assert commit == ev.git_head(str(upstream))
+
+
+def test_c01_a_dirty_checkout_is_an_error_and_is_not_replaced_by_the_pin(tmp_path):
+    upstream = _checkout(tmp_path)
     (upstream / "local_edit.txt").write_text("x")
     with pytest.raises(ev.EvidenceError, match="local changes"):
-        ev.upstream_commit(str(tmp_path))
+        ev.upstream_commit(str(tmp_path), pins_file=_pins(tmp_path))
+
+
+def test_c01_without_a_checkout_the_package_pin_is_used_and_labelled(tmp_path):
+    assert ev.upstream_commit_and_source(str(tmp_path), pins_file=_pins(tmp_path)) == (COMMIT, ev.METADATA_SOURCE)
+
+
+def test_c01_no_checkout_and_no_pin_is_an_error_not_a_guess(tmp_path):
+    with pytest.raises(ev.EvidenceError, match="no git checkout"):
+        ev.upstream_commit(str(tmp_path), pins_file=str(tmp_path / "missing.yaml"))
+    other = tmp_path / "other.yaml"
+    other.write_text("schema_version: 1\npins:\n  something_else: abc\n")
+    with pytest.raises(ev.EvidenceError, match="no git checkout"):
+        ev.upstream_commit(str(tmp_path), pins_file=str(other))
+
+
+def test_c01_the_package_pin_equals_the_checkout_and_the_baseline_pin():
+    """The fallback constant may not rot: if the pin moves, this fails until upstream_pins.yaml moves with it."""
+    pin = ev.pinned_commit_in_metadata()
+    assert pin and re.fullmatch(r"[0-9a-f]{40}", pin)
+    assert pin == _commit(), "config/upstream_pins.yaml disagrees with the upstream checkout"
+    baseline = ev.pinned_commit_in_baseline(WORKSPACE)
+    if baseline is not None:
+        assert pin == baseline
+
+
+def test_c01_the_fallback_gives_the_same_id_as_the_checkout(tmp_path):
+    """An empty workspace has no checkout, so the package pin is used; the id it gives is the checkout's id."""
+    commit, source = ev.upstream_commit_and_source(str(tmp_path))
+    assert source == ev.METADATA_SOURCE
+    assert _id(commit=commit) == _id(commit=_commit())
 
 
 def test_c01_records_its_inputs_and_where_the_c9_pattern_came_from():
