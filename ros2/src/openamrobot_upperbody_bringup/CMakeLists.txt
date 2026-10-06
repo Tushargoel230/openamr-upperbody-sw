@@ -2,7 +2,11 @@ cmake_minimum_required(VERSION 3.8)
 project(openamrobot_upperbody_bringup)
 find_package(ament_cmake REQUIRED)
 install(DIRECTORY launch config DESTINATION share/openamrobot_upperbody_bringup)
-install(PROGRAMS scripts/base_joint_states_stub.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS
+  scripts/base_joint_states_stub.py
+  scripts/build_a7_evidence.py
+  scripts/run_a7_regression.sh
+  DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(launch_testing_ament_cmake REQUIRED)

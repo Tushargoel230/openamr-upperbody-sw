@@ -1,0 +1,326 @@
+#!/usr/bin/env python3
+"""Assemble the A7 evidence report. Called by run_a7_regression.sh after the tests ran.
+
+    build_a7_evidence.py --since EPOCH [--step name=returncode ...] [--repo PATH]
+    build_a7_evidence.py --clear
+
+Writes `<evidence dir>/<UTC timestamp>_a7.json` in the openamr.evidence.v1 shape (VERIFICATION.md), `profile: "a7"`,
+`evidence_class: "simulation"`: G01 and G02 (the Gazebo package's launch tests), M01 (once per mast ID), M02, M03, M04, the M05 and M06 checks
+this step proposes, I01, V01 (still WARN: a person has to answer docs/v01_visual_check.md) and AUX. It reuses the A6 report's machinery
+(build_evidence.py and evidence_common.py of the description package, installed next to it) and its rules:
+
+  * a check with no result is FAIL ("no result"), never a pass; a skipped M01/M02 is no result
+  * a dirty tree writes NO file (P08): a report records a commit, and a tree with uncommitted changes is no commit. The summary still prints,
+    labelled as not recorded, and the exit status is 3 when nothing failed
+  * sidecars and xunit files older than --since are ignored
+
+Exit status: 1 if any check is FAIL, 3 if nothing failed but the tree is dirty (nothing recorded), 2 if the report cannot be assembled, else 0.
+Everything in this report is `simulation`: it permits no statement about a physical robot, a payload, a torque, or a validated limit.
+"""
+import argparse
+import datetime
+import hashlib
+import json
+import os
+import sys
+from collections import defaultdict
+
+from ament_index_python.packages import get_package_prefix, get_package_share_directory
+
+
+def _description_scripts():
+    path = os.path.join(get_package_prefix("openamrobot_upperbody_description"), "lib", "openamrobot_upperbody_description")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+    return path
+
+
+_description_scripts()
+import build_evidence as be  # noqa: E402
+import evidence_common as ev  # noqa: E402
+
+REPO = be.REPO
+PROFILE = "a7"
+EVIDENCE_CLASS = "simulation"
+MAST_IDS = ("mast_1300", "mast_1350", "mast_1400", "mast_1450")
+A7_CHECKS = [
+    ("G01", "combined robot in Gazebo: arm controllers, arm goal, Nav2-facing topics unchanged"),
+    ("G02", "grippers close in Gazebo and finger_joint2 follows finger_joint1 in the physics (Bullet-Featherstone, passed explicitly)"),
+    ("M01", "named poses plan and execute on mock at every release-candidate mast ID"),
+    ("M02", "named poses plan and execute in Gazebo at mast_1350"),
+    ("M03", "ACM validated by sampling: no pair disabled as Never collides (N=2000 at each mast ID)"),
+    ("M04", "a goal that puts the left gripper in a base-side collision volume is rejected by planning"),
+    ("M05", "per-hand gripper values: closed is each hand's own far limit, opposite signs (ADR-009 point 5)  [proposed check]"),
+    ("M06", "named-pose plans need some acceleration limit and do not depend on its value  [proposed check]"),
+    ("L01", "launch test: five controllers active on mock, one trajectory followed"),
+    ("I01", "installed packages match the source the tests and this report describe"),
+    ("V01", "a person has looked at the simulator and RViz and answered the checklist (eight items)"),
+    ("AUX", "supporting tests and steps (SRDF, imported elements, ACM record, config files, harness, colcon test of the packages)"),
+]
+PACKAGES = {"gazebo": "openamrobot_upperbody_gazebo", "moveit": "openamrobot_upperbody_moveit", "bringup": "openamrobot_upperbody_bringup"}
+EXPECTED_STEPS = ("colcon_test_gazebo", "colcon_test_moveit", "colcon_test_bringup")
+# A check recorded by one sidecar per run, and the runs it must have. M01 is once per mast ID: the cut order in the prompt allows fewer
+# (mast_1350 plus one other, with the reason recorded) through A7_M01_MASTS, and the report then says so.
+SIDECAR_REQUIRED = {"G01", "G02", "M01", "M02", "M03", "M04", "M05", "M06"}
+REFUSED_DIRTY = be.REFUSED_DIRTY
+
+
+def expected_m01_masts():
+    masts = tuple(m for m in os.environ.get("A7_M01_MASTS", ",".join(MAST_IDS)).split(",") if m)
+    unknown = [m for m in masts if m not in MAST_IDS]
+    if unknown:
+        raise ev.EvidenceError(f"A7_M01_MASTS names {unknown}; accepted: {', '.join(MAST_IDS)}")
+    return masts
+
+
+def all_fresh_sidecars(directory, since):
+    """{check id: [sidecar dicts]}: unlike evidence_common.read_sidecars, EVERY file of an id (M01 has one per mast ID)."""
+    out = defaultdict(list)
+    for filename in sorted(os.listdir(directory)):
+        if ev.SIDECAR_RE.match(filename) and os.path.getmtime(os.path.join(directory, filename)) >= since:
+            with open(os.path.join(directory, filename)) as f:
+                doc = json.load(f)
+            out[doc["id"]].append({**doc, "file": filename})
+    return out
+
+
+def run_summary(details):
+    return {"poses_ok": details.get("poses_ok"), "poses_run": details.get("poses_run"), "worst_final_error_rad": details.get("worst_final_error_rad"),
+            "start_state_invalid_retries": details.get("start_state_invalid_retries_total")}
+
+
+def combine_multi(check_id, counts, docs, expected_masts):
+    """-> (result, details) for a check recorded once per mast ID (M01) or once (M02, with its mast in the details)."""
+    details = {}
+    if counts:
+        details = {"tests": counts["tests"], "failed": counts["failures"], "skipped": counts["skipped"]}
+        if counts["failed_tests"]:
+            details["failed_tests"] = counts["failed_tests"][:10]
+    by_mast = {d["details"].get("mast_id"): d for d in docs}
+    runs, problems = {}, []
+    for mast in expected_masts:
+        doc = by_mast.get(mast)
+        if doc is None:
+            problems.append(f"no result for {mast}")
+            continue
+        runs[mast] = {"result": doc["result"], **run_summary(doc["details"])}
+        if doc["result"] != "PASS":
+            problems.append(f"{mast}: {doc['result']}")
+    details["expected_mast_ids"] = list(expected_masts)
+    details["runs"] = runs
+    if check_id == "M01" and tuple(expected_masts) != MAST_IDS:
+        details["reduced_set"] = f"the cut order reduced M01 to {', '.join(expected_masts)} (A7_M01_MASTS); the other mast IDs were not run"
+    if counts and counts["failures"]:
+        return "FAIL", {**details, "problems": problems or ["a test of this check failed"]}
+    if problems:
+        return "FAIL", {**details, "problems": problems}
+    return "PASS", details
+
+
+def moveit_identity():
+    """What the MoveIt configuration IS, as hashes: the SRDF (which carries the generated ACM) and the other config files."""
+    share = get_package_share_directory("openamrobot_upperbody_moveit")
+    out = {}
+    for name in ("openamrobot.srdf", "joint_limits.yaml", "moveit_controllers.yaml", "kinematics.yaml", "ompl_planning.yaml",
+                 "pilz_cartesian_limits.yaml", "acm/acm_generation.yaml"):
+        with open(os.path.join(share, "config", name), "rb") as f:
+            out[name] = "sha256:" + hashlib.sha256(f.read()).hexdigest()
+    return out
+
+
+def limitations(sidecars):
+    m03 = (sidecars.get("M03") or [{}])[0]
+    m03_details = m03.get("details", {})
+    out = [
+        "`simulation` names the evidence class: every result here is how the model behaves in Gazebo Harmonic or on mock_components, planned by "
+        "MoveIt 2.12.4 under OpenAMRobot's own declared limits. Every claim reads 'plans and executes in simulation under declared OpenAMRobot "
+        "limits'; nothing here is a validated limit, a payload, a torque, or a statement about a physical robot",
+        "the acceleration limits are engineering defaults (source: engineering_default, status: placeholder; rule: velocity / 2 s) written because "
+        "upstream declares none (openamrobot-manipulation#10, ADR-009); M06 shows the plans need SOME limit and do not depend on its value",
+        "MoveIt never sees base_link's 4.18 kg inertial: KDL drops the inertia of a root link (W01)",
+        "`park` is a placeholder copy of upstream's `home`, until the safe-pose definition lands under the manipulation action contract",
+        "the gripper controller is still the deprecated position_controllers/GripperActionController serving GripperCommand (option 1 of "
+        "ADR-009 point 4): this report does not choose between the three gripper interfaces (manipulation#11)",
+        "G02 and M02 pass the Bullet-Featherstone engine explicitly; sim.launch.py defaults to DART, the engine platform-sw tuned the base on, on "
+        "which a closed gripper pose does not close. The base's contact behaviour was compared on neither engine",
+        "the arms' position interface in gz_ros2_control is a velocity servo, so a final error under 0.01 rad in M02 says nothing about the real "
+        "arm's controller, gains, compliance or latency",
+        "MoveIt 2.12.4 refuses a start state even 1e-7 rad outside a joint limit (START_STATE_INVALID, no tolerance), and a simulated joint "
+        "resting on its limit (openarm_*_joint4 = 0, the home pose) can read past it: M01/M02 retry a bounded number of times and count every "
+        "retry (start_state_invalid_retries in the runs)",
+        "move_group exits with SIGSEGV when it is stopped (MoveIt 2.12.4); the checks allow that code for that one process and no other",
+        "the arms cannot reach the platform's base body: M04's refused goal is inside mast_base_link's volume, the nearest base-side volume a "
+        "left gripper can be put in",
+        "the collision matrix was generated with the Setup Assistant's own collision-matrix code run headless (collisions_updater), not by "
+        "driving the GUI, which cannot be done from a non-interactive session",
+        "V01: no human has answered the eight-item visual checklist yet; nothing in this report is a visual inspection",
+        "no physical evidence; simulation only. This report is not a statement about hardware",
+    ]
+    if m03.get("result") == "FAIL":
+        pairs = m03_details.get("never_pairs_that_collided", {})
+        first = next(iter(pairs.values()), [{}])[0] if pairs else {}
+        out.insert(0, "M03 FAILS: the collision matrix disables a pair as `Never` that collides in sampled states: "
+                      + ", ".join(sorted({f"{p['pair'][0]} <-> {p['pair'][1]}" for items in pairs.values() for p in items}))
+                      + f" (first reproducing sample: seed {m03_details.get('seed')}, index {first.get('first_sample_index')}). "
+                        "The ACM is wrong for that pair and the pair is NOT re-enabled here: which pair is wrong is the finding")
+    return out
+
+
+def build(args):
+    share = ev.share_dir()
+    workspace = ev.workspace_root(share)
+    edir = ev.evidence_dir(share)
+    repo = args.repo or os.path.join(workspace, "src", REPO)
+    steps = dict(s.split("=", 1) for s in args.step)
+    result_dirs = [os.path.join(workspace, "build", p, "test_results", p) for p in PACKAGES.values()]
+    counts, stale_xunit = be.read_xunit_dirs(result_dirs, args.since)
+    sidecars = all_fresh_sidecars(edir, args.since)
+
+    source = lambda pkg: os.path.join(repo, "ros2", "src", pkg)
+    differing = []
+    for pkg, names in (("openamrobot_upperbody_description", ("urdf", "config", "launch", "meshes")),
+                       ("openamrobot_upperbody_control", ("config",)),
+                       ("openamrobot_upperbody_gazebo", ("launch", "config", "worlds")),
+                       ("openamrobot_upperbody_moveit", ("launch", "config")),
+                       ("openamrobot_upperbody_bringup", ("launch",))):
+        differing += [f"{pkg}/{d}" for d in be.trees_differ(source(pkg), ev.package_share(pkg), names=names)]
+
+    masts = expected_m01_masts()
+    checks = []
+    for check_id, name in A7_CHECKS:
+        docs = sidecars.get(check_id, [])
+        if check_id == "M01":
+            result, details = combine_multi("M01", counts.get("M01"), docs, masts)
+        elif check_id == "M02":
+            result, details = combine_multi("M02", counts.get("M02"), docs, ("mast_1350",))
+        elif check_id == "V01":
+            result, details = "WARN", {
+                "performed": "pending: docs/v01_visual_check.md has eight items (item 8: an arm executes a named pose in RViz and the preview "
+                             "matches what the robot then does); no answers are recorded, and 'looks fine' would not clear it",
+                "checklist": "docs/v01_visual_check.md"}
+        elif check_id == "I01":
+            result, details = ("FAIL", {"differing": differing, "hint": "run colcon build, then run_a7_regression.sh again"}) if differing \
+                else ("PASS", {"compared": ["description: urdf, config, launch, meshes", "control: config", "gazebo: launch, config, worlds",
+                                            "moveit: launch, config", "bringup: launch"]})
+        elif check_id == "AUX":
+            result, details = "PASS", {}
+        else:
+            result, details = be.combine(check_id, counts.get(check_id), docs[0] if docs else None)
+            if check_id in SIDECAR_REQUIRED and not docs:
+                result = "FAIL"
+        if check_id == "AUX":
+            problems = {}
+            for step in EXPECTED_STEPS:
+                if steps.get(step) is None:
+                    problems[step] = "step was not run"
+                elif steps[step] != "0":
+                    problems[step] = f"exited {steps[step]} (the failing checks above say which test)"
+            if stale_xunit:
+                problems["stale_xunit"] = stale_xunit
+            aux_counts = counts.get("AUX")
+            if aux_counts:
+                details.update({"tests": aux_counts["tests"], "failed": aux_counts["failures"], "skipped": aux_counts["skipped"]})
+                if aux_counts["failures"]:
+                    problems["failed_tests"] = aux_counts["failed_tests"][:10]
+            details["steps"] = steps
+            if problems:
+                result, details["step_problems"] = "FAIL", problems
+        checks.append({"id": check_id, "name": name, "result": result, "details": details})
+
+    with open(os.path.join(share, "config", "datums.yaml")) as f:
+        datums = yaml_load(f)
+    with open(os.path.join(share, "config", "mast_ids.yaml")) as f:
+        mast_ids = yaml_load(f)
+    commit, commit_source = ev.upstream_commit_and_source(workspace)
+    import print_config_id as pci
+    matrix = [c for c in ev.expansion_matrix(mast_ids) if c[1] == "openarm" and c[2] in ("mock", "gazebo")]
+    config_ids = {ev.expansion_label(*c): pci.config_id_of(share, commit, *c) for c in matrix}
+    provenance = defaultdict(int)
+    for d in datums["datums"].values():
+        provenance[d["status"]] += 1
+
+    dirty, dirty_files = ev.git_dirty(repo)
+    upstream = {"openarm_description": commit}
+    for name in ("openarm_ros2",):
+        head = ev.git_head(ev.upstream_checkout(workspace, name))
+        if head:
+            upstream[name] = head
+    simulator = be.simulator_versions()
+    try:
+        import subprocess
+        moveit_version = subprocess.run(["dpkg-query", "-W", "-f=${Version}", "ros-jazzy-moveit-core"], capture_output=True, text=True).stdout or "unknown"
+    except OSError:
+        moveit_version = "unknown"
+    now = datetime.datetime.now(datetime.timezone.utc)
+    doc = {
+        "schema": "openamr.evidence.v1", "repo": REPO, "git_hash": ev.git_head(repo), "dirty": dirty,
+        "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "profile": PROFILE, "evidence_class": EVIDENCE_CLASS,
+        "simulator": {**simulator, "moveit": moveit_version}, "upstream": upstream, "datums_revision": datums["revision"],
+        "checks": checks, "config_ids": config_ids, "moveit_config": moveit_identity(),
+        "provenance": {k: provenance[k] for k in ("placeholder", "provisional", "verified")},
+        "limitations": limitations(sidecars),
+    }
+    if dirty:
+        doc["dirty_files"] = dirty_files
+        return doc, None
+    path = os.path.join(edir, now.strftime("%Y%m%dT%H%M%SZ") + f"_{PROFILE}.json")
+    with open(path, "w") as f:
+        json.dump(doc, f, indent=2)
+        f.write("\n")
+    return doc, path
+
+
+def yaml_load(f):
+    import yaml
+    return yaml.safe_load(f)
+
+
+def summary(doc, path):
+    lines = ["", f"A7 evidence  {doc['repo']} @ {(doc['git_hash'] or '?')[:7]}{' (dirty)' if doc['dirty'] else ''}  class {doc['evidence_class']}  "
+                 f"MoveIt {doc['simulator'].get('moveit')}"]
+    for c in doc["checks"]:
+        extra = (c["details"].get("problems") or [c["details"].get("reason") or ""])[0] if c["result"] in ("FAIL", "WARN") else ""
+        tests = f"  [{c['details']['tests']} tests]" if "tests" in c["details"] else ""
+        lines.append(f"  {c['result']:<4}  {c['id']:<4} {c['name'][:84]}{tests}{('  -- ' + str(extra)[:90]) if extra else ''}")
+    counts = defaultdict(int)
+    for c in doc["checks"]:
+        counts[c["result"]] += 1
+    lines += ["", "Limitations"] + [f"  - {text}" for text in doc["limitations"][:4]] + ["  - ... (all in the evidence file)"]
+    if path is None:
+        files = doc["dirty_files"]
+        lines += ["", f"Evidence: NOT WRITTEN. {doc['repo']} has uncommitted changes ({len(files)}: {', '.join(files[:5])}{', ...' if len(files) > 5 else ''}), "
+                      "so a report would describe no commit.",
+                  "          Commit, then run this again. Nothing above is a record; the evidence directory only holds clean-tree runs."]
+    else:
+        lines += ["", f"Evidence: {path}"]
+    lines += ["Result: " + ("FAIL" if counts["FAIL"] else "no FAIL") + "  (" + ", ".join(f"{counts[r]} {r}" for r in ("PASS", "WARN", "SKIP", "FAIL")) + ")"]
+    return "\n".join(lines)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--since", type=float, help="epoch seconds: results older than this are stale (required to build)")
+    parser.add_argument("--clear", action="store_true", help="delete the previous run's G* and M* sidecars from the evidence directory, print it, and stop")
+    parser.add_argument("--step", action="append", default=[], metavar="NAME=RC", help="return code of a step run_a7_regression.sh ran")
+    parser.add_argument("--repo", default=None, help=f"the {REPO} checkout (default <workspace>/src/{REPO})")
+    args = parser.parse_args(argv)
+    if args.clear:
+        directory = ev.evidence_dir()
+        ev.clear_sidecars(directory, only=lambda filename: filename[0] in "GM")
+        print(directory)
+        return 0
+    if args.since is None:
+        parser.error("--since is required")
+    try:
+        doc, path = build(args)
+    except ev.EvidenceError as err:
+        print(f"build_a7_evidence: {err}", file=sys.stderr)
+        return 2
+    print(summary(doc, path))
+    if any(c["result"] == "FAIL" for c in doc["checks"]):
+        return 1
+    return REFUSED_DIRTY if path is None else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
