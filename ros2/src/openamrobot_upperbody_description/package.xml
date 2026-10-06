@@ -14,9 +14,8 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
-  <!-- T15 reads the plugin names out of the installed gz_ros2_control; the controller yaml's package is found with
-       $(find openamrobot_upperbody_control) and NOT declared: control already test_depends on this package, and a
-       dependency back would be a cycle -->
+  <!-- T15 reads the plugin names out of the installed gz_ros2_control. The controller yaml's package is not resolved by this
+       package at all: the gazebo profile takes its path as the controllers_file xacro arg (P10), supplied by the launch -->
   <test_depend>gz_ros2_control</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>ament_cmake_ros</test_depend>

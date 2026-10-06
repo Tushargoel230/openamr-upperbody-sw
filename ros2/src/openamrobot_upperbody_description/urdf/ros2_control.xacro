@@ -50,7 +50,7 @@
     </joint>
   </xacro:macro>
 
-  <xacro:macro name="openamr_arm_ros2_control" params="hardware_profile">
+  <xacro:macro name="openamr_arm_ros2_control" params="hardware_profile controllers_file:=''">
     <xacro:if value="${hardware_profile in ['mock', 'real']}">
       <!-- What upstream's openarm_v20.urdf.xacro does before it calls the macro. -->
       <xacro:property name="openarm_robot_root" value="$(find openarm_description)/assets/robot/openarm_v2.0"/>
@@ -75,11 +75,16 @@
            with no reference becomes a plugin of the model when ros_gz_sim converts the URDF to SDF. Filename and class were
            read from the installed Jazzy gz_ros2_control 1.2.20, not from documentation: libgz_ros2_control-system.so
            registers gz_ros2_control::GazeboSimROS2ControlPlugin (libgz_hardware_plugins.so registers GazeboSimSystem).
-           The controllers are the same file every profile uses (ADR-003). The world, physics, sensors and the launch that
-           spawns this model are simulation bringup and live in openamrobot_upperbody_gazebo. -->
+           The controllers are the same file every profile uses (ADR-003), but this description does not know where it lives:
+           the path comes in as the controllers_file arg, and with the arg empty (the default) there is no <parameters> at all.
+           The launch that starts the simulation supplies it, so this package does not resolve the control package's path
+           (it would be an undeclared dependency, or a cycle: control test-depends on this package). The world, physics,
+           sensors and the launch that spawns this model are simulation bringup and live in openamrobot_upperbody_gazebo. -->
       <gazebo>
         <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
-          <parameters>$(find openamrobot_upperbody_control)/config/arm_controllers.yaml</parameters>
+          <xacro:if value="${controllers_file != ''}">
+            <parameters>${controllers_file}</parameters>
+          </xacro:if>
         </plugin>
       </gazebo>
 

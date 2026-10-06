@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 import pytest
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
 
-from conftest import expand
+from conftest import COMBINED, expand, expand_xml
 from ros2_control_utils import arm_joints_needing_an_interface, blocks, controlled_joints, element_text, plugins
 
 GAZEBO = "gz_ros2_control/GazeboSimSystem"
@@ -57,12 +57,59 @@ def _model_plugins(root):
             if p.get("filename") == MODEL_PLUGIN_FILE]
 
 
-def test_t15_gazebo_model_carries_the_gz_ros2_control_plugin_with_the_controller_yaml_by_installed_path():
-    plugin, = _model_plugins(expand(hardware_profile="gazebo"))
+CONTROLLERS_FILE = "/opt/example/share/some_controllers_package/config/arm_controllers.yaml"      # a path the description never reads
+
+
+def test_t15_gazebo_model_carries_the_gz_ros2_control_plugin_and_the_controllers_file_arg_is_its_parameters():
+    """The description does not know where a controller config lives (ADR-003, P10 task 0): the path is the controllers_file
+    xacro arg, and the <parameters> element is exactly that string."""
+    plugin, = _model_plugins(expand(hardware_profile="gazebo", controllers_file=CONTROLLERS_FILE))
     assert plugin.get("name") == MODEL_PLUGIN_CLASS
-    parameters = (plugin.findtext("parameters") or "").strip()
-    installed = os.path.join(get_package_share_directory("openamrobot_upperbody_control"), "config", "arm_controllers.yaml")
-    assert parameters == installed and os.path.isfile(parameters), "the plugin must read the one controller file every profile uses"
+    assert [p.text for p in plugin.findall("parameters")] == [CONTROLLERS_FILE]
+
+
+def test_t15_without_the_arg_the_plugin_is_still_there_and_has_no_parameters_element():
+    root = expand(hardware_profile="gazebo")
+    plugin, = _model_plugins(root)
+    assert plugin.get("name") == MODEL_PLUGIN_CLASS and plugin.find("parameters") is None
+    assert plugin.findall("*") == [], "an empty controllers_file must leave the plugin with no children at all"
+    assert [name for name, _ in plugins(root)] == ["openamr_arms_gazebo"], "the hardware contract is unchanged"
+
+
+def test_t15_the_arg_is_the_only_difference_it_adds_and_removes_one_element():
+    """With the arg the expansion equals the default one plus the <parameters> element, and nothing else moves."""
+    default, given = expand_xml(hardware_profile="gazebo"), expand_xml(hardware_profile="gazebo", controllers_file=CONTROLLERS_FILE)
+    assert default != given
+    assert given.replace(f"<parameters>{CONTROLLERS_FILE}</parameters>", "") == default
+
+
+@pytest.mark.parametrize("profile", ["mock", "real"])
+def test_t15_the_other_profiles_ignore_the_controllers_file_arg(profile):
+    assert expand_xml(hardware_profile=profile, controllers_file=CONTROLLERS_FILE) == expand_xml(hardware_profile=profile)
+
+
+def test_t15_the_default_gazebo_expansion_is_valid_urdf_without_the_arg():
+    """No controllers file is a legal description (it is a hardware contract, not a launch): check_urdf takes it."""
+    import subprocess
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".urdf") as f:
+        f.write(expand_xml(hardware_profile="gazebo"))
+        f.flush()
+        result = subprocess.run(["check_urdf", f.name], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_t15_the_description_does_not_resolve_the_control_package():
+    """The colcon cycle was removed, not declared: no xacro, launch or config of this package may name the control package's
+    path (a $(find) of it is an undeclared dependency, or a cycle because control test-depends on this package)."""
+    urdf = os.path.join(os.path.dirname(COMBINED), "")
+    offenders = []
+    for name in sorted(os.listdir(urdf)):
+        with open(os.path.join(urdf, name)) as f:
+            for number, line in enumerate(f, 1):
+                if "$(find openamrobot_upperbody_control" in line:
+                    offenders.append(f"{name}:{number}")
+    assert not offenders, f"the description resolves the control package at {offenders}"
 
 
 def test_t15_the_plugin_is_a_model_plugin_not_a_link_or_world_one():

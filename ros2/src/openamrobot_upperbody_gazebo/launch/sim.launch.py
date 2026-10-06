@@ -96,12 +96,17 @@ def generate_launch_description():
     except PackageNotFoundError:
         pass
 
+    # The description knows nothing about where a controller config lives (ADR-003); this launch depends on both packages, so it
+    # is what hands the controller manager inside the simulator its parameter file, as an absolute path.
+    controllers_file = os.path.join(get_package_share_directory(CONTROL), "config", "arm_controllers.yaml")
+
     robot_description = ParameterValue(
         Command([
             FindExecutable(name="xacro"), " ",
             PathJoinSubstitution([FindPackageShare(DESCRIPTION), "urdf", "combined_robot.xacro"]),
             " mast_id:=", mast_id,
             " hardware_profile:=gazebo",
+            " controllers_file:=", controllers_file,
         ]),
         value_type=str,
     )

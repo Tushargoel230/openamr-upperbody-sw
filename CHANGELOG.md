@@ -95,6 +95,12 @@ All notable changes to this repository. Evidence for the description is static a
   gripper-mimic convenience is not grounds to re-baseline platform-sw's physics. G02 passes `gz-physics-bullet-featherstone-plugin`
   explicitly and its sidecar records which engine each Gazebo check ran on.
 
+- The description no longer resolves `openamrobot_upperbody_control`'s path. The `gazebo` profile's `gz_ros2_control` `<parameters>`
+  is the new `controllers_file` xacro arg (default empty, no `<parameters>` element then); `sim.launch.py`, which depends on both
+  packages, passes `arm_controllers.yaml`'s installed path. This removes the `$(find)` that the description could neither declare
+  (a colcon cycle) nor leave undeclared. The `gazebo` configuration id changes; the other 13 expansions of the matrix are
+  byte-identical to before. T15 asserts the element appears with the arg and that the default expansion is valid URDF.
+
 ### Removed
 
 - `config/lift/`: an empty scaffold directory. An actuated lift is OpenAMRobot 3.0 scope.
