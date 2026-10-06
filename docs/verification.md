@@ -94,4 +94,6 @@ Current result: 20 `PASS`, 6 `WARN`, 0 `SKIP`, 0 `FAIL` with the upstream checko
 
 Check `git_hash` first (every file in `evidence/` is from a clean commit), then `limitations`, then every non-`PASS` row. T10 prints the modelled mass beside the
 120 kg limit and the F2S vehicle estimate (93 kg); the modelled total is what the description contains, not what the robot
-weighs.
+weighs. Each mass row carries its provenance state from `config/mass_provenance.yaml`: `placeholder` (no source), `external_nominal`
+(another owner's figure, not verified by us: the base CAD export and the upstream arm nominals) or `verified` (measured, with a
+document); none is `verified` today.

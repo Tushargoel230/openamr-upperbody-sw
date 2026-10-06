@@ -69,7 +69,7 @@ All notable changes to this repository. Evidence for the description is static a
   `finger_joint2` follows in the physics). `verify_gazebo.sh` writes a `gazebo` evidence report, `evidence_class: "simulation"`.
 - `docs/v01_visual_check.md`: the checklist for V01, to be answered by a person with the simulator and RViz open.
 - Check T15 gains the finger-mimic multiplier test (a hard-coded multiplier, including one equal to the yaml's, fails), and the
-  plugin tests. T10 gains the mass-provenance tripwire (a verified mass datum with no base/arm provenance entry fails).
+  plugin tests. T10 gained a tripwire (a verified mass datum with no base/arm provenance entry fails), replaced in P10 by the provenance map below.
 
 ### Changed
 
@@ -100,6 +100,14 @@ All notable changes to this repository. Evidence for the description is static a
   packages, passes `arm_controllers.yaml`'s installed path. This removes the `$(find)` that the description could neither declare
   (a colcon cycle) nor leave undeclared. The `gazebo` configuration id changes; the other 13 expansions of the matrix are
   byte-identical to before. T15 asserts the element appears with the arg and that the default expansion is valid URDF.
+
+- `config/mass_provenance.yaml`, the mass-provenance map: `placeholder`, `external_nominal` or `verified` for each of the four mass
+  groups (base and openarm are `external_nominal`, mast and sensors are `placeholder`, nothing is `verified`). T10 reads the
+  caveat off it: `per-link masses still placeholders` when any group is `placeholder`, and a separate line naming the
+  `external_nominal` groups. A group that draws its mass from a datum (the mast, `mast_mass`) must agree with the datum's status;
+  `verified` needs a `document`. This replaces P09's tripwire, which only guarded the absence of the map. Because the sensors
+  carry no inertial (zero mass is a figure chosen so the model expands), that group is a placeholder, so the caveat now needs the
+  cameras weighed as well as the mast.
 
 ### Removed
 
