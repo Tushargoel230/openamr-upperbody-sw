@@ -1,7 +1,7 @@
 # Changelog
 
-All notable changes to this repository. Evidence for the description is static and mock only; nothing here is a hardware
-or Gazebo result.
+All notable changes to this repository. Evidence for the description is static and mock only, and the Gazebo evidence is class
+`simulation`; nothing here is a hardware result.
 
 ## [Unreleased]
 
@@ -58,8 +58,28 @@ or Gazebo result.
 - Test dependencies `python3-numpy` and `liburdfdom-tools` declared in the description package, so
   `rosdep install --from-paths src` installs what T02 and T05 use.
 
+- `openamrobot_upperbody_gazebo` (A7, part 1): `sim.launch.py` (args `mast_id`, `world`, `headless`, plus `physics_engine` and
+  `rviz`) spawns the combined robot in Gazebo Harmonic with the base on platform-sw's DiffDrive plugin and both arms on
+  `gz_ros2_control`; an empty world; platform-sw's `gz_bridge.yaml` used by reference, plus one bridge for the wheels' joint
+  states; `joint_state_publisher` merging `/base/joint_states` and `/arm/joint_states` so `/joint_states` has one publisher;
+  `odom -> base_link` from the DiffDrive plugin only. The `gazebo` profile loads `gz_ros2_control` into the model (model plugin,
+  `gz_ros2_control-system`, with `arm_controllers.yaml` by installed path), names read from the installed library.
+- Checks G01 (headless smoke test: five controllers `active`, an arm goal completes, platform-sw's topics unchanged by name and
+  type, `/cmd_vel` and `/odom` work, one `odom -> base_link` publisher, `/joint_states` once each) and G02 (grippers close and
+  `finger_joint2` follows in the physics). `verify_gazebo.sh` writes a `gazebo` evidence report, `evidence_class: "simulation"`.
+- `docs/v01_visual_check.md`: the checklist for V01, to be answered by a person with the simulator and RViz open.
+- Check T15 gains the finger-mimic multiplier test (a hard-coded multiplier, including one equal to the yaml's, fails), and the
+  plugin tests. T10 gains the mass-provenance tripwire (a verified mass datum with no base/arm provenance entry fails).
+
 ### Changed
 
+- The evidence harness writes no report from a dirty tree: it prints the results, says `Evidence: NOT WRITTEN`, and exits 3 if
+  nothing failed. Every file in `evidence/` is a clean-commit run.
+- C02 checks every pin in `config/upstream_pins.yaml`, not only `openarm_description`, and the file is normalised to quoted
+  40-hex hashes (`openarm_ros2` was a 7-character hash nothing compared). A pin with no checkout is listed as not compared; C01
+  compares every pin with the manipulation baseline.
+- In `ros2_control.xacro` the finger-mimic multiplier property moved from inside the mock/real branch to file scope so it can be
+  read and tested; the expansion of every profile (mock, real; gazebo before the plugin was added) is byte-identical.
 - Repository README: status updated, and a pointer to the description package. The mast configuration text is unchanged.
 - `mast_section` datum: the invented 80 mm square placeholder is now the MISUMI HFS6-60120 profile, 60 x 120 mm (`source: plan`,
   `status: provisional`; which axis carries the 120 mm is unconfirmed). Datums revision `2026-10-08.d`, so every
@@ -79,9 +99,12 @@ or Gazebo result.
 
 - Base inertials are platform-sw CAD placeholders; the mast mass, mast and plate transforms and all camera poses are
   placeholder datums. No physical evidence.
-- `ros2_control` is verified by a runtime launch on `mock` only. The `gazebo` and `real` blocks are checked by expansion;
-  `openarm_hardware` cannot be built in the reference workspace (it needs OpenArmCAN). Whether `gz_ros2_control` needs a
-  `mimic` parameter for `openarm_*_finger_joint2` is open and is decided with a Gazebo run.
+- `ros2_control` runs on `mock` (L01) and in Gazebo (G01, G02); the `real` block is checked by expansion only,
+  `openarm_hardware` cannot be built in the reference workspace (it needs OpenArmCAN). In Gazebo the arms' position interface is
+  a velocity servo, so tracking there says nothing about the real arm. `finger_joint2` is not declared under `ros2_control`:
+  Gazebo's Bullet-Featherstone engine follows the URDF `<mimic>` on its own, its DART default does not move the fingers at all.
+- The Gazebo launch uses the Bullet-Featherstone engine, not platform-sw's DART. The base was driven on it only far enough to
+  compare distance and yaw with the command; contact behaviour against DART was not compared.
 - The gripper controllers stay `position_controllers/GripperActionController` (deprecated in Jazzy) on purpose: the replacement,
   `parallel_gripper_action_controller`, serves `ParallelGripperCommand` instead of `GripperCommand`, so switching decides the
   gripper interface (manipulation#11, ADR-009 point 4), which is open.

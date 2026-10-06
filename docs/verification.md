@@ -13,8 +13,10 @@ source install/setup.bash
 ros2 run openamrobot_upperbody_description verify_a6.sh                   # about 2 minutes
 ```
 
-It prints a summary and writes `<workspace>/evidence/<UTC timestamp>_dev.json`. The exit status is non-zero if and only if
-a check is `FAIL`. `OPENAMR_EVIDENCE_DIR` moves the output; `OPENAMR_WS` names the workspace.
+It prints a summary and writes `<workspace>/evidence/<UTC timestamp>_dev.json`, **from a clean tree only**: with uncommitted
+changes (untracked files included) it prints the results, says `Evidence: NOT WRITTEN` and names the files, because a report
+records a commit and a dirty tree is none. The exit status is 1 if a check is `FAIL`, 3 if everything passed but the tree was
+dirty, 2 if the evidence cannot be assembled. `OPENAMR_EVIDENCE_DIR` moves the output; `OPENAMR_WS` names the workspace.
 
 ## The evidence report (`openamr.evidence.v1`)
 
@@ -43,6 +45,29 @@ datums). Words such as "validated" or "works on hardware" do not belong in anyth
 directly: *"SKIP/BLOCKED is not PASS; fixtures/fake hardware are not integrated simulation, physical acceptance or
 release readiness."*
 
+## The Gazebo report (`verify_gazebo.sh`)
+
+```bash
+ros2 run openamrobot_upperbody_description verify_gazebo.sh            # about 1.5 minutes: two headless Gazebo servers
+```
+
+It runs the launch tests of `openamrobot_upperbody_gazebo` and writes `<workspace>/evidence/<UTC timestamp>_gazebo.json` with
+`profile: "gazebo"` and `evidence_class: "simulation"`, plus a `simulator` block (Gazebo, `gz_ros2_control` and `ros_gz_sim`
+versions). It refuses to write from a dirty tree, like the other report. Its checks:
+
+| ID | Proves |
+|---|---|
+| G01 | in a headless Gazebo: the five arm controllers are `active`; a `left_arm_controller` goal completes and tracks while the other arm and the base stay still; every topic of platform-sw's bridge file exists by name and type; `/cmd_vel` moves the base and `/odom` reports it; exactly one publisher of `odom -> base_link` (strictly increasing stamps at the plugin's 50 Hz); `/joint_states` has one publisher carrying the wheels and the arms once each |
+| G02 | both grippers close and `finger_joint2` follows `finger_joint1` in the physics (link poses, not `/joint_states`); it fails on Gazebo's DART default engine |
+| I01 | the installed gazebo and description packages match the source |
+| V01 | `WARN` until a person has answered `v01_visual_check.md`; "looks fine" does not clear it |
+
+**What `simulation` permits:** the model behaves as G01 and G02 say in that simulator on that machine. **What it does not:** any
+statement about a physical robot, about the real arm's controller, gains or latency (the arms' position interface is a velocity
+servo in `gz_ros2_control`), about payload, torque or mass (the masses are placeholders), about the base's real wheel or
+motor parameters (platform-sw's plugin values, not measured), or about how the base behaves on the physics engine platform-sw
+tuned for (DART). The report's last limitation is the A6 report's own sentence: *no physical evidence*.
+
 ## Result values
 
 | Value | Meaning |
@@ -63,7 +88,7 @@ Current result: 20 `PASS`, 6 `WARN`, 0 `SKIP`, 0 `FAIL` with the upstream checko
 | E01 | Height, width and depth are lower bounds from link origins and primitives; meshes are not loaded. A figure under the limit proves nothing, so it is never `PASS` by design | A4 measures the envelope with meshes. Until then it stays `WARN` |
 | W01 | `base_link` has a 4.18 kg inertial and KDL drops the inertia of a root link, so `robot_state_publisher` and MoveIt never see it. The usual workaround changes the contract's root, and the base is platform-sw's | A base-macro refactor by the WP-F5 owner. It matters in A7 |
 | W02 | `robot_state_publisher` converts the planar joint to fixed, because KDL has no planar joint. A consumer limitation; A6's acceptance (joint present, `check_urdf` accepts it) is unaffected | Not clearable here. In A7 planar motion comes from Gazebo's `odom -> base_link` |
-| V01 | No person has looked at the RViz window. A numeric check is not a visual one | A person runs `ros2 launch openamrobot_upperbody_bringup view.launch.py`, looks, and records it |
+| V01 | No person has answered the visual checklist. A numeric check is not a visual one | A person runs the simulator with RViz beside it, looks, and answers each item of [`v01_visual_check.md`](v01_visual_check.md) in their own words |
 
 ## Reading a report
 
