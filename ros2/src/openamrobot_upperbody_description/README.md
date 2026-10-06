@@ -164,7 +164,7 @@ Rules, enforced by tests T12 and T13 (`config/datums.schema.json` holds the sche
 6. A number that only affects how the model is *drawn* (the camera marker cube edge, `openamr_sensor_marker_edge`) is a
    named visual-only constant in the xacro, not a datum. It may appear only inside a `<visual>`.
 
-Current state (revision `2026-10-08.d`): **14 datums: 8 placeholder, 5 provisional, 1 verified.**
+Current state (revision `2026-10-08.e`): **15 datums: 8 placeholder, 6 provisional, 1 verified.**
 `ros2 run openamrobot_upperbody_description datums_report.py` lists them with their owners.
 
 ## Verify
@@ -191,7 +191,7 @@ Result vocabulary: `PASS`, `FAIL`, `WARN`, `SKIP`. **`SKIP` and `WARN` are not `
 | T05 | `openarm_left_base_link` is at the shoulder height of its `mast_id`, within 1 mm, for all four IDs |
 | T06 | an unknown arg value fails with the accepted values named |
 | T07 / T08 | collision geometry exists or is declared absent; a collision mesh that is the visual mesh is reported |
-| T09 / T10 | every massed link has positive mass and a physically valid inertia; the modelled mass is reported by owner against 120 kg |
+| T09 / T10 | every massed link has positive mass and a physically valid inertia; the modelled mass is reported by owner against 120 kg, next to the F2S vehicle estimate (93 kg, `f2s_vehicle_mass_estimate`), with "per-link masses still placeholders" printed while a mass datum is `placeholder` |
 | T11 | no planar joint by default; with `enable_planar_base:=true` a `planar` joint, parent `world`, child `base_link` |
 | T12 / T13 | datum schema, provenance rules and references |
 | C01 | every configuration id is `sha256:` plus 64 hex characters and matches the C9 dataset schema pattern |

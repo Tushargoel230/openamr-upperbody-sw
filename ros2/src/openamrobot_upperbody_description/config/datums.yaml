@@ -2,7 +2,7 @@
 # Schema v1, see 10_architecture/DATUMS.md. Values may change; names and the frame structure may not.
 # Computed values (e.g. mast_offset) are NOT stored here; upstream-owned values are read from upstream YAML.
 schema_version: 1
-revision: "2026-10-08.d"          # bump on every change to this file; goes into config_id (test_datums_revision.py enforces it)
+revision: "2026-10-08.e"          # bump on every change to this file; goes into config_id (test_datums_revision.py enforces it)
 units: {length: m, angle: rad, mass: kg}
 
 # Datums that are reported but never feed the model (DATUMS.md rule 1).
@@ -12,6 +12,7 @@ report_only:
   - envelope_max_width
   - envelope_max_depth
   - gross_mass_limit
+  - f2s_vehicle_mass_estimate
 
 # Datums whose xacro consumer has not been written yet: <datum>: <step that will consume it>.
 # The step that adds the consumer deletes the entry in the same commit; T13 fails if it does not.
@@ -122,3 +123,11 @@ datums:
     status: verified
     ref: "P-00 s3.1 platform-level requirement"
     owner: "Alex (P-00)"
+
+  f2s_vehicle_mass_estimate:
+    value: 93.0
+    source: f2s
+    status: provisional
+    ref: "Alex, F2S design proposal, 28 Sep 2026 (gross mass about 93 kg vs the 120 kg cap); second-hand via DESIGN_UPDATE_2026-10-05 s1, the F2S document is not in this repo"
+    owner: "Alex (F2S)"
+    note: "Vehicle level, not per link. T10 prints it next to the modelled total so 22 kg against 120 kg is not read as headroom; it feeds nothing."
