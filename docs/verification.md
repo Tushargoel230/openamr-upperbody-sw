@@ -1,7 +1,8 @@
-# Verifying the robot description (A6)
+# Verifying the robot description (A6) and its simulation (A7)
 
 `verify_a6.sh` runs the description, control and bringup tests, then writes one JSON evidence report. This page says how
-to run it, what the report contains, what it lets you claim, and why six checks are `WARN`.
+to run it, what the report contains, what it lets you claim, and why six checks are `WARN`. The Gazebo report and the A7 report
+(MoveIt, `run_a7_regression.sh`) follow the A6 one.
 
 ## Run it
 
@@ -67,6 +68,47 @@ statement about a physical robot, about the real arm's controller, gains or late
 servo in `gz_ros2_control`), about payload, torque or mass (the masses are placeholders), about the base's real wheel or
 motor parameters (platform-sw's plugin values, not measured), or about how the base behaves on the physics engine platform-sw
 tuned for (DART). The report's last limitation is the A6 report's own sentence: *no physical evidence*.
+
+## The A7 report (`run_a7_regression.sh`)
+
+```bash
+ros2 run openamrobot_upperbody_bringup run_a7_regression.sh            # about 15 minutes; headless
+```
+
+It runs the gazebo, moveit and bringup tests (`OPENAMR_A7=1`, which un-gates M01 and M02: they skip otherwise so that `verify_a6.sh` never
+starts them), then `build_a7_evidence.py` writes `<workspace>/evidence/<UTC timestamp>_a7.json` with `profile: "a7"`, `evidence_class:
+"simulation"`, a `simulator` block (Gazebo, `gz_ros2_control`, `ros_gz_sim` and MoveIt versions) and a `moveit_config` block (hashes of the
+SRDF, which carries the collision matrix, and of the other configuration files). It inherits P08's rule: **a dirty tree writes no file**. The
+exit status is 1 if a check is `FAIL`, 3 if everything passed but the tree is dirty, 2 if the evidence cannot be assembled.
+
+| ID | Proves |
+|---|---|
+| G01, G02 | as in the Gazebo report above (G01 on the default DART engine, G02 on Bullet-Featherstone passed explicitly) |
+| M01 | on `mock`, at **each of the four mast IDs**, every SRDF named pose plans and executes through `move_group` into the real controllers and ends under 0.01 rad of its goal: both arms (`hands_up`, `home`, `hands_up`, `park`) and both grippers (`closed` then `open`, each hand with its own value) |
+| M02 | the same in Gazebo at `mast_1350` (the release configuration), on Bullet-Featherstone passed explicitly because the gripper poses do not close on DART |
+| M03 | the collision matrix validated by sampling: 2000 random joint states per mast ID, collision checked ignoring the SRDF's list, a pair disabled as `Never` that collides is a FAIL with the pair and a reproducing sample; the `Never` pairs that never collided are listed |
+| M04 | a goal that puts the left gripper inside a base-side collision volume is **rejected** by planning (the joint goal: answered at once, the planner's own verdict `GOAL_STATE_INVALID`), not merely unsuccessful; the pose goal at the same place **times out**, and the record says which is which |
+| M05 | *(proposed by this step)* the per-hand gripper values: `closed` is each hand's own far limit, the signs are opposite, and the single-number version fails (ADR-009 point 5) |
+| M06 | *(proposed by this step)* the named-pose plans need some acceleration limit and do not depend on its value (ADR-009) |
+| L01, I01, V01, AUX | as in the A6 report, for the packages this one touches; V01 now has **eight** checklist items (item 8: an arm executes a named pose in RViz and the preview matches what the robot then does) and stays `WARN` until a person has answered them |
+
+**What `simulation` permits here:** every claim reads *"plans and executes in simulation under declared OpenAMRobot limits"*. The limits
+are engineering defaults (`source: engineering_default`, `status: placeholder`) because upstream declares no acceleration limits
+(manipulation#10, ADR-009); they are not vendor data. **What it does not permit:** any statement about a physical robot, a payload, a
+torque, a validated limit, the real arm's controller or latency (the Gazebo position interface is a velocity servo), or the base's
+behaviour on the engine platform-sw tuned (DART, on which the grippers do not close).
+
+The A7 WARNs and findings, beyond the A6 ones (W01, W02, E01, T04, T08, V01 above):
+
+| Item | What | What would clear it |
+|---|---|---|
+| W01 in A7 | MoveIt never sees `base_link`'s 4.18 kg inertial: KDL drops the inertia of a root link | not clearable here; matters for nothing planned (the base does not move) |
+| `park` | a placeholder copy of `home` | Adnan's safe-pose definition under the manipulation action contract |
+| acceleration limits | engineering defaults, tagged placeholder | vendor data (manipulation#10) |
+| gripper interface | option 1 is in use; the choice is open on manipulation#11 | Om and Adnan; the evidence is in the MoveIt package README |
+| start-state tolerance | MoveIt 2.12.4 refuses a start state 1e-7 rad past a limit; in Gazebo `home` (joint 4 on its lower limit 0) can read that way, so planning from `home` is intermittently refused. M01/M02 retry up to 3 times per pose and count every retry | a decision on where a tolerance may live (MoveIt bounds, the simulator's joint state, or a `home` off the limit) |
+| `move_group` shutdown | exits with SIGSEGV when stopped; allowed for that one process | upstream MoveIt |
+| M03 | see the report: when a pair disabled as `Never` collides, the ACM is wrong for it and the pair is not re-enabled by the check | a decision on how the matrix is certified (more samples, or enabling the arm-arm pairs a larger run finds) |
 
 ## Result values
 

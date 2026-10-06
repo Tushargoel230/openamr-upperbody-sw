@@ -176,5 +176,7 @@ fails G02.
 
 ## Not here
 
-The MoveIt configuration, its limits and the gripper interface decision are P10. Platform-sw's launch, bridge, world and
-plugins are read and used, never edited.
+The MoveIt configuration, its limits and the gripper evidence are in [`openamrobot_upperbody_moveit`](../openamrobot_upperbody_moveit/README.md);
+`ros2 launch openamrobot_upperbody_bringup moveit.launch.py sim:=gazebo` starts this simulator and `move_group` together, and M02 (named poses
+in Gazebo at `mast_1350`) runs on the **Bullet-Featherstone** engine for the reason given above. Platform-sw's launch, bridge, world and plugins
+are read and used, never edited.

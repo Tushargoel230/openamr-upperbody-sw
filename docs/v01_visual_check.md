@@ -2,7 +2,7 @@
 
 V01 has been `WARN` since A6, and it stays `WARN` until a person has looked at the robot on a screen and said what they saw.
 Numeric checks are not visual ones: the 80 mm square mast section passed every test we had and was caught by someone looking.
-**"Looks fine" does not clear it.** Answer each item below in your own words: what you saw, and for the "wrong would look like"
+**"Looks fine" does not clear it.** Answer each of the eight items below in your own words: what you saw, and for the "wrong would look like"
 case, that it did not.
 
 ## Start the simulator and RViz
@@ -18,6 +18,13 @@ controllers `active`; nobody has looked at either window yet, which is what this
 
 That opens the Gazebo window and RViz beside it (fixed frame `odom`, RobotModel and TF displays). The first start takes about a
 minute; wait until `ros2 control list_controllers` in another terminal shows five controllers `active`.
+
+For item 8 (MoveIt) start MoveIt with RViz instead, which opens the MotionPlanning display and replaces the simulator's own RViz:
+
+    ros2 launch openamrobot_upperbody_bringup moveit.launch.py sim:=gazebo rviz:=true physics_engine:=gz-physics-bullet-featherstone-plugin
+
+(same `ROS_DOMAIN_ID` and `GZ_PARTITION` as above; `physics_engine` is passed so a gripper pose can close: the launch's own default is DART,
+where it may not. `sim:=mock rviz:=true` shows the same preview with no Gazebo window.) The fixed frame there is `base_link`.
 
 ## Items
 
@@ -48,6 +55,19 @@ Look at both windows for each item. Gazebo shows what the physics built; RViz sh
    symmetrically.
    *Wrong:* one finger moving and the other staying still, or neither moving.
 
+8. **MoveIt: a named pose, preview and execution (A7).** In RViz's MotionPlanning panel choose Planning Group `left_arm`, open the
+   Planning tab, set the Goal State to `hands_up`, press **Plan**: a purple copy of the robot animates the plan. Then press **Execute**
+   and watch the real robot (the Gazebo window, and the Scene Robot in RViz). The preview matches what the robot then does: the same
+   pose at the end, the same direction of motion, the same arm. Repeat with `right_arm`, then `home` and `park` (`park` is a placeholder
+   copy of `home`: it should look the same as `home`), then the grippers (`left_gripper` / `right_gripper`, `closed` and `open`).
+   *Wrong:* the preview showing a different pose than the robot reaches, the wrong arm moving, an arm swinging through the mast or the
+   other arm in the preview, a gripper whose fingers do not close together, one hand closing while the other opens for the same named pose
+   (the two hands take opposite-signed joint values, so each must close its own fingers), the robot in Gazebo and the Scene Robot in RViz
+   in different poses afterwards.
+   *If RViz says "Planning failed" or the log says `START_STATE_INVALID` right after the arm has been at `home`:* press Plan again.
+   In Gazebo `home` sets elbow joint 4 exactly on its lower limit (0) and the simulator can read it 1e-7 rad past it, which MoveIt refuses
+   (see the MoveIt package README). That is a known limitation, not what this item is looking for.
+
 A trajectory to run for item 6 (moves the left arm's joints 1, 2 and 4 over 4 seconds):
 
     ros2 action send_goal /left_arm_controller/follow_joint_trajectory control_msgs/action/FollowJointTrajectory \
@@ -56,4 +76,4 @@ A trajectory to run for item 6 (moves the left arm's joints 1, 2 and 4 over 4 se
 ## Record the answers
 
 One line per item: the item number and what you saw. They go into the step's report and into the evidence for V01; the check
-turns `PASS` only when all seven have an answer that says what was seen, and `FAIL` if any item shows the wrong thing.
+turns `PASS` only when all eight have an answer that says what was seen, and `FAIL` if any item shows the wrong thing.
