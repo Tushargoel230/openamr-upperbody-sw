@@ -255,14 +255,16 @@ def test_c01_no_checkout_and_no_pin_is_an_error_not_a_guess(tmp_path):
         ev.upstream_commit(str(tmp_path), pins_file=str(other))
 
 
-def test_c01_the_package_pin_is_a_full_hash_and_equals_the_baseline_pin():
-    """The fallback constant may not rot against the manipulation baseline. Its agreement with a present checkout is C02:
-    here the comparison would pass vacuously with no checkout, because the pin is then what `_commit()` returns."""
-    pin = ev.pinned_commit_in_metadata()
-    assert pin and re.fullmatch(r"[0-9a-f]{40}", pin)
-    baseline = ev.pinned_commit_in_baseline(WORKSPACE)
-    if baseline is not None:
-        assert pin == baseline
+def test_c01_every_package_pin_is_a_full_hash_and_equals_the_baseline_pin():
+    """The fallback constants may not rot against the manipulation baseline. Their agreement with a present checkout is
+    C02: here the comparison would pass vacuously with no checkout, because the pin is then what `_commit()` returns."""
+    pins = ev.all_pins()
+    assert "openarm_description" in pins
+    for name, pin in pins.items():
+        assert isinstance(pin, str) and re.fullmatch(r"[0-9a-f]{40}", pin), f"{name}: {pin!r}"
+        baseline = ev.pinned_commit_in_baseline(WORKSPACE, name)
+        if baseline is not None:
+            assert pin == baseline, f"{name}: pinned {pin}, openarm_v2.dev.repos pins {baseline}"
 
 
 def test_c01_the_fallback_gives_the_same_id_as_the_checkout(tmp_path):
