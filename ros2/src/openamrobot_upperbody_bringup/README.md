@@ -42,7 +42,6 @@ description package), and tracking performance, which mock hardware cannot show.
 
 - A Gazebo launch, a MoveIt launch and a base launch: later steps. The `package.xml` still lists the Gazebo and MoveIt
   packages, which are scaffolds.
-- No lift: OpenAMRobot 2.0 has a fixed mast. The `description` field of `package.xml` still says "base + lift + arm"
-  because it predates that decision (issue #7) and has not been re-worded yet.
+- No lift: OpenAMRobot 2.0 has a fixed mast.
 
 See [`openamrobot_upperbody_description`](../openamrobot_upperbody_description/README.md).

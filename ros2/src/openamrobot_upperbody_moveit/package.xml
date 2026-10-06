@@ -2,7 +2,7 @@
 <package format="3">
   <name>openamrobot_upperbody_moveit</name>
   <version>0.0.0</version>
-  <description>MoveIt 2 config (planning groups: arm, arm+lift).</description>
+  <description>MoveIt 2 configuration for the two OpenArm v2.0 arms of OpenAMRobot 2.0 (fixed mast; no lift planning group). Scaffold: nothing implemented yet.</description>
   <maintainer email="info@botshare.ai">OpenAMRobot</maintainer>
   <license>MIT</license>
   <buildtool_depend>ament_cmake</buildtool_depend>

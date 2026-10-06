@@ -2,7 +2,7 @@
 <package format="3">
   <name>openamrobot_upperbody_bringup</name>
   <version>0.0.0</version>
-  <description>Launch files composing base + lift + arm in simulation.</description>
+  <description>Launch files for the OpenAMRobot 2.0 upper body (fixed mast, two OpenArm v2.0 arms): the model viewer and a mock bringup with the arm controllers.</description>
   <maintainer email="info@botshare.ai">OpenAMRobot</maintainer>
   <license>MIT</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
