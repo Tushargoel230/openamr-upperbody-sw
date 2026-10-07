@@ -72,7 +72,7 @@ is a failed pose. M02 starts a headless Gazebo server in its own ROS domain and 
 passes `bullet-featherstone` explicitly. `simulation` class throughout.
 
 They **skip unless `OPENAMR_A7=1`** (`run_a7_regression.sh` sets it): `verify_a6.sh` runs this package's whole `colcon test`, and it must neither
-start Gazebo nor depend on an A7 check. A skipped M01 or M02 is never a result; the A7 report treats a missing sidecar as a `FAIL`.
+start Gazebo nor depend on an A7 check. A skipped M01 or M02 is never a result; the A7 report treats a missing sidecar as `NOT_RUN`.
 
 ```bash
 ros2 run openamrobot_upperbody_bringup run_a7_regression.sh      # about 15 minutes; G01, G02, M01-M06, writes evidence/<ts>_a7.json
@@ -80,7 +80,7 @@ ros2 run openamrobot_upperbody_bringup run_a7_regression.sh      # about 15 minu
 
 `run_a7_regression.sh` runs the gazebo, moveit and bringup tests, then `build_a7_evidence.py` writes `<workspace>/evidence/<UTC timestamp>_a7.json`
 (`profile: "a7"`, `evidence_class: "simulation"`). A tree with uncommitted changes prints its results and writes **no** file (P08's rule: a
-report records a commit). Exit status: **1** if any check is `FAIL`; **3** if nothing failed but the tree is dirty (nothing recorded); 2 if the
+report records a commit). Exit status: **1** if any check is `FAIL` or `NOT_RUN`; **3** if nothing failed but the tree is dirty (nothing recorded); 2 if the
 evidence cannot be assembled; 0 otherwise. `A7_M01_MASTS=mast_1350,mast_1400` reduces M01 to those mast IDs and the report says so.
 
 ## Not here

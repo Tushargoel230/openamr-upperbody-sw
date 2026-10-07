@@ -110,7 +110,7 @@ clearance, which is why it is reported. Collision is checked through `moveit_py`
 pairs under test, so the SRDF's list is never consulted; the contact map is not readable from Python (`CollisionResult.contacts` raises "Unregistered type"),
 so the colliding pairs are found by bisection.
 
-{{M03_RESULT}}
+**Result at the recorded commit** (`evidence/20261007T164239Z_a7.json`): **M03 PASS** at all four mast IDs. 113 pairs are disabled (36 `Adjacent`, 77 `ConstantTransform`, 20 declared by upstream) and 448 are enabled; every disabled pair has a reason that can be shown; the 77 constant pairs are clear in the one evaluation that decides them and agree with the first 200 sampled states. Information, not a result: 37 of the 448 enabled pairs collided in some of 2000 random states at seed 20261006 (411 in none), the same at every mast ID; the commonest are arm links against `mast_base_link` (`openarm_left_ee_base_link` 48, `openarm_right_ee_base_link` 43, `openarm_right_ee_link1` 41 of 2000 states, with `mast_base_link`). `openarm_left_ee_link1` <-> `openarm_left_link2`, the pair P10 found colliding and P11 reported as an inherited WARN, is now an enabled pair like any other: the planner avoids it.
 
 **The mutation tests** (`test_m03_acm_sampling.py`) plant each defect in a copy of the SRDF and require M03 to name the pair: a disabled pair with no reason
 (`openarm_left_link1` <-> `openarm_left_link3` as `Never`), a false `ConstantTransform` label on a pair with arm joints between its links
@@ -192,6 +192,32 @@ payload, torque or controller analysis behind them. The test fails if either hal
 `closed` gripper pose may not close. **M02 passes `physics_engine:=gz-physics-bullet-featherstone-plugin` explicitly**, as G02 does, because
 its poses include the grippers and the per-hand sign is part of what it checks; the arm poses do not depend on the engine. The base's contact
 behaviour was compared on neither engine. `moveit.launch.py`'s `physics_engine` is empty by default, which means the simulator's default.
+
+## Planning time before and after the matrix change (P12A)
+
+Enabling every pair that has no reason to be disabled costs the planner CPU, and a false `Never` costs nothing and hides a collision, so the cost was measured
+(`scripts/planning_time.py`: the twelve named-pose plans, OMPL RRTConnect, 20 repeats after a warm-up round, twice, old SRDF against new, median wall time per plan):
+
+| Named-pose plan (offline, `moveit_py`) | before: 458 sampled `Never` + 36 `Adjacent` | after: 113 justified pairs | after, worst of 40 |
+|---|---|---|---|
+| left_arm/hands_up (from home) | 0.0210 s | 0.0227 s | 0.0340 s |
+| left_arm/home (from hands_up) | 0.0220 s | 0.0230 s | 0.0380 s |
+| left_arm/hands_up (from home) | 0.0212 s | 0.0250 s | 0.0330 s |
+| left_arm/park (from hands_up) | 0.0225 s | 0.0255 s | 0.0460 s |
+| right_arm/hands_up (from home) | 0.0210 s | 0.0245 s | 0.0380 s |
+| right_arm/home (from hands_up) | 0.0222 s | 0.0262 s | 0.0380 s |
+| right_arm/hands_up (from home) | 0.0215 s | 0.0243 s | 0.0390 s |
+| right_arm/park (from hands_up) | 0.0230 s | 0.0253 s | 0.0400 s |
+| left_gripper/closed (from open) | 0.0612 s | 0.0650 s | 0.0760 s |
+| left_gripper/open (from closed) | 0.0620 s | 0.0622 s | 0.0750 s |
+| right_gripper/closed (from open) | 0.0628 s | 0.0622 s | 0.0800 s |
+| right_gripper/open (from closed) | 0.0630 s | 0.0625 s | 0.0790 s |
+
+The whole sequence took a median of 0.418 s and 0.433 s (two rounds) before and 0.455 s and 0.455 s after: about **5 to 9 per cent longer, roughly 3 ms per plan**, and every
+one of the 40 plans per pose succeeded both before and after. No named pose that planned before fails now. The real stack agrees: M01 and M02 plan and execute all twelve poses
+(20 poses over five runs, none failed; M01's wall time per pose is unchanged at about 2.2 s; M02's, which includes execution in a simulator running below real time, was 2.7 to 2.9 s before and 3.3 to 3.4 s
+in a re-measurement, which the planning figures above do not explain and which was not separated from the simulator's load). MoveIt's action reports a planning time of 0, and `moveit_py`'s plan result carries no
+collision-check count, so none is reported.
 
 ## The joint-state clamp: simulator float noise, and nothing else
 
