@@ -133,7 +133,8 @@ samples at seed 20261006. One inherited pair collides, as a **WARN**: `openarm_l
 first at sample index 1112 of 2000 at seed 20261006, the same at every mast ID (it is arm-internal, so it cannot depend on the mast). It is
 **not** re-enabled: the matrix is the contract and the finding is that it is a sampling conclusion. Note what the WARN's `origin` says: this pair
 is not one of the 20 Enactic listed (`imported_from_upstream`); the Setup Assistant wrote it (`generated_for_upstream_links`), so "an upstream
-observation" is true of the geometry and not of the matrix entry. And a `left_vs_right` pair is two Enactic links whose relative pose is set by
+observation" is true of the geometry and not of the matrix entry. That holds for **all** of the inherited `Never` pairs: the 20 pairs Enactic listed are
+all `Adjacent`, and none of the 114 inherited `Never` pairs (51 within one arm, 63 left against right) is Enactic's assertion; the tool wrote them. And a `left_vs_right` pair is two Enactic links whose relative pose is set by
 **our** mast plates (datums), so a collision there is arguably ours; the rule as specified treats it as inherited and the WARN says `arms:
 left_vs_right`. Both are raised in the report.
 
