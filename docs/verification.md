@@ -86,10 +86,10 @@ exit status is 1 if a check is `FAIL`, 3 if everything passed but the tree is di
 | G01, G02 | as in the Gazebo report above (G01 on the default DART engine, G02 on Bullet-Featherstone passed explicitly) |
 | M01 | on `mock`, at **each of the four mast IDs**, every SRDF named pose plans and executes through `move_group` into the real controllers and ends under 0.01 rad of its goal: both arms (`hands_up`, `home`, `hands_up`, `park`) and both grippers (`closed` then `open`, each hand with its own value) |
 | M02 | the same in Gazebo at `mast_1350` (the release configuration), on Bullet-Featherstone passed explicitly because the gripper poses do not close on DART |
-| M03 | the collision matrix validated by sampling: 2000 random joint states per mast ID, collision checked ignoring the SRDF's list, a pair disabled as `Never` that collides is a FAIL with the pair and a reproducing sample; the `Never` pairs that never collided are listed |
-| M04 | a goal that puts the left gripper inside a base-side collision volume is **rejected** by planning (the joint goal: answered at once, the planner's own verdict `GOAL_STATE_INVALID`), not merely unsuccessful; the pose goal at the same place **times out**, and the record says which is which |
-| M05 | *(proposed by this step)* the per-hand gripper values: `closed` is each hand's own far limit, the signs are opposite, and the single-number version fails (ADR-009 point 5) |
-| M06 | *(proposed by this step)* the named-pose plans need some acceleration limit and do not depend on its value (ADR-009) |
+| M03 | the collision matrix, split by who owns the claim. **Ours** (a pair with a link of the platform's or ours: base, wheels, casters, lidar, camera, mast): a colliding disabled pair is a `FAIL`; the pairs with no joint between their links (77) are **certified by construction**, evaluated once, and the rest (267) are sampled: 2000 random joint states per mast ID at seed 20261006. **Inherited** (both links upstream's): a collision is a `WARN` naming the pair, the seed and the sample index. What sampling does and does not establish is in the paragraph below |
+| M04 | a goal inside the nearest **reachable** structure volume (`mast_base_link`; the arms cannot reach the base body at all) is **rejected** by planning (the joint goal: answered at once, the planner's own verdict `GOAL_STATE_INVALID`), not merely unsuccessful; the pose goal at the same place **times out**, and the record says which is which |
+| M05 | the per-hand gripper values: `closed` is each hand's own far limit, the signs are opposite, and the single-number version fails in both directions (ADR-009 point 5) |
+| M06 | the named-pose plans need some acceleration limit and are insensitive to our values across three orders of magnitude, which retires the stop condition "planning succeeds only because the limits we invented are generous"; **it does not make the limits any less of a placeholder** (ADR-009) |
 | L01, I01, V01, AUX | as in the A6 report, for the packages this one touches; V01 now has **eight** checklist items (item 8: an arm executes a named pose in RViz and the preview matches what the robot then does) and stays `WARN` until a person has answered them |
 
 Recorded run: commit `4567b02` (code; later commits are documentation only), from a clean build of the five upper-body packages, evidence
@@ -97,6 +97,15 @@ Recorded run: commit `4567b02` (code; later commits are documentation only), fro
 0.001 rad, no start-state retries), M02 12 of 12 at `mast_1350` (0.00096 rad, no retries), M04 rejected the joint goal and timed out on the pose goal.
 M03 fails on one pair, `openarm_left_ee_link1` / `openarm_left_link2`, at every mast ID; the script therefore exits 1. The A6 report is unchanged
 by A7: `verify_a6.sh` at the same commit gives 20 `PASS`, 6 `WARN`, 0 `FAIL` (`20261006T213101Z_dev.json`).
+
+**What the sampled part of M03 does and does not establish.** Sampling falsifies; it does not certify. Its result is a sentence with two
+numbers in it: *no counterexample was found among our 267 sampled pairs in N = 2000 random joint states at seed 20261006, at each of the four mast
+IDs.* It is not "validated", because the collisions it is looking for are rare (a 20000-sample run at seed 7 found 14 of the 458 `Never` pairs
+colliding, once to six times each, all arm-against-arm), and a larger N or another seed could find one. What does not depend on N or on the seed is
+the by-construction part: a pair with no joint between its links has a constant relative transform, so one evaluation settles every configuration
+(77 of our 344 `Never` pairs, tested against an independent forward kinematics). The matrix itself is a checked-in file (`config/openamrobot.srdf`,
+fingerprint in `config/acm/acm_generation.yaml`): its generator has no seed, so regenerating gives a different matrix and is a proposal for a
+new contract, not a verification step.
 
 **What `simulation` permits here:** every claim reads *"plans and executes in simulation under declared OpenAMRobot limits"*. The limits
 are engineering defaults (`source: engineering_default`, `status: placeholder`) because upstream declares no acceleration limits
@@ -112,9 +121,10 @@ The A7 WARNs and findings, beyond the A6 ones (W01, W02, E01, T04, T08, V01 abov
 | `park` | a placeholder copy of `home` | Adnan's safe-pose definition under the manipulation action contract |
 | acceleration limits | engineering defaults, tagged placeholder | vendor data (manipulation#10) |
 | gripper interface | option 1 is in use; the choice is open on manipulation#11 | Om and Adnan; the evidence is in the MoveIt package README |
-| start-state tolerance | MoveIt 2.12.4 refuses a start state 1e-7 rad past a limit; in Gazebo `home` (joint 4 on its lower limit 0) can read that way, so planning from `home` is intermittently refused. M01/M02 retry up to 3 times per pose and count every retry | a decision on where a tolerance may live (MoveIt bounds, the simulator's joint state, or a `home` off the limit) |
+| start-state tolerance | MoveIt 2.12.4 refuses a start state any amount past a joint limit, and in Gazebo `home` (joint 4 on its lower limit 0) reads back up to 9.9e-7 rad past it. `move_group` plans from a joint state clamped to the limit by at most 1e-5 rad (`joint_state_clamp.py`); the clamp's count and largest magnitude are in the report (`clamp`); a reading beyond the epsilon is never clamped. Upstream's `home` on its own limit is itself reportable upstream | nothing here: the clamp is a simulation workaround, and the choice of where a tolerance may live on a real robot is not made |
 | `move_group` shutdown | exits with SIGSEGV when stopped; allowed for that one process | upstream MoveIt |
-| M03 | see the report: when a pair disabled as `Never` collides, the ACM is wrong for it and the pair is not re-enabled by the check | a decision on how the matrix is certified (more samples, or enabling the arm-arm pairs a larger run finds) |
+| M03 WARN | inherited pairs (both links upstream's) that are disabled as `Never` and collide in sampled states, named in the report's `warnings` with pair, seed and sample index. At the recorded commit: `openarm_left_ee_link1` / `openarm_left_link2`, which the Setup Assistant wrote (Enactic did not list it) | an upstream-side decision, or enabling the pair in a new contract; it is not re-enabled by the check. Left-arm against right-arm pairs depend on how this model places the arms, which is ours |
+| M03 matrix | the matrix is a sampling conclusion from an unseeded generator | nothing: it is the contract, and M03 validates that file |
 
 ## Result values
 

@@ -5,6 +5,23 @@ All notable changes to this repository. Evidence for the description is static a
 
 ## [Unreleased]
 
+### Changed (P11, A7 close-out)
+
+- `openamrobot_upperbody_moveit`: M03 splits the collision matrix by who owns the claim. A pair whose links are both upstream's is
+  *inherited* and a collision there is a WARN (pair, seed, sample index); every other pair is *ours* and a collision is a FAIL. The split is
+  derived from the frame contract's owner column and the `openarm_` prefix, and the kinematic tree: our pairs with no joint between their
+  links (77) are certified by construction with one evaluation, the rest (267) are sampled, and the sampled result is worded "no counterexample
+  in N samples at seed S", never "validated". The P10 mutation test never worked (it relabelled a pair that does not collide); the new
+  mutations use pairs measured to collide.
+- The collision matrix is a checked-in contract with a recorded fingerprint; `regenerate_acm.sh` proposes and prints the diff, `--write`
+  replaces it. `collisions_updater` has no seed, so regenerating is not a verification step.
+- `joint_state_clamp.py`: `move_group` plans from `/joint_states_clamped`, the simulated joint state with float noise past a limit (at most
+  1e-5 rad; measured up to 9.9e-7) clamped to the limit, logged and counted. Nothing else reads it, no limit was widened and no pose moved. The
+  start-state retry loop of M01/M02 is removed (it never fired, and it was keyed on a code MoveIt does not return here); M01/M02 and the report
+  carry the clamp's counters.
+- M04's wording follows VERIFICATION.md (nearest reachable volume), M05 fails the single-number version in both directions, and M06's
+  conclusion states both halves (the stop condition is retired; the limits remain placeholders).
+
 ### Added
 
 - `openamrobot_upperbody_description`: the canonical OpenAMRobot 2.0 robot description (A6). One xacro entry point,
