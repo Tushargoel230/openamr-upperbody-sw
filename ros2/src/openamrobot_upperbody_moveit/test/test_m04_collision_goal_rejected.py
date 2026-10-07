@@ -45,9 +45,17 @@ from shape_msgs.msg import SolidPrimitive  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))          # launch_test is not pytest: conftest is not on the path
 from conftest import write_sidecar  # noqa: E402
-from openamrobot_upperbody_moveit.move_group_client import REFUSAL_CODES, MoveGroupClient  # noqa: E402
+from openamrobot_upperbody_moveit.move_group_client import MoveGroupClient  # noqa: E402
 from openamrobot_upperbody_moveit.moveit_config import moveit_config, srdf_path  # noqa: E402
 from openamrobot_upperbody_moveit.named_poses import read_group_states  # noqa: E402
+
+from ament_index_python.packages import get_package_prefix as _prefix  # noqa: E402
+
+sys.path.insert(0, os.path.join(_prefix("openamrobot_upperbody_description"), "lib", "openamrobot_upperbody_description"))
+from launch_guard import MOVE_GROUP_ALLOWED, SIM_ALLOWED, assert_launch_healthy  # noqa: E402
+
+EXPECTED_PROCESSES = ["joint_state_publisher", "move_group"]
+
 
 # Found by the sampler (see the docstring). Left arm only; everything else at zero.
 FIXTURE = {"openarm_left_joint1": 1.2373230513354518, "openarm_left_joint2": -0.25747859273328544,
@@ -117,9 +125,10 @@ class TestCollisionGoalRejected(unittest.TestCase):
                             and record.get("pose_goal", {}).get("classification") != "succeeded") else "FAIL"
         write_sidecar("M04", "collision_goal", "a goal inside the nearest reachable structure volume (mast_base_link) is rejected by planning; the base body itself is out of the arms' reach",
                       status, {"volume": VOLUME, "mast_id": "mast_1350", "planning_budget_s": PLANNING_BUDGET_S,
-                               "rejected_means": f"the pipeline refused it with a goal/start/constraint error code in {list(REFUSAL_CODES)} "
-                                                 f"within {REJECTED_WITHIN_S} s, far under the {PLANNING_BUDGET_S} s the planner was given; "
-                                                 "'failed' is a search that gave up with PLANNING_FAILED; 'timed_out' used the budget",
+                               "rejected_means": f"answered within {REJECTED_WITHIN_S} s of the free control, far under the {PLANNING_BUDGET_S} s the planner was given, "
+                                                 "and move_group's log carries the planner's own verdict (Planner 'OMPL' failed with error code GOAL_STATE_INVALID). "
+                                                 "The reply itself is the generic FAILURE for every outcome, so 'rejected', 'failed' (a search that gave up "
+                                                 "in between) and 'timed_out' (used the budget) are told apart by time and by that log line, not by a code",
                                "base_link_volume_reachable_by_the_arms": False,         # a reach fact for A4, not a defect: the lift will change it
                                "volume_tested_is": "the nearest structure volume the arms can reach (VERIFICATION.md M04)",
                                "base_link_evidence": "0 of 6000 left-arm samples at mast_1350 put a left gripper link in collision with "
@@ -198,3 +207,10 @@ class TestCollisionGoalRejected(unittest.TestCase):
                         f"move_group's log has no '{planner_verdict}' for the joint goal")
         self.assertFalse(pose_outcome.success, "a pose goal inside the mast volume produced a plan")
         self.assertIn(classify(pose_outcome, baseline), ("rejected", "timed_out", "failed"))
+
+
+@launch_testing.post_shutdown_test()
+class TestShutdown(unittest.TestCase):
+    def test_m04_processes_started_and_exited_cleanly(self, proc_info):
+        """move_group and its joint state publisher started, and nothing but move_group's known SIGSEGV at stop ended badly."""
+        assert_launch_healthy(proc_info, expected=EXPECTED_PROCESSES, allowed=MOVE_GROUP_ALLOWED)

@@ -9,6 +9,7 @@ Nothing physical is involved: mock hardware reflects its command back as state, 
 (joint names, interfaces, spawning order), not tracking performance.
 """
 import os
+import sys
 import random
 import time
 import unittest
@@ -143,7 +144,15 @@ class TestMockControllers(unittest.TestCase):
             self.assertAlmostEqual(self.joint_states[name], right_before[name], delta=TOLERANCE, msg=name)
 
 
+from ament_index_python.packages import get_package_prefix as _prefix  # noqa: E402
+
+sys.path.insert(0, os.path.join(_prefix("openamrobot_upperbody_description"), "lib", "openamrobot_upperbody_description"))
+from launch_guard import assert_launch_healthy  # noqa: E402
+
+EXPECTED_PROCESSES = ["robot_state_publisher", "ros2_control_node", "spawner"]
+
+
 @launch_testing.post_shutdown_test()
 class TestShutdown(unittest.TestCase):
-    def test_l01_processes_exit_cleanly(self, proc_info):
-        launch_testing.asserts.assertExitCodes(proc_info)
+    def test_l01_processes_started_and_exited_cleanly(self, proc_info):
+        assert_launch_healthy(proc_info, expected=EXPECTED_PROCESSES)

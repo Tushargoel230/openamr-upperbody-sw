@@ -8,6 +8,8 @@ install(PROGRAMS
   scripts/check_urdf_matrix.py
   scripts/build_evidence.py
   scripts/evidence_common.py
+  scripts/launch_guard.py
+  scripts/harness_canary.py
   scripts/verify_a6.sh
   scripts/verify_gazebo.sh
   DESTINATION lib/${PROJECT_NAME})

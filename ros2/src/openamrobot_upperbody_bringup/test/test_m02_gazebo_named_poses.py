@@ -33,7 +33,7 @@ from openamrobot_upperbody_moveit.move_group_client import MoveGroupClient  # no
 from openamrobot_upperbody_moveit.named_poses import GRIPPER_JOINT, SIDES  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, clamp_record, named_pose_plan, run_sequence,  # noqa: E402
+from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, clamp_record, named_pose_plan, run_sequence, stack_healthy,  # noqa: E402
                         write_run_sidecar)
 
 MAST_ID = "mast_1350"
@@ -45,7 +45,10 @@ READY_WITHIN_S = 150.0
 @pytest.mark.launch_test
 def generate_test_description():
     if not A7_ENABLED:
-        return launch.LaunchDescription([launch_testing.actions.ReadyToTest()]), {}
+        # A launch with no process at all races its own tests ("Processes under test stopped before tests completed": about one run in
+        # three failed, found in P12A, and the A6 report dropped those failures because it did not list M01/M02). One process that outlives
+        # the skipped test keeps the launch up until launch_testing stops it.
+        return launch.LaunchDescription([launch.actions.ExecuteProcess(cmd=["sleep", "30"]), launch_testing.actions.ReadyToTest()]), {}
     moveit = os.path.join(get_package_share_directory("openamrobot_upperbody_bringup"), "launch", "moveit.launch.py")
     return launch.LaunchDescription([
         launch.actions.IncludeLaunchDescription(
@@ -93,3 +96,13 @@ class TestNamedPosesInGazebo(unittest.TestCase):
         self.record["poses"], failures, self.record["start"] = run_sequence(self.client, named_pose_plan(), result_timeout=240.0)
         self.assertFalse(failures, "\n".join(failures))
         self.assertEqual(len(self.record["poses"]), 4 * 2 + 2 * 2)
+
+
+EXPECTED_PROCESSES = ["gazebo", "robot_state_publisher", "parameter_bridge", "create", "joint_state_publisher", "spawner", "move_group", "joint_state_clamp"]
+
+
+@launch_testing.post_shutdown_test()
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+class TestShutdown(unittest.TestCase):
+    def test_m02_processes_started_and_exited_cleanly(self, proc_info):
+        stack_healthy(proc_info, expected=EXPECTED_PROCESSES, simulator=True)

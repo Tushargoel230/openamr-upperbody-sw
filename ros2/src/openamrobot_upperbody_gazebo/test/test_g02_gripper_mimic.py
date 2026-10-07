@@ -41,6 +41,14 @@ from rclpy.parameter import Parameter  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sim_test_support import finger_angles, gz_link_poses, launch_engine_constants, write_g_sidecar  # noqa: E402
 
+from ament_index_python.packages import get_package_prefix as _prefix  # noqa: E402
+
+sys.path.insert(0, os.path.join(_prefix("openamrobot_upperbody_description"), "lib", "openamrobot_upperbody_description"))
+from launch_guard import MOVE_GROUP_ALLOWED, SIM_ALLOWED, assert_launch_healthy  # noqa: E402
+
+EXPECTED_PROCESSES = ["gazebo", "robot_state_publisher", "parameter_bridge", "create", "joint_state_publisher", "spawner"]
+
+
 # The engine this check REQUIRES, passed to the launch on purpose; sim.launch.py's own default is DART (see the docstring).
 ENGINE_THE_MIMIC_NEEDS = launch_engine_constants()[1]
 
@@ -131,3 +139,10 @@ class TestGripperMimic(unittest.TestCase):
                                  "finger_joint1_physical_rad": round(j1, 4), "finger_joint2_physical_rad": round(j2, 4),
                                  "follow_tolerance_rad": FOLLOW_TOLERANCE,
                                  "measured_from": "gz /world/empty/dynamic_pose/info (link poses), not /joint_states"}
+
+
+@launch_testing.post_shutdown_test()
+class TestShutdown(unittest.TestCase):
+    def test_g02_processes_started_and_exited_cleanly(self, proc_info):
+        """The processes of the launch started, and none ended with a code that is neither 0 nor a documented shutdown behaviour (launch_guard.py)."""
+        assert_launch_healthy(proc_info, expected=EXPECTED_PROCESSES, allowed=SIM_ALLOWED)

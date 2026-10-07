@@ -40,6 +40,14 @@ from openamrobot_upperbody_moveit.move_group_client import MoveGroupClient  # no
 from openamrobot_upperbody_moveit.named_poses import ARM_GROUP, read_group_states  # noqa: E402
 from openamrobot_upperbody_moveit.moveit_config import srdf_path  # noqa: E402
 
+from ament_index_python.packages import get_package_prefix as _prefix  # noqa: E402
+
+sys.path.insert(0, os.path.join(_prefix("openamrobot_upperbody_description"), "lib", "openamrobot_upperbody_description"))
+from launch_guard import MOVE_GROUP_ALLOWED, SIM_ALLOWED, assert_launch_healthy  # noqa: E402
+
+EXPECTED_PROCESSES = ["move_group"] + (["joint_state_clamp"] if CLAMP == "true" else [])
+
+
 JOINT = "openarm_left_joint4"
 NOISE = -2.5e-7             # what Gazebo read back for a joint on its lower limit
 
@@ -135,3 +143,10 @@ class TestClampInTheLoop(unittest.TestCase):
         self.assertGreater(s["over_epsilon"], 0)
         self.assertAlmostEqual(s["max_over_epsilon_rad"], 1e-3, delta=1e-12)
         self.assertEqual(s["activations"], before, "nothing beyond the epsilon is counted as a clamp")
+
+
+@launch_testing.post_shutdown_test()
+class TestShutdown(unittest.TestCase):
+    def test_clamp_processes_started_and_exited_cleanly(self, proc_info):
+        """move_group (and, with the clamp, joint_state_clamp.py) started, and nothing but move_group's known SIGSEGV at stop ended badly."""
+        assert_launch_healthy(proc_info, expected=EXPECTED_PROCESSES, allowed=MOVE_GROUP_ALLOWED)
