@@ -32,49 +32,39 @@ package (ADR-007).
    `closed`. The virtual joint is fixed because the base does not move during manipulation (AD-30), and because of W02: KDL has no
    planar joint, so planning against a planar root would be planning against a joint `robot_state_publisher` has already turned
    into a fixed one. Base motion in simulation comes from Gazebo's `odom -> base_link`.
-3. **Generated:** the self-collision matrix for the combined model's own links, between the `BEGIN`/`END GENERATED ACM` markers. Together
-   with the imported arm-internal pairs it is **the collision-matrix contract**: this checked-in file is what M03 validates, and its
-   fingerprint is recorded in `config/acm/acm_generation.yaml` (a test fails if the matrix changes without the record changing).
+3. **Derived:** the rest of the self-collision matrix, between the `BEGIN`/`END GENERATED ACM` markers (the markers keep their old name): structural
+   neighbours (`Adjacent`) and pairs with no movable joint between them that are clear in one evaluation (`ConstantTransform`). Together with the pairs
+   upstream declares (section 1) it is **the collision-matrix contract**: this checked-in file is what M03 validates, and its fingerprint is recorded in
+   `config/acm/acm_generation.yaml` (a test fails if the matrix changes without the record changing). **Every other pair is enabled.**
 
-### The collision matrix is a checked-in contract; regenerating it only proposes
+### The collision matrix is derived, and a checked-in contract
+
+A pair is disabled for exactly three reasons, each computed from the model or read from upstream, none from a sampler:
+
+| Reason | Meaning | Pairs |
+|---|---|---|
+| **declared by upstream** | listed in upstream's own SRDF (`enactic/openarm_ros2` @ `4e837e1`); section 1, copied verbatim, diffed against the pinned checkout by `test_srdf_import.py`. All 20 are `Adjacent` and none is a `Never` | 20 |
+| **`Adjacent`** | a structural neighbour: both links carry collision geometry, no other geometry-bearing link lies between them on the tree path (frames and geometry-less links do not count), and at most one movable joint does. Contact is governed by the joint's limits and the assembly, not by the matrix | 36 (18 of them upstream's, 16 derived, 2 upstream's only: a gripper's two fingers are siblings through two movable joints) |
+| **`ConstantTransform`** | certified by construction: no movable joint between the links, so their relative transform is a constant and **one evaluation settles every configuration**; disabled only if it found them clear | 77 |
+
+That is **113 disabled pairs**; of the 561 pairs of the 34 geometry-bearing links, **448 are enabled**. A pair whose only credential would be "the Setup Assistant
+sampled it and saw no collision" is enabled, because sampling falsifies and never certifies, and the asymmetry decides it: a false `Never` hides a real
+self-collision from the planner, a missing one costs CPU (measured below). Every constant pair that collides is either `Adjacent` (it overlaps by design) or
+reported by the derivation as a permanent collision and not disabled; there are none.
+
+`scripts/derive_acm.py` (`ros2 run openamrobot_upperbody_moveit regenerate_acm.sh`) derives the matrix; `scripts/validate_acm.py` (M03) recomputes the
+reasons independently and checks the checked-in file against them. **Regenerating is now stable: it gives the contract back every time**, because nothing
+in the derivation is random (`test_acm_generation.py` derives it twice and requires the contract each time). Before P12A the matrix came from the Setup
+Assistant's `collisions_updater`, which has no `--seed` option (checked on the installed tool: `--help`, the headers) and gave a different set of `Never`
+pairs on every run (473 and 468 at 3000 trials, 455, 456 and 458 at 10000, and a fresh run that differed from the contract in 11 pairs); that is why the
+matrix was a contract that could not be reproduced, and why it is no longer sampled. The tool is no longer used.
 
 ```bash
-ros2 run openamrobot_upperbody_moveit regenerate_acm.sh [--trials N] [--mast-id mast_1350]         # a PROPOSAL: prints the diff, changes nothing
-ros2 run openamrobot_upperbody_moveit regenerate_acm.sh --write                                    # replaces the contract: a decision, read the diff
+ros2 run openamrobot_upperbody_moveit regenerate_acm.sh [--mast-id mast_1350]          # a PROPOSAL: prints the diff against the contract, changes nothing
+ros2 run openamrobot_upperbody_moveit regenerate_acm.sh --write                        # replaces the contract (and the fingerprint): a decision, read the diff
 ```
 
-**`collisions_updater` takes no seed.** Checked on the installed tool: `--help` lists `--config-pkg --urdf --srdf --output --xacro-args
---default --always --keep --verbose --trials --min-collision-fraction` and no seed, `ComputeDefaultCollisions` takes the number of trials and
-nothing else, and it samples with `RobotState::setToRandomPositions()`, whose generator is seeded from the system. Measured: two runs at the same
-settings gave 473 and 468 `Never` pairs at 3000 trials, three runs at 10000 gave 455, 456 and 458, and a fresh 10000-trial run against the contract
-below differs from it in 11 pairs (3 only in the run, 8 only in the contract; all of them left-arm against right-arm links). So **running the
-procedure again is not a verification step**: it is a proposal for a new contract. The contract is the SRDF in the repository, and what verifies
-it is `scripts/validate_acm.py` (M03, below), which is seeded.
-
-The script runs the MoveIt Setup Assistant's `collisions_updater`, `scripts/merge_acm.py` merges its output into a **copy** of the SRDF, and the
-diff against the contract is printed. Without `--write` the contract and its record are untouched; with `--write` the SRDF and
-`config/acm/acm_generation.yaml` (every setting, and the new fingerprint) are rewritten, and the commit that does it is a contract change.
-
-| Setting | Value | Note |
-|---|---|---|
-| Tool | `moveit_setup_assistant` `collisions_updater`, MoveIt 2.12.4 | the same `ComputeDefaultCollisions` code as the GUI's Self-Collisions page |
-| Model | `combined_robot.xacro`, args `mast_id:=mast_1350 arm_package:=openarm hardware_profile:=mock` | the release configuration (rev 18.2) |
-| Input SRDF | `config/openamrobot.srdf` as it is; its own `disable_collisions` are **not** kept (`--keep` off) | the tool recomputes every pair |
-| Samples | `--trials 10000` (the script refuses fewer) | |
-| Seed | **none: the tool has no such option** | see above |
-| "Never in collision" | on (always on in the tool) | pairs that collided in no sample |
-| "Adjacent" | on (always on in the tool) | pairs adjacent in the kinematic tree |
-| "Default" | on (`--default`) | pairs that collide in the default state: the two finger links of each hand |
-| "Always in collision" | **off** (no `--always`) | the run found 0 such pairs; one would be a modelling question, not something to disable |
-| Min. collision fraction | the tool's default, unused because "always" is off | |
-
-The contract (recorded 2026-10-06, `contract:` in `acm_generation.yaml`): 46 links, 1035 possible pairs, 494 disabled pairs (458 `Never`, 36
-`Adjacent`), of which 20 are imported from upstream and 474 are in the generated block; fingerprint
-`sha256:f8254fac4550ef1254034d477e406d69c725a8facd8d7c8402fcd4e371803e45`.
-
-**The GUI was not driven.** The Setup Assistant GUI cannot be operated from a non-interactive session, so the headless tool of the same
-package was used. The tool loaded the combined model without trouble (the stop condition "the Setup Assistant cannot load the combined model"
-did not occur).
+The contract (`contract:` in `acm_generation.yaml`): 113 pairs (36 `Adjacent`, 77 `ConstantTransform`), fingerprint `{{FINGERPRINT}}`.
 
 ## Named poses
 
@@ -97,53 +87,36 @@ number is valid for one hand and out of range for the other, and nothing fails w
 is in range but not the far limit, a missing state and an extra joint. The sign is also exercised live: M01 and M02 close and open
 each hand with its own value through the real controllers.
 
-## The collision matrix, split by who owns the claim (M03)
+## The collision matrix disables only what can be justified (M03)
 
-"Never in collision" in a generated matrix is a **sampling conclusion**, not a certification: the tool's own count of `Never` pairs changes
-from run to run (above), and 20000 samples at another seed (7) found 14 of the 458 `Never` pairs colliding (a P10 diagnostic), all of them
-arm-against-arm. So M03 says what each part of the matrix can and cannot be held to, and `scripts/validate_acm.py` derives the parts.
+M03 is `scripts/validate_acm.py`. It recomputes, from the URDF's kinematic tree and the SRDF, the reason every disabled pair is disabled for, and **FAILs**:
 
-**Inherited and ours, derived from link provenance** (`openamrobot_upperbody_moveit/acm_split.py`; nothing is a list somebody keeps up to date).
-A link is *upstream's* if the frame contract's `owner` column says so (`upstream: ...`), else if it is named `openarm_*`; a link that is neither
-listed nor prefixed is ours, so an unknown link cannot hide a defect behind someone else's name. A pair whose two links are both upstream's is
-**inherited** (Enactic's arm: a collision there is a **WARN** carrying the pair, the seed and the sample index, an upstream observation and not a
-defect of ours); every other pair is **ours** (base, wheels, casters, lidar, camera, mast, plates, whatever is added next, and ours against
-upstream's): a colliding disabled pair there is a **FAIL**. The sets partition the matrix by construction, and `test_acm_split.py` proves it at
-every mast ID, proves that a link added later lands on the right side without an edit, and fails on a contract that contradicts the prefix.
+* a disabled pair that none of the three reasons covers (a pair disabled because it "never collides");
+* a `reason` label that is not true: `Adjacent` on a pair that is neither a structural neighbour nor upstream's, `ConstantTransform` on a pair with a
+  movable joint between its links, any other label (a sampled `Never` included);
+* a `ConstantTransform` pair that collides in the one evaluation (the claim is that it is clear), and, as a check on the reasoning and not as a
+  certification, any disagreement between that evaluation and the first 200 sampled states;
+* a constant pair that is **not** disabled and collides: a permanent collision, every state of the model invalid.
 
-**Certified by construction.** Between two links of a kinematic tree there is one path. If no joint on it can move (all `fixed`, none a mimic),
-their relative transform is a constant, so the pair collides in every configuration or in none, and **one evaluation settles it**. Of our 344
-`Never` pairs, **77 are certified by construction** (55 among the platform's rigid hardware: the base, the casters and their wheels, the lidar, the camera and
-the mast base; and 22 between those and the two arms' base links, which are rigid on the mast plates) and are
-evaluated once, in the default state, at each mast ID; the other **267 are sampled** (they have an arm joint or a wheel joint on the path).
-The reasoning is tested against an independent forward kinematics (`test_acm_split.py`): every one of the 77 has the same relative pose at random
-configurations. As a further check on the reasoning (not as a certification) the first 200 sampled states must agree with the one evaluation,
-pair for pair; a disagreement is a FAIL that says the tree reasoning is wrong.
+**There is no WARN class.** (Until P12A there was one, for "inherited" pairs. The premise was false: upstream declares 20 pairs, all `Adjacent`, and every
+one of the 114 "inherited" `Never` pairs was written by our own sampler on our own model, 51 within one arm and 63 left against right with their relative
+pose set by our plates. `openarm_left_ee_link1` <-> `openarm_left_link2` was our wrong claim about upstream's geometry.) `Adjacent` and upstream-declared
+pairs touch by design and are not claims about collision.
 
-**What sampling does.** It falsifies; it does not certify. The sampled part of M03 means exactly this and nothing more: *no counterexample was
-found among our 267 sampled pairs in 2000 random joint states at seed 20261006, at each of the four mast IDs.* Not "validated". Another seed or
-more samples could find one, which is what the 14-of-458 diagnostic did for the inherited arm-arm pairs. The states are numpy
-`default_rng(seed)` draws inside the joint limits (continuous joints in [-pi, pi]), the same states at every mast ID; collision is checked with an
-allowed-collision matrix of its own that allows everything except the pairs under test, so nothing the SRDF says is consulted. The contact map is
-not readable from Python (the `Contact` type is not bound), so the colliding pairs are found by bisection.
+**What sampling does.** The sampled part is **information about the enabled pairs**, not a result and not a reason: N random joint states inside the
+limits (numpy `default_rng(seed)`, the same states at every mast ID), and the enabled pairs found colliding with how often. Sampling falsifies and never
+certifies; a pair absent from the table may still collide. A pair that collides often although the matrix is right tells A4 something about reach and
+clearance, which is why it is reported. Collision is checked through `moveit_py` with an allowed-collision matrix of its own that allows everything except the
+pairs under test, so the SRDF's list is never consulted; the contact map is not readable from Python (`CollisionResult.contacts` raises "Unregistered type"),
+so the colliding pairs are found by bisection.
 
-**Result at the recorded commit** (see the A7 section of `docs/verification.md` for the evidence file): **M03 PASS**. No disabled pair of ours
-collides: the 77 by-construction pairs are clear in their one configuration at each mast ID, and none of the 267 sampled pairs collided in 2000
-samples at seed 20261006. One inherited pair collides, as a **WARN**: `openarm_left_ee_link1` <-> `openarm_left_link2`, disabled as `Never`,
-first at sample index 1112 of 2000 at seed 20261006, the same at every mast ID (it is arm-internal, so it cannot depend on the mast). It is
-**not** re-enabled: the matrix is the contract and the finding is that it is a sampling conclusion. Note what the WARN's `origin` says: this pair
-is not one of the 20 Enactic listed (`imported_from_upstream`); the Setup Assistant wrote it (`generated_for_upstream_links`), so "an upstream
-observation" is true of the geometry and not of the matrix entry. That holds for **all** of the inherited `Never` pairs: the 20 pairs Enactic listed are
-all `Adjacent`, and none of the 114 inherited `Never` pairs (51 within one arm, 63 left against right) is Enactic's assertion; the tool wrote them. And a `left_vs_right` pair is two Enactic links whose relative pose is set by
-**our** mast plates (datums), so a collision there is arguably ours; the rule as specified treats it as inherited and the WARN says `arms:
-left_vs_right`. Both are raised in the report.
+{{M03_RESULT}}
 
-**The mutation tests** (`test_m03_acm_sampling.py`) disable a pair that really collides as `Never` and require M03 to name exactly that pair by
-the route that applies: `mast_base_link` <-> `openarm_left_ee_base_link` (ours, sampled: 7 of 300 states), `base_link` <-> `mast_base_link` (ours,
-no joint between: by construction), and `openarm_left_link5` <-> `openarm_left_link6` (inherited: a WARN, exit 0). **The P10 version of this test
-never worked**: it relabelled `openarm_left_link1` / `openarm_left_link2` and expected more than 10 hits in 100 samples; those links collide in
-about 5 of 300 states, so it failed in P10's own run (`expected exit 1, got 0`) behind M03's real FAIL. The pairs above were measured to collide
-with nothing ignored before they were used.
+**The mutation tests** (`test_m03_acm_sampling.py`) plant each defect in a copy of the SRDF and require M03 to name the pair: a disabled pair with no reason
+(`openarm_left_link1` <-> `openarm_left_link3` as `Never`), a false `ConstantTransform` label on a pair with arm joints between its links
+(`mast_base_link` <-> `openarm_left_ee_base_link`, which collides in about 2 of 100 random states), a `ConstantTransform` pair that collides
+(`base_link` <-> `mast_base_link`, no joint between them, overlapping by design), and a permanent collision left enabled (the same pair removed from the
+matrix). Each pair was measured to behave so with nothing ignored; the P10 mutation never worked because it assumed instead (README, P11).
 
 ## M04: a goal inside the nearest reachable volume is refused
 
@@ -262,8 +235,8 @@ is dead code and one that fires says something else is wrong. A refused request 
 * **The gripper fork is open** on manipulation#11; this package is option 1 because it is the combination known to work, and the evidence above
   is for Om and Adnan.
 * **The mimic needs `bullet-featherstone`**: `finger_joint2` follows `finger_joint1` only on that engine.
-* **M03 is a sampling result, not a certification** (above): it passes with one inherited WARN, and the sampled part means "no counterexample in
-  2000 samples at seed 20261006", nothing stronger. The matrix is a checked-in contract that cannot be regenerated reproducibly.
+* **The collision matrix is derived and enables most pairs** (above): planning pays for every pair that has no reason to be disabled. The cost is measured in
+  "Planning time before and after" below. The sampled information about enabled pairs says nothing about whether a pair that did not collide can.
 * **MoveIt's start-state check has no tolerance, so the simulated joint state is clamped** (next section). `home` sets `openarm_*_joint4 = 0`,
   exactly that joint's lower limit, which is upstream's pose and is itself reportable upstream: it breaks planning from `home` for any
   float-valued state source.
@@ -285,13 +258,11 @@ whole A7 report.
 |---|---|---|
 | `test_srdf.py` | AUX | names exist at every mast ID; groups, virtual joint (fixed, not planar), poses inside the limits; `park` is a copy of `home` and says it is a placeholder; each pair disabled once |
 | `test_srdf_import.py` | AUX | the imported elements equal upstream's at the pinned commit (SKIP, with the reason, only if there is no checkout) |
-| `test_acm_generation.py` | AUX | the recorded settings are the ones asked for (at least 10000 samples at `mast_1350`, never/adjacent/default on, always off), the SRDF holds exactly what they say, **the matrix's fingerprint is the one on record**, and a merge proposes and leaves the contract alone unless `--write` |
-| `test_acm_split.py` | AUX | inherited/ours is derived from link provenance and partitions the matrix at every mast ID; a link added later lands on the right side; the by-construction pairs have a constant relative pose in an independent forward kinematics |
-| `test_joint_state_clamp_logic.py` | AUX | the clamp: to the limit and never past it, nothing beyond epsilon, the counters, the limits are the URDF's, no named pose is touched |
-| `test_joint_state_clamp_loop.py` | AUX | with a real `move_group`: the refusal without the clamp, the plan with it, and a reading beyond epsilon still refused and counted |
+| `test_acm_generation.py` | AUX | the matrix's fingerprint is the one on record; the record says derived, no sampling, three reasons; **regenerating twice gives the contract back**; a proposal leaves the contract alone and only `--write` replaces it (on copies) |
+| `test_acm_derive.py` | AUX | every disabled pair has a reason that can be shown at every mast ID and a true label; only `Adjacent`/`ConstantTransform`; the counts the report states; the 77 constant pairs are the ones P11 certified, at every mast ID; the constant pairs have a constant relative pose in an independent forward kinematics |
 | `test_config_files.py` | AUX | limit tags and rule, controller names against `arm_controllers.yaml`, option 1 unchanged, OMPL defaults are MoveIt's |
 | `test_gripper_sign.py` | M05 | per-hand gripper values; the single-number version fails, in both directions |
-| `test_m03_acm_sampling.py` | M03 | no disabled pair of ours collides (by construction, or in 2000 samples at seed 20261006 at each mast ID); inherited collisions are WARNs; three mutation tests (ours sampled, ours by construction, inherited), and the bisection |
+| `test_m03_acm_sampling.py` | M03 | every disabled pair has a reason that can be shown at each mast ID; four mutation tests (no reason, false label, constant pair that collides, permanent collision enabled); the sampled enabled pairs are information that never changes the result; the bisection |
 | `test_m04_collision_goal_rejected.py` | M04 | a goal in the nearest reachable volume (`mast_base_link`) is rejected; the pose goal times out |
 | `test_m06_limits_sensitivity.py` | M06 | the plans need some acceleration limit and do not depend on its value |
 

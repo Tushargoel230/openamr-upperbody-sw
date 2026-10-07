@@ -1,47 +1,25 @@
-schema_version: 1
-tool: moveit_setup_assistant collisions_updater
-moveit_version: 2.12.4
-date: '2026-10-06'
+schema_version: 2
+method: 'derived: scripts/derive_acm.py over the model''s kinematic tree and upstream''s own SRDF; no sampling, no seed (P12A)'
+date: '2026-10-07'
 mast_id: mast_1350
-trials: 10000
-xacro_args: mast_id:=mast_1350 arm_package:=openarm hardware_profile:=mock
-command: ros2 run moveit_setup_assistant collisions_updater --urdf /home/slash/openamr_ws/install/openamrobot_upperbody_description/share/openamrobot_upperbody_description/urdf/combined_robot.xacro
-  --xacro-args "mast_id:=mast_1350 arm_package:=openarm hardware_profile:=mock" --srdf /home/slash/openamr_ws/src/openamr-upperbody-sw/ros2/src/openamrobot_upperbody_moveit/config/openamrobot.srdf
-  --output /tmp/tmp.C21xYDFlbk/tool_output.srdf --default --trials 10000
-categories:
-  never_in_collision: true
-  adjacent: true
-  default: true
-  always: false
-min_collision_fraction: the tool's default; unused because the always category is off
-tool_statistics:
-  total_links: 46
-  possible_pairs: 1035
-  always_in_collision: 0
-  never_in_collision: 458
-  default_in_collision: 2
-  adjacent_disabled: 34
-  sometimes_in_collision: 541
-  total_disabled: 494
-written:
-  Never: 458
-  Adjacent: 16
-  Default: 0
-written_total: 474
-imported_before_the_markers: 20
-imported_not_in_the_tool_output: []
+moveit_version: 2.12.4
+rules:
+  upstream_declared: pairs upstream's SRDF states (enactic/openarm_ros2 @ 4e837e1), section 1 of the SRDF, verbatim
+  Adjacent: both links carry collision geometry, no other geometry-bearing link between them on the tree path, at most one movable joint
+  ConstantTransform: no movable joint between the links (one evaluation settles every configuration) and CLEAR in that evaluation
+  everything_else: 'enabled: sampling falsifies and never certifies, so it is not a reason to disable a pair'
+counts:
+  upstream_declared: 20
+  adjacent_derived: 16
+  constant_transform: 77
+  disabled_total: 113
+deterministic: true
 contract:
   file: config/openamrobot.srdf
-  what: 'every <disable_collisions> of the SRDF (section 1, imported from upstream, and the generated block). This file is the contract: M03 validates
-    it, and a change to it is a change to the contract'
-  fingerprint: sha256:f8254fac4550ef1254034d477e406d69c725a8facd8d7c8402fcd4e371803e45
+  what: 'every <disable_collisions> of the SRDF (section 1, upstream''s, and the derived block). This file is the contract: M03 validates it,
+    and a change to it is a change to the contract'
+  fingerprint: sha256:c04ca8eaee5edadd9f9518e308b7103f22d90899e5de5bd83b37325eabdc5eb7
   pairs:
-    total: 494
-    Never: 458
+    total: 113
     Adjacent: 36
-    Default: 0
-  generation_is_seeded: false
-  regeneration: approximate. moveit_setup_assistant's collisions_updater has no --seed option and samples with an unseeded generator (two runs
-    at the same settings gave 473 and 468 `Never` pairs at 3000 trials; three runs at 10000 gave 455, 456 and 458). Re-running scripts/regenerate_acm.sh
-    therefore proposes a new contract and is not a verification step; scripts/validate_acm.py (M03) is the verification, and it validates THIS
-    file
+    ConstantTransform: 77

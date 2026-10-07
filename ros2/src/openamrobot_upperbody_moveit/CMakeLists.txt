@@ -7,10 +7,11 @@ ament_python_install_package(${PROJECT_NAME})
 install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
 install(PROGRAMS
   scripts/regenerate_acm.sh
-  scripts/merge_acm.py
+  scripts/derive_acm.py
   scripts/validate_acm.py
   scripts/joint_state_clamp.py
   scripts/limits_sensitivity.py
+  scripts/planning_time.py
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
@@ -19,7 +20,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(srdf test/test_srdf.py TIMEOUT 600)
   ament_add_pytest_test(srdf_import test/test_srdf_import.py TIMEOUT 600)
   ament_add_pytest_test(acm_generation test/test_acm_generation.py TIMEOUT 600)
-  ament_add_pytest_test(acm_split test/test_acm_split.py TIMEOUT 600)
+  ament_add_pytest_test(acm_derive test/test_acm_derive.py TIMEOUT 600)
   ament_add_pytest_test(joint_state_clamp_logic test/test_joint_state_clamp_logic.py TIMEOUT 600)
   ament_add_pytest_test(gripper_sign test/test_gripper_sign.py TIMEOUT 600)
   ament_add_pytest_test(config_files test/test_config_files.py TIMEOUT 600)
