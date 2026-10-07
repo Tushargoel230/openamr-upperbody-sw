@@ -33,7 +33,7 @@ from openamrobot_upperbody_moveit.move_group_client import MoveGroupClient  # no
 from openamrobot_upperbody_moveit.named_poses import GRIPPER_JOINT, SIDES  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, clamp_record, named_pose_plan, run_sequence, stack_healthy,  # noqa: E402
+from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, clamp_record, named_pose_plan, run_sequence, stack_alive, stack_healthy,  # noqa: E402
                         write_run_sidecar)
 
 MAST_ID = "mast_1350"
@@ -99,6 +99,12 @@ class TestNamedPosesInGazebo(unittest.TestCase):
 
 
 EXPECTED_PROCESSES = ["gazebo", "robot_state_publisher", "parameter_bridge", "create", "joint_state_publisher", "spawner", "move_group", "joint_state_clamp"]
+
+
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+class TestProcessesAlive(unittest.TestCase):
+    def test_no_process_of_the_launch_died_while_the_tests_were_running(self, proc_info):
+        stack_alive(proc_info)
 
 
 @launch_testing.post_shutdown_test()

@@ -42,7 +42,7 @@ from openamrobot_upperbody_moveit.move_group_client import MoveGroupClient  # no
 from openamrobot_upperbody_moveit.named_poses import ARM_GROUP, GRIPPER_JOINT, SIDES  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, clamp_record, named_pose_plan, stack_healthy, run_sequence,  # noqa: E402
+from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, clamp_record, named_pose_plan, stack_alive, stack_healthy, run_sequence,  # noqa: E402
                         write_run_sidecar)
 
 MAST_ID = _mast_id_from_arguments()
@@ -102,6 +102,12 @@ class TestNamedPosesOnMock(unittest.TestCase):
 
 
 EXPECTED_PROCESSES = ["robot_state_publisher", "ros2_control_node", "spawner", "base_joint_states_stub", "move_group", "joint_state_clamp"]
+
+
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+class TestProcessesAlive(unittest.TestCase):
+    def test_no_process_of_the_launch_died_while_the_tests_were_running(self, proc_info):
+        stack_alive(proc_info)
 
 
 @launch_testing.post_shutdown_test()
