@@ -50,7 +50,7 @@ A7_CHECKS = [
     ("G02", "grippers close in Gazebo and finger_joint2 follows finger_joint1 in the physics (Bullet-Featherstone, passed explicitly)"),
     ("M01", "named poses plan and execute on mock at every release-candidate mast ID"),
     ("M02", "named poses plan and execute in Gazebo at mast_1350"),
-    ("M03", "ACM: no disabled pair of ours collides (by construction, or in N=2000 samples at each mast ID); inherited collisions are WARNs"),
+    ("M03", "ACM: every disabled pair has a reason that can be shown (upstream-declared, Adjacent, ConstantTransform); every other pair is enabled"),
     ("M04", "a goal inside the nearest reachable structure volume (mast_base_link) is rejected by planning (the base body is out of the arms' reach)"),
     ("M05", "per-hand gripper values: closed is each hand's own far limit, opposite signs (ADR-009 point 5); the single-number version fails both ways"),
     ("M06", "named-pose plans need some acceleration limit and are insensitive to its value across three orders of magnitude (the limits stay placeholders)"),
@@ -147,6 +147,8 @@ def combine_multi(check_id, counts, docs, expected_masts, missing=None):
         return be.NOT_RUN, {**details, "problems": problems}
     if problems:
         return "FAIL", {**details, "problems": problems}
+    if details.get("reduced_set"):
+        return "WARN", {**details, "problems": [details["reduced_set"]]}
     if totals["over_epsilon"]:
         return "WARN", {**details, "problems": [f"the clamp met {totals['over_epsilon']} reading(s) beyond its epsilon (largest {totals['max_over_epsilon_rad']:.3g} "
                                                 f"rad): not float noise, passed through unclamped; the poses still reached their goals, but look at why"]}
@@ -165,13 +167,6 @@ def moveit_identity():
         with open(os.path.join(share, "config", name), "rb") as f:
             out[name] = "sha256:" + hashlib.sha256(f.read()).hexdigest()
     return out
-
-
-def warnings_of(sidecars):
-    """The M03 sidecar's inherited-pair collisions as top-level WARNs: pair, seed, sample index, and where the pair came from."""
-    details = (sidecars.get("M03") or [{}])[0].get("details", {})
-    keep = ("mast_id", "pair", "origin", "arms", "seed", "first_sample_index", "collided_in_samples", "why_a_warn")
-    return [{"id": "M03", "result": "WARN", **{k: w[k] for k in keep if k in w}} for w in details.get("warnings", [])]
 
 
 def limitations(sidecars):
@@ -198,25 +193,22 @@ def limitations(sidecars):
         "move_group exits with SIGSEGV when it is stopped (MoveIt 2.12.4); the checks allow that code for that one process and no other",
         "the arms cannot reach the platform's base body: M04's refused goal is inside mast_base_link's volume, the nearest base-side volume a "
         "left gripper can be put in",
-        "the collision matrix was generated with the Setup Assistant's own collision-matrix code run headless (collisions_updater), not by "
-        "driving the GUI, which cannot be done from a non-interactive session; the tool has no seed option, so regenerating gives a different "
-        "matrix and is a proposal for a new contract, not a verification: the checked-in SRDF is the contract and M03 validates that file",
-        "M03's sampled part falsifies and does not certify: it says 'no counterexample found among our sampled pairs in N samples at seed S', "
-        "with N and S in the check's details, and never that the matrix is validated. The pairs with no joint between their links are "
-        "certified by construction instead (one evaluation, every configuration), and that reasoning is tested against an independent forward "
-        "kinematics",
+        "the collision matrix is DERIVED, not sampled (scripts/derive_acm.py): a pair is disabled only if upstream declares it, it is a structural "
+        "neighbour (Adjacent), or no movable joint lies between its links and it is clear in the one evaluation that settles every configuration "
+        "(ConstantTransform); every other pair is enabled. The Setup Assistant's sampler, which has no seed and gave a different matrix on every "
+        "run, is no longer used. The checked-in SRDF is the contract and M03 validates that file",
+        "M03's sampled part is information about the ENABLED pairs, never a reason: sampling falsifies and does not certify. It lists the enabled pairs "
+        "that collide in random states and how often (for A4); nothing in the matrix rests on it",
         "V01: no human has answered the eight-item visual checklist yet; nothing in this report is a visual inspection",
         "no physical evidence; simulation only. This report is not a statement about hardware",
     ]
     if m03.get("result") == "FAIL":
-        failing = m03_details.get("ours_never_pairs_that_collided", {})
-        pairs = sorted({f"{p['pair'][0]} <-> {p['pair'][1]}" for item in failing.values() for key in ("sampled", "by_construction") for p in item[key]})
-        out.insert(0, "M03 FAILS: the collision matrix disables a pair of OURS as `Never` that collides (" + ", ".join(pairs) + f"; seed {m03_details.get('seed')}). "
-                      "Our part of the ACM is wrong for that pair and the pair is NOT re-enabled here: which pair is wrong is the finding")
-    for w in m03_details.get("warnings", [])[:1]:
-        out.insert(0, f"M03 WARN: {len({(x['pair'][0], x['pair'][1]) for x in m03_details['warnings']})} inherited pair(s) (both links upstream's) disabled as "
-                      "`Never` collided in sampled states, named with seed and sample index in `warnings`; an observation about the upstream-owned part of the matrix, "
-                      "not a defect of ours, and not re-enabled here")
+        failing = m03_details.get("failures", {})
+        pairs = sorted({f"{p['pair'][0]} <-> {p['pair'][1]}" for item in failing.values() for key in ("unjustified", "bad_labels") for p in item.get(key, [])}
+                       | {f"{p[0]} <-> {p[1]}" for item in failing.values() for key in ("constant_transform_colliding", "enabled_constant_pairs_colliding")
+                          for p in item.get(key, [])})
+        out.insert(0, "M03 FAILS: the collision matrix is wrong for " + ", ".join(pairs) + ". A disabled pair with no reason that can be shown, a false label, "
+                      "a constant pair that collides, or a permanent collision that is enabled: the pair is the finding, and it is not re-disabled on statistics")
     return out
 
 
@@ -326,8 +318,7 @@ def build(args):
         "checks": checks, "config_ids": config_ids, "moveit_config": moveit_identity(),
         "provenance": {k: provenance[k] for k in ("placeholder", "provisional", "verified")},
         "limitations": limitations(sidecars),
-        # Findings that are not a check's result: an inherited pair that collided although disabled (M03), and what the joint-state clamp did.
-        "warnings": warnings_of(sidecars),
+        # What the joint-state clamp did, summed over M01/M02. Not a result of its own: a reading beyond the epsilon makes M01/M02 WARN.
         "clamp": {c["id"]: c["details"].get("clamp_totals") for c in checks if c["id"] in ("M01", "M02")},
     }
     if dirty:
@@ -357,9 +348,6 @@ def summary(doc, path):
     counts = defaultdict(int)
     for c in doc["checks"]:
         counts[c["result"]] += 1
-    for w in doc.get("warnings", []):
-        lines.append(f"  WARN  {w['id']:<4} inherited {w['pair'][0]} <-> {w['pair'][1]} collided ({w['mast_id']}, seed {w['seed']}, sample index "
-                     f"{w['first_sample_index']}; {w['origin']}, {w['arms']})")
     lines += ["", "Limitations"] + [f"  - {text}" for text in doc["limitations"][:4]] + ["  - ... (all in the evidence file)"]
     if path is None:
         files = doc["dirty_files"]
