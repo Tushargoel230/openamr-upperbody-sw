@@ -64,7 +64,7 @@ ros2 run openamrobot_upperbody_moveit regenerate_acm.sh [--mast-id mast_1350]   
 ros2 run openamrobot_upperbody_moveit regenerate_acm.sh --write                        # replaces the contract (and the fingerprint): a decision, read the diff
 ```
 
-The contract (`contract:` in `acm_generation.yaml`): 113 pairs (36 `Adjacent`, 77 `ConstantTransform`), fingerprint `{{FINGERPRINT}}`.
+The contract (`contract:` in `acm_generation.yaml`): 113 pairs (36 `Adjacent`, 77 `ConstantTransform`), fingerprint `sha256:c04ca8eaee5edadd9f9518e308b7103f22d90899e5de5bd83b37325eabdc5eb7`.
 
 ## Named poses
 
