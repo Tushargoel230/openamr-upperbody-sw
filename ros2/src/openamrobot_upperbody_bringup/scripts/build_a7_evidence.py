@@ -9,7 +9,9 @@ Writes `<evidence dir>/<UTC timestamp>_a7.json` in the openamr.evidence.v1 shape
 this step proposes, I01, V01 (still WARN: a person has to answer docs/v01_visual_check.md) and AUX. It reuses the A6 report's machinery
 (build_evidence.py and evidence_common.py of the description package, installed next to it) and its rules:
 
-  * a check with no result is FAIL ("no result"), never a pass; a skipped M01/M02 is no result
+  * a check with no result is NOT_RUN ("no result"), never a pass and never silently a skip; a skipped M01/M02 is no result. NOT_RUN fails the
+    exit status like FAIL (build_evidence.py explains the value). Every test CMake registered must have left a result file (check H02), and
+    results filed under an ID this report does not list land in AUX instead of being dropped
   * a dirty tree writes NO file (P08): a report records a commit, and a tree with uncommitted changes is no commit. The summary still prints,
     labelled as not recorded, and the exit status is 3 when nothing failed
   * sidecars and xunit files older than --since are ignored
@@ -53,6 +55,8 @@ A7_CHECKS = [
     ("M05", "per-hand gripper values: closed is each hand's own far limit, opposite signs (ADR-009 point 5); the single-number version fails both ways"),
     ("M06", "named-pose plans need some acceleration limit and are insensitive to its value across three orders of magnitude (the limits stay placeholders)"),
     ("L01", "launch test: five controllers active on mock, one trajectory followed"),
+    ("H01", "every test file is registered and every launch test checks that its processes started and exited cleanly"),
+    ("H02", "every test CMake registered left a result file (nothing registered but not run)"),
     ("I01", "installed packages match the source the tests and this report describe"),
     ("V01", "a person has looked at the simulator and RViz and answered the checklist (eight items)"),
     ("AUX", "supporting tests and steps (SRDF, imported elements, ACM record, config files, harness, colcon test of the packages)"),
@@ -102,19 +106,22 @@ def clamp_totals(runs):
             "max_over_epsilon_rad": max((c["max_over_epsilon_rad"] for _, c in present), default=None)}
 
 
-def combine_multi(check_id, counts, docs, expected_masts):
+def combine_multi(check_id, counts, docs, expected_masts, missing=None):
     """-> (result, details) for a check recorded once per mast ID (M01) or once (M02, with its mast in the details)."""
     details = {}
     if counts:
         details = {"tests": counts["tests"], "failed": counts["failures"], "skipped": counts["skipped"]}
         if counts["failed_tests"]:
-            details["failed_tests"] = counts["failed_tests"][:10]
+            details["failed_tests"] = counts["failed_tests"][:40]
     by_mast = {d["details"].get("mast_id"): d for d in docs}
-    runs, problems = {}, []
+    runs, problems, no_result = {}, [], []
+    if missing:
+        details["tests_without_a_result"] = list(missing)[:40]
     for mast in expected_masts:
         doc = by_mast.get(mast)
         if doc is None:
             problems.append(f"no result for {mast}")
+            no_result.append(mast)
             continue
         runs[mast] = {"result": doc["result"], **run_summary(doc["details"])}
         if doc["result"] != "PASS":
@@ -132,6 +139,12 @@ def combine_multi(check_id, counts, docs, expected_masts):
             problems.append(f"{name}: no joint-state clamp counters in the run")
     if counts and counts["failures"]:
         return "FAIL", {**details, "problems": problems or ["a test of this check failed"]}
+    if any(doc["result"] == "FAIL" for doc in docs):
+        return "FAIL", {**details, "problems": problems}
+    if missing:
+        return be.NOT_RUN, {**details, "problems": problems + [f"registered test(s) left no result: {', '.join(list(missing)[:3])}"]}
+    if no_result:
+        return be.NOT_RUN, {**details, "problems": problems}
     if problems:
         return "FAIL", {**details, "problems": problems}
     if totals["over_epsilon"]:
@@ -216,6 +229,10 @@ def build(args):
     result_dirs = [os.path.join(workspace, "build", p, "test_results", p) for p in PACKAGES.values()]
     counts, stale_xunit = be.read_xunit_dirs(result_dirs, args.since)
     sidecars = all_fresh_sidecars(edir, args.since)
+    accounted = be.accounting(workspace, list(PACKAGES.values()), args.since)
+    claimed = {i for i, _ in A7_CHECKS}
+    unclaimed = be.fold_unclaimed(counts, claimed)
+    missing = be.missing_by_id(accounted["problems"], claimed)
 
     source = lambda pkg: os.path.join(repo, "ros2", "src", pkg)
     differing = []
@@ -231,9 +248,9 @@ def build(args):
     for check_id, name in A7_CHECKS:
         docs = sidecars.get(check_id, [])
         if check_id == "M01":
-            result, details = combine_multi("M01", counts.get("M01"), docs, masts)
+            result, details = combine_multi("M01", counts.get("M01"), docs, masts, missing.get("M01"))
         elif check_id == "M02":
-            result, details = combine_multi("M02", counts.get("M02"), docs, ("mast_1350",))
+            result, details = combine_multi("M02", counts.get("M02"), docs, ("mast_1350",), missing.get("M02"))
         elif check_id == "V01":
             result, details = "WARN", {
                 "performed": "pending: docs/v01_visual_check.md has eight items (item 8: an arm executes a named pose in RViz and the preview "
@@ -243,13 +260,22 @@ def build(args):
             result, details = ("FAIL", {"differing": differing, "hint": "run colcon build, then run_a7_regression.sh again"}) if differing \
                 else ("PASS", {"compared": ["description: urdf, config, launch, meshes", "control: config", "gazebo: launch, config, worlds",
                                             "moveit: launch, config", "bringup: launch"]})
+        elif check_id == "H02":
+            result, details = (be.NOT_RUN, {"reason": f"{len(accounted['problems'])} registered test(s) left no usable result"
+                                                      if accounted["problems"] else "no registered tests were found to account for",
+                                            "problems": accounted["problems"][:20], "registered": accounted["registered"],
+                                            "with_a_result": accounted["with_a_result"]}) if (accounted["problems"] or not accounted["registered"]) \
+                else ("PASS", {"registered": accounted["registered"], "with_a_result": accounted["with_a_result"],
+                               "packages": list(PACKAGES.values())})
         elif check_id == "AUX":
-            result, details = "PASS", {}
+            result, details = ("PASS", {}) if not counts.get("AUX") else be.combine("AUX", counts["AUX"], None, missing.get("AUX"))
         else:
-            result, details = be.combine(check_id, counts.get(check_id), docs[0] if docs else None)
-            if check_id in SIDECAR_REQUIRED and not docs:
-                result = "FAIL"
+            result, details = be.combine(check_id, counts.get(check_id), docs[0] if docs else None, missing.get(check_id))
+            if check_id in SIDECAR_REQUIRED and not docs and result in ("PASS", "WARN", "SKIP"):
+                result, details["reason"] = be.NOT_RUN, "no sidecar: the test that records this check did not complete"
         if check_id == "AUX":
+            if unclaimed:
+                details["unclaimed_check_ids"] = {cid: {"tests": r["tests"], "failures": r["failures"]} for cid, r in unclaimed.items()}
             problems = {}
             for step in EXPECTED_STEPS:
                 if steps.get(step) is None:
@@ -262,7 +288,7 @@ def build(args):
             if aux_counts:
                 details.update({"tests": aux_counts["tests"], "failed": aux_counts["failures"], "skipped": aux_counts["skipped"]})
                 if aux_counts["failures"]:
-                    problems["failed_tests"] = aux_counts["failed_tests"][:10]
+                    problems["failed_tests"] = aux_counts["failed_tests"][:40]
             details["steps"] = steps
             if problems:
                 result, details["step_problems"] = "FAIL", problems
@@ -323,7 +349,9 @@ def summary(doc, path):
     lines = ["", f"A7 evidence  {doc['repo']} @ {(doc['git_hash'] or '?')[:7]}{' (dirty)' if doc['dirty'] else ''}  class {doc['evidence_class']}  "
                  f"MoveIt {doc['simulator'].get('moveit')}"]
     for c in doc["checks"]:
-        extra = (c["details"].get("problems") or [c["details"].get("reason") or ""])[0] if c["result"] in ("FAIL", "WARN") else ""
+        extra = (c["details"].get("problems") or [c["details"].get("reason") or ""])[0] if c["result"] in ("FAIL", "WARN", be.NOT_RUN) else ""
+        if not extra and c["details"].get("failed_tests"):
+            extra = "failing: " + ", ".join(c["details"]["failed_tests"][:3])
         tests = f"  [{c['details']['tests']} tests]" if "tests" in c["details"] else ""
         lines.append(f"  {c['result']:<4}  {c['id']:<4} {c['name'][:84]}{tests}{('  -- ' + str(extra)[:90]) if extra else ''}")
     counts = defaultdict(int)
@@ -340,7 +368,8 @@ def summary(doc, path):
                   "          Commit, then run this again. Nothing above is a record; the evidence directory only holds clean-tree runs."]
     else:
         lines += ["", f"Evidence: {path}"]
-    lines += ["Result: " + ("FAIL" if counts["FAIL"] else "no FAIL") + "  (" + ", ".join(f"{counts[r]} {r}" for r in ("PASS", "WARN", "SKIP", "FAIL")) + ")"]
+    lines += ["Result: " + ("FAIL" if counts["FAIL"] else ("NOT_RUN" if counts[be.NOT_RUN] else "no FAIL")) +
+              "  (" + ", ".join(f"{counts[r]} {r}" for r in be.RESULT_ORDER) + ")"]
     return "\n".join(lines)
 
 
@@ -364,7 +393,7 @@ def main(argv=None):
         print(f"build_a7_evidence: {err}", file=sys.stderr)
         return 2
     print(summary(doc, path))
-    if any(c["result"] == "FAIL" for c in doc["checks"]):
+    if any(c["result"] in be.FAILING for c in doc["checks"]):
         return 1
     return REFUSED_DIRTY if path is None else 0
 

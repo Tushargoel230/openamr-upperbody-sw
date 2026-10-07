@@ -64,6 +64,10 @@ run_tests() {  # <package> <step name> : runs one package's tests, never aborts 
   ( cd "$WS" && colcon test --packages-select "$1" --event-handlers console_cohesion+ )
   local rc=$?
   ( cd "$WS" && colcon test-result --test-result-base "build/$1" --verbose 2>&1 | tail -n 25 )
+  # `colcon test` exits 0 whatever its tests did (demonstrated in P12A: a failing test still gave 0); `colcon test-result` is the command that
+  # exits 1 for a failing or erroring test, so its status is part of the step's. The report does not rely on either alone: it reads every
+  # result file and checks that every registered test left one.
+  ( cd "$WS" && colcon test-result --test-result-base "build/$1" >/dev/null 2>&1 ) || rc=1
   eval "RC_$2=$rc"
 }
 run_tests $GAZEBO gazebo       # G01, G02

@@ -46,6 +46,8 @@ echo; echo "== colcon test ($GAZEBO: G01, G02)"
 ( cd "$WS" && colcon test --packages-select "$GAZEBO" --event-handlers console_cohesion+ )
 RC_COLCON=$?
 ( cd "$WS" && colcon test-result --test-result-base "build/$GAZEBO" --verbose 2>&1 | tail -n 25 )
+# `colcon test` exits 0 whatever its tests did (demonstrated in P12A); `colcon test-result` exits 1 for a failing or erroring test.
+( cd "$WS" && colcon test-result --test-result-base "build/$GAZEBO" >/dev/null 2>&1 ) || RC_COLCON=1
 
 echo; echo "== evidence report"
 python3 "$HERE/build_evidence.py" --profile gazebo --since "$START" --step "colcon_test=$RC_COLCON"

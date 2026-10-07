@@ -23,9 +23,15 @@ Where each result comes from
   - a check's sidecar (`<ID>_<slug>.json` in the evidence directory, written by the test or by check_urdf_matrix.py) adds
     its details and can raise a WARN. Sidecars and xunit files older than --since are ignored, so a stale result from an
     earlier run is never mixed into this one.
-  - a check with no test and no sidecar is FAIL ("no result"), except those listed in NOT_IMPLEMENTED, which are SKIP
+  - a check with no test and no sidecar is NOT_RUN ("no result"), except those listed in NOT_IMPLEMENTED, which are SKIP
     with the reason: SKIP is a statement, a missing result is not.
-Nothing here decides a PASS on its own: the report only combines what the tests recorded.
+  - NOT_RUN is a result value of its own (P12A): the check's backing test did not run to a result. It is not FAIL (nothing was observed to be
+    wrong) and not SKIP (nobody said it would not run), it is never PASS, and it fails the exit status like FAIL does.
+  - every test CMake registered for the packages a report covers (`ctest -N`) must have left a fresh result file, whatever its name says it
+    is: a registered test with no result, a package with no tests registered, and a result file produced by ament's own `missing_result`
+    stand-in (a test that timed out or died by a signal) are all listed by check H02 and make the checks they back NOT_RUN. Results whose test
+    names carry a check ID this report does not list are not dropped: they land in AUX, and fail it.
+Nothing here decides a PASS on its own: the report only combines what the tests recorded, and a PASS needs a test that ran behind it.
 """
 import argparse
 import datetime
@@ -72,6 +78,8 @@ EXTRA_CHECKS = [
     ("W01", "base_link inertia not seen by KDL consumers"),
     ("W02", "KDL converts base_planar_joint to a fixed joint"),
     ("REV", "datums.yaml content change carries a revision change"),
+    ("H01", "every test file is registered and every launch test checks that its processes started and exited cleanly"),
+    ("H02", "every test CMake registered left a result file (nothing registered but not run)"),
     ("V01", "RViz launch at mast_1350"),
     ("I01", "installed package matches the source the tests and this report describe"),
     ("AUX", "supporting tests and steps (urdf_utils, datums_report, s4_sensors, evidence_dir, build_evidence, scripts)"),
@@ -80,6 +88,7 @@ EXTRA_CHECKS = [
 GAZEBO_CHECKS = [
     ("G01", "combined robot in Gazebo: arm controllers, arm goal, Nav2-facing topics unchanged"),
     ("G02", "grippers close in Gazebo and finger_joint2 follows finger_joint1 in the physics"),
+    ("H02", "every test CMake registered left a result file (nothing registered but not run)"),
     ("I01", "installed packages match the source the tests and this report describe"),
     ("V01", "a person has looked at the simulator and RViz and answered the checklist"),
     ("AUX", "supporting steps (colcon test of the gazebo package)"),
@@ -97,6 +106,12 @@ MODULE_IDS = {"test_datums_revision": "REV"}
 ID_IN_NAME = re.compile(r"^test_([a-z]\d{2})_")
 EXPECTED_STEPS = {"dev": ("colcon_test", "check_urdf_matrix", "datums_report"), "gazebo": ("colcon_test",)}
 REFUSED_DIRTY = 3          # exit status: every check passed, but the tree is dirty so no evidence file was written
+NOT_RUN = "NOT_RUN"        # the check's backing test did not run to a result (P12A): never PASS, fails the exit status
+FAILING = ("FAIL", NOT_RUN)
+RESULT_ORDER = ("PASS", "WARN", "SKIP", "FAIL", NOT_RUN)
+# The packages whose tests each profile runs (verify_a6.sh runs the first three, verify_gazebo.sh the gazebo package). The A7 builder
+# (build_a7_evidence.py) passes its own list. Every one of them is read: a package that is run but not read is a place for failures to hide.
+PROFILE_PACKAGES = {"dev": (ev.PKG, "openamrobot_upperbody_control", "openamrobot_upperbody_bringup"), "gazebo": ("openamrobot_upperbody_gazebo",)}
 
 
 # --- mapping and combining (pure, tested in test_build_evidence.py) --------------------------------------------------
@@ -149,28 +164,123 @@ def read_xunit_dirs(results_dirs, since):
     return merged, stale
 
 
-def combine(check_id, counts, sidecar):
-    """-> (result, details) for one check from its pytest counts (or None) and its sidecar dict (or None)."""
+def combine(check_id, counts, sidecar, missing=None):
+    """-> (result, details) for one check from its pytest counts (or None), its sidecar dict (or None) and the registered tests attributed to
+    it that left no result (`missing`, names). A PASS needs a test that ran behind it; FAIL beats NOT_RUN beats everything else."""
     details = dict(sidecar["details"]) if sidecar else {}
     if counts:
         details = {"tests": counts["tests"], "failed": counts["failures"], "skipped": counts["skipped"], **details}
         if counts["failed_tests"]:
-            details["failed_tests"] = counts["failed_tests"][:10]
+            details["failed_tests"] = counts["failed_tests"][:40]
+    if missing:
+        details["tests_without_a_result"] = list(missing)[:10]
     if counts and counts["failures"]:
         return "FAIL", details
     if sidecar and sidecar["result"] == "FAIL":
         return "FAIL", details
-    if check_id in SIDECAR_REQUIRED and not sidecar:
-        return "FAIL", {**details, "reason": "no sidecar: the test that records this check did not complete"}
-    if not counts and not sidecar:
+    if missing:
+        return NOT_RUN, {**details, "reason": f"registered test(s) left no result: {', '.join(list(missing)[:3])}"}
+    if not counts:
         if check_id in NOT_IMPLEMENTED:
             return "SKIP", {"reason": NOT_IMPLEMENTED[check_id]}
-        return "FAIL", {"reason": "no result: no test ran for this check ID"}
-    if counts and counts["tests"] == counts["skipped"] and not sidecar:
+        why = "a sidecar exists but no test result backs it: the test that wrote it did not complete" if sidecar \
+            else "no result: no test ran for this check ID"
+        return NOT_RUN, {**details, "reason": why}
+    if check_id in SIDECAR_REQUIRED and not sidecar:
+        return NOT_RUN, {**details, "reason": "no sidecar: the test that records this check did not complete"}
+    if counts["tests"] == counts["skipped"]:
+        if sidecar and sidecar["result"] in ("WARN", "SKIP"):
+            return sidecar["result"], details
         return "SKIP", details
     if sidecar and sidecar["result"] in ("WARN", "SKIP"):
         return sidecar["result"], details
     return "PASS", details
+
+
+# --- accounting: what CMake registered against what left a result ------------------------------------------------------
+
+def test_name_id(test_name):
+    """Check ID of a ctest test by its name: `t04_frame_contract` and `test_test_l01_mock_controllers.py` -> T04, L01; else AUX."""
+    name = test_name
+    while name.startswith("test_"):
+        name = name[5:]
+    match = re.match(r"^([a-z]\d{2})_", name)
+    if match:
+        return match.group(1).upper()
+    return MODULE_IDS.get("test_" + name) or MODULE_IDS.get(test_name) or "AUX"
+
+
+def registered_tests(workspace, package):
+    """Names of the tests CMake registered for the package (`ctest -N` in its build directory), or None if that cannot be read."""
+    import subprocess
+    build = os.path.join(workspace, "build", package)
+    try:
+        done = subprocess.run(["ctest", "--test-dir", build, "-N"], capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if done.returncode != 0:
+        return None
+    return re.findall(r"^\s*Test\s+#\d+:\s+(\S+)\s*$", done.stdout, flags=re.M)
+
+
+def result_status(results_dir, test, since):
+    """`ok`, or why the test left no usable result: no_result_file, stale, empty, or did_not_complete (ament's own `missing_result`
+    stand-in, written when a test times out or dies of a signal before it can write its file)."""
+    path = os.path.join(results_dir, test + ".xunit.xml")
+    if not os.path.isfile(path):
+        return "no_result_file"
+    if os.path.getmtime(path) < since:
+        return "stale"
+    try:
+        cases = list(ET.parse(path).getroot().iter("testcase"))
+    except ET.ParseError:
+        return "unreadable"
+    if not cases:
+        return "empty"
+    if any(c.get("name", "").endswith(".xunit.missing_result") for c in cases):
+        return "did_not_complete"
+    return "ok"
+
+
+def accounting(workspace, packages, since):
+    """{registered, with_a_result, problems[{package, test, status, id}]} over the packages' registered tests. A package with no registered
+    test is itself a problem: a suite that vanished must not look like a suite that passed."""
+    registered, problems = 0, []
+    for package in packages:
+        names = registered_tests(workspace, package)
+        if not names:
+            problems.append({"package": package, "test": None, "id": "AUX",
+                             "status": "no registered tests (no ctest project in the build directory, or none registered)"})
+            continue
+        results_dir = os.path.join(workspace, "build", package, "test_results", package)
+        for test in names:
+            registered += 1
+            status = result_status(results_dir, test, since)
+            if status != "ok":
+                problems.append({"package": package, "test": test, "status": status, "id": test_name_id(test)})
+    return {"registered": registered, "with_a_result": registered - len([p for p in problems if p["test"]]), "problems": problems}
+
+
+def fold_unclaimed(counts, claimed_ids):
+    """Results whose ID is not one of the report's checks are not dropped: they are added to AUX (and returned by ID, for the report to say
+    so). `counts` is changed in place."""
+    unclaimed = {cid: counts.pop(cid) for cid in [c for c in counts if c not in claimed_ids]}
+    if unclaimed:
+        aux = counts.setdefault("AUX", {"tests": 0, "failures": 0, "skipped": 0, "failed_tests": []})
+        for row in unclaimed.values():
+            for key in ("tests", "failures", "skipped"):
+                aux[key] += row[key]
+            aux["failed_tests"] += row["failed_tests"]
+    return unclaimed
+
+
+def missing_by_id(problems, claimed_ids):
+    """{check ID: [test names]} of the registered tests with no result; an ID the report does not list is attributed to AUX."""
+    out = {}
+    for p in problems:
+        cid = p["id"] if p["id"] in claimed_ids else "AUX"
+        out.setdefault(cid, []).append(p["test"] or p["package"])
+    return out
 
 
 # Names that carry no content: a scaffold placeholder and compiled caches. Anything else only in the install (a stale
@@ -305,16 +415,27 @@ def build(args):
     profile = args.profile
     bringup_results_dir = args.bringup_results_dir or os.path.join(workspace, "build", BRINGUP_PKG, "test_results", BRINGUP_PKG)
     gazebo_results_dir = args.gazebo_results_dir or os.path.join(workspace, "build", GAZEBO_PKG, "test_results", GAZEBO_PKG)
-    result_dirs = [results_dir, bringup_results_dir] if profile == "dev" else [gazebo_results_dir]
+    packages = PROFILE_PACKAGES[profile]
+    result_dirs = [os.path.join(workspace, "build", p, "test_results", p) for p in packages]
+    fixture = bool(args.results_dir or (profile == "gazebo" and args.gazebo_results_dir))        # the tests of this script point at fixtures
+    if args.results_dir:
+        result_dirs = [args.results_dir] + ([bringup_results_dir] if profile == "dev" else [])
+    elif fixture:
+        result_dirs = [args.gazebo_results_dir]
     counts, stale_xunit = read_xunit_dirs(result_dirs, args.since)
+    accounted = accounting(workspace, packages, args.since) if not fixture else {"registered": 0, "with_a_result": 0, "problems": []}
     sidecars = fresh_sidecars(edir, args.since)
+    check_list = (A6_CHECKS + EXTRA_CHECKS) if profile == "dev" else GAZEBO_CHECKS
+    claimed = {i for i, _ in check_list}
+    unclaimed = fold_unclaimed(counts, claimed)
+    missing = missing_by_id(accounted["problems"], claimed)
 
     gazebo_src = os.path.join(repo, "ros2", "src", GAZEBO_PKG)
     gazebo_share = ev.package_share(GAZEBO_PKG) if profile == "gazebo" else None
     differ = trees_differ(pkg_src, share)
     gazebo_differ = trees_differ(gazebo_src, gazebo_share, names=("launch", "config", "worlds")) if gazebo_share else []
     checks = []
-    for check_id, name in (A6_CHECKS + EXTRA_CHECKS if profile == "dev" else GAZEBO_CHECKS):
+    for check_id, name in check_list:
         if check_id == "V01" and profile == "gazebo":
             result, details = "WARN", {
                 "performed": "pending: the checklist in docs/v01_visual_check.md is printed for a person to run with the simulator "
@@ -332,12 +453,20 @@ def build(args):
         elif check_id == "I01":
             result, details = ("FAIL", {"differing": differ, "hint": "run colcon build, then verify_a6.sh again"}) if differ \
                 else ("PASS", {"compared": ["urdf", "config", "launch", "meshes"]})
+        elif check_id == "H02":
+            result, details = ("NOT_RUN", {"reason": f"{len(accounted['problems'])} registered test(s) left no usable result"
+                                                     if accounted["problems"] else "no registered tests were found to account for",
+                                           "problems": accounted["problems"][:20], "registered": accounted["registered"],
+                                           "with_a_result": accounted["with_a_result"]}) if (accounted["problems"] or not accounted["registered"]) \
+                else ("PASS", {"registered": accounted["registered"], "with_a_result": accounted["with_a_result"], "packages": list(packages)})
         elif check_id == "AUX" and profile == "gazebo":
-            result, details = "PASS", {}            # only the steps below decide it: no test of this report is filed under AUX
+            result, details = ("PASS", {}) if not counts.get("AUX") else combine("AUX", counts["AUX"], None, missing.get("AUX"))
         else:
-            result, details = combine(check_id, counts.get(check_id), sidecars.get(check_id))
+            result, details = combine(check_id, counts.get(check_id), sidecars.get(check_id), missing.get(check_id))
         if check_id == "T02" and steps.get("check_urdf_matrix") not in (None, "0"):
             result, details["step"] = "FAIL", f"check_urdf_matrix.py exited {steps['check_urdf_matrix']}"
+        if check_id == "AUX" and unclaimed:
+            details["unclaimed_check_ids"] = {cid: {"tests": r["tests"], "failures": r["failures"]} for cid, r in unclaimed.items()}
         if check_id == "AUX":
             problems = {}
             for step in EXPECTED_STEPS[profile]:
@@ -415,6 +544,8 @@ def summary(doc, path, sidecars):
                  f"datums {doc['datums_revision']}  class {doc['evidence_class']}"]
     for c in doc["checks"]:
         extra = c["details"].get("reason") or ""
+        if not extra and c["details"].get("failed_tests"):
+            extra = "failing: " + ", ".join(c["details"]["failed_tests"][:3])
         tests = f"  [{c['details']['tests']} tests]" if "tests" in c["details"] else ""
         lines.append(f"  {c['result']:<4}  {c['id']:<4} {c['name'][:78]}{tests}{('  -- ' + extra[:90]) if extra else ''}")
     report = (sidecars.get("T10") or {}).get("details", {}).get("report")
@@ -437,8 +568,9 @@ def summary(doc, path, sidecars):
                   "          Commit, then run this again. Nothing above is a record; the evidence directory only holds clean-tree runs."]
     else:
         lines += ["", f"Evidence: {path}"]
-    lines += ["Result: " + ("FAIL" if counts["FAIL"] else "no FAIL") +
-             "  (" + ", ".join(f"{counts[r]} {r}" for r in ("PASS", "WARN", "SKIP", "FAIL")) + ")"]
+    bad = counts["FAIL"] + counts[NOT_RUN]
+    lines += ["Result: " + ("FAIL" if counts["FAIL"] else ("NOT_RUN" if counts[NOT_RUN] else "no FAIL")) +
+             "  (" + ", ".join(f"{counts[r]} {r}" for r in RESULT_ORDER) + ")"]
     return "\n".join(lines)
 
 
@@ -473,7 +605,7 @@ def main(argv=None):
         print(f"build_evidence: {err}", file=sys.stderr)
         return 2
     print(summary(doc, path, sidecars))
-    if any(c["result"] == "FAIL" for c in doc["checks"]):
+    if any(c["result"] in FAILING for c in doc["checks"]):
         return 1
     return REFUSED_DIRTY if path is None else 0
 

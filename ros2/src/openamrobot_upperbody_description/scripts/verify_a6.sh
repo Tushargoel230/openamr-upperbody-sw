@@ -40,13 +40,17 @@ START="$(date +%s.%N)"
 echo "== verify_a6: workspace $WS"
 EVIDENCE_DIR="$(python3 "$HERE/build_evidence.py" --clear)" || exit 2
 echo "== evidence directory: $EVIDENCE_DIR (previous sidecars cleared)"
-rm -f "$WS/build/$PKG/test_results/$PKG/"*.xunit.xml "$WS/build/$BRINGUP/test_results/$BRINGUP/"*.xunit.xml 2>/dev/null
+# Every package whose results the report reads: a result file left by an earlier run would be reported as stale, and one that is not stale would be
+# somebody else's result. (The control package was read by nobody before P12A, so nobody cleared it.)
+rm -f "$WS/build/$PKG/test_results/$PKG/"*.xunit.xml "$WS/build/$CONTROL/test_results/$CONTROL/"*.xunit.xml "$WS/build/$BRINGUP/test_results/$BRINGUP/"*.xunit.xml 2>/dev/null
 
 echo; echo "== colcon test ($PKG, $CONTROL, $BRINGUP)"
 ( cd "$WS" && colcon test --packages-select "$PKG" "$CONTROL" "$BRINGUP" --event-handlers console_cohesion+ )
 RC_COLCON=$?
 for p in "$PKG" "$CONTROL" "$BRINGUP"; do
   ( cd "$WS" && colcon test-result --test-result-base "build/$p" --verbose 2>&1 | tail -n 25 )
+  # `colcon test` exits 0 whatever its tests did (demonstrated in P12A); `colcon test-result` exits 1 for a failing or erroring test.
+  ( cd "$WS" && colcon test-result --test-result-base "build/$p" >/dev/null 2>&1 ) || RC_COLCON=1
 done
 
 echo; echo "== T02: check_urdf on every T01 expansion"
