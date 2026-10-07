@@ -10,6 +10,9 @@ install(PROGRAMS
 
 if(BUILD_TESTING)
   find_package(launch_testing_ament_cmake REQUIRED)
+  find_package(ament_cmake_pytest REQUIRED)
+  # H01: every test file is registered, and every launch test checks that its processes started and exited cleanly (static, over all five packages).
+  ament_add_pytest_test(h01_harness_guards test/test_h01_harness_guards.py TIMEOUT 120)
   # L01 starts a real controller_manager: it picks its own ROS_DOMAIN_ID (see the test), so it cannot see or be seen by
   # another stack on the machine.
   add_launch_test(test/test_l01_mock_controllers.py TIMEOUT 60)

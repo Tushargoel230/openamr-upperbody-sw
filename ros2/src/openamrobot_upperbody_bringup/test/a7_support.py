@@ -96,17 +96,9 @@ def clamp_record(client):
                     "a reading further out is passed through and counted as over_epsilon. No limit was widened and no pose moved"}
 
 
-SIGSEGV = -11
-
-
-def assert_clean_exit(proc_info):
-    """Every process of the launch exits with code 0, except move_group, which is also allowed -11 (SIGSEGV).
-
-    Observed on every stop of move_group here (MoveIt 2.12.4 on Jazzy, stopped with SIGINT; the same in a manual run with no test around
-    it): it answers every request first and then dies with a segmentation fault while shutting down. It is not investigated and not
-    claimed to be harmless in general: this allows exactly that one code for exactly that one process, so a crash of move_group
-    DURING a check still fails it (the check's requests would not be answered), and any other process exiting badly still fails this."""
-    from launch_testing.asserts import EXIT_OK, assertExitCodes
-    for name in proc_info.process_names():
-        allowed = [EXIT_OK, SIGSEGV] if name.startswith("move_group") else [EXIT_OK]
-        assertExitCodes(proc_info, allowable_exit_codes=allowed, process=name)
+def stack_healthy(proc_info, expected, simulator=False):
+    """After the launch: every process in `expected` started and every process exited cleanly, allowing move_group's known SIGSEGV at stop and,
+    with the simulator, its documented shutdown exits (launch_guard.py has the list and the reasons)."""
+    description_scripts()
+    import launch_guard
+    launch_guard.assert_launch_healthy(proc_info, expected=expected, allowed=launch_guard.SIM_ALLOWED if simulator else launch_guard.MOVE_GROUP_ALLOWED)

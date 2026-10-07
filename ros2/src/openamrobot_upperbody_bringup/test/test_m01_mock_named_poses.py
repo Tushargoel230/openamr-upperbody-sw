@@ -42,7 +42,7 @@ from openamrobot_upperbody_moveit.move_group_client import MoveGroupClient  # no
 from openamrobot_upperbody_moveit.named_poses import ARM_GROUP, GRIPPER_JOINT, SIDES  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, assert_clean_exit, clamp_record, named_pose_plan, run_sequence,  # noqa: E402
+from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, clamp_record, named_pose_plan, stack_healthy, run_sequence,  # noqa: E402
                         write_run_sidecar)
 
 MAST_ID = _mast_id_from_arguments()
@@ -52,7 +52,10 @@ READY_WITHIN_S = 90.0
 @pytest.mark.launch_test
 def generate_test_description():
     if not A7_ENABLED:
-        return launch.LaunchDescription([launch_testing.actions.ReadyToTest()]), {}
+        # A launch with no process at all races its own tests ("Processes under test stopped before tests completed": about one run in
+        # three failed, found in P12A, and the A6 report dropped those failures because it did not list M01/M02). One process that outlives
+        # the skipped test keeps the launch up until launch_testing stops it.
+        return launch.LaunchDescription([launch.actions.ExecuteProcess(cmd=["sleep", "30"]), launch_testing.actions.ReadyToTest()]), {}
     moveit = os.path.join(get_package_share_directory("openamrobot_upperbody_bringup"), "launch", "moveit.launch.py")
     return launch.LaunchDescription([
         launch.actions.DeclareLaunchArgument("mast_id", default_value=MAST_ID),
@@ -98,8 +101,11 @@ class TestNamedPosesOnMock(unittest.TestCase):
         self.assertEqual(len(self.record["poses"]), 4 * 2 + 2 * 2, "both arms x four moves, both grippers x two")
 
 
+EXPECTED_PROCESSES = ["robot_state_publisher", "ros2_control_node", "spawner", "base_joint_states_stub", "move_group", "joint_state_clamp"]
+
+
 @launch_testing.post_shutdown_test()
 @unittest.skipUnless(A7_ENABLED, SKIP_REASON)
 class TestShutdown(unittest.TestCase):
-    def test_m01_processes_exit_cleanly(self, proc_info):
-        assert_clean_exit(proc_info)
+    def test_m01_processes_started_and_exited_cleanly(self, proc_info):
+        stack_healthy(proc_info, expected=EXPECTED_PROCESSES)

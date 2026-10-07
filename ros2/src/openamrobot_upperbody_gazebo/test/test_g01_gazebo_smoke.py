@@ -56,6 +56,14 @@ from trajectory_msgs.msg import JointTrajectoryPoint  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sim_test_support import ros_type_name, write_g_sidecar  # noqa: E402
 
+from ament_index_python.packages import get_package_prefix as _prefix  # noqa: E402
+
+sys.path.insert(0, os.path.join(_prefix("openamrobot_upperbody_description"), "lib", "openamrobot_upperbody_description"))
+from launch_guard import MOVE_GROUP_ALLOWED, SIM_ALLOWED, assert_launch_healthy  # noqa: E402
+
+EXPECTED_PROCESSES = ["gazebo", "robot_state_publisher", "parameter_bridge", "create", "joint_state_publisher", "spawner"]
+
+
 CONTROLLERS = ("joint_state_broadcaster", "left_arm_controller", "right_arm_controller",
                "left_gripper_controller", "right_gripper_controller")
 LEFT = [f"openarm_left_joint{n}" for n in range(1, 8)]
@@ -297,3 +305,10 @@ class TestGazeboSmoke(unittest.TestCase):
                                        "merged_joints": sorted(merged), "base_source_joints": sorted(base_names),
                                        "arm_source_joint_count": len(arm_names),
                                        "joints_reported_by_both_sources": [], "duplicates_within_a_message": []}
+
+
+@launch_testing.post_shutdown_test()
+class TestShutdown(unittest.TestCase):
+    def test_g01_processes_started_and_exited_cleanly(self, proc_info):
+        """The processes of the launch started, and none ended with a code that is neither 0 nor a documented shutdown behaviour (launch_guard.py)."""
+        assert_launch_healthy(proc_info, expected=EXPECTED_PROCESSES, allowed=SIM_ALLOWED)
