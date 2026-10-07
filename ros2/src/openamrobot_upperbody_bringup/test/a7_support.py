@@ -2,6 +2,7 @@
 import os
 import sys
 
+from openamrobot_upperbody_moveit.joint_state_clamp import EPSILON
 from openamrobot_upperbody_moveit.moveit_config import srdf_path
 from openamrobot_upperbody_moveit.named_poses import ARM_GROUP, GRIPPER_GROUP, GRIPPER_JOINT, SIDES, read_group_states
 
@@ -59,14 +60,11 @@ def controlled_limits():
     return {j: limits[j] for j in wanted}
 
 
-START_STATE_RETRIES = 3     # per pose, simulation only in practice (mock reads exact values); counted in the record, never silent
-
-
 def run_sequence(client, plan, result_timeout=120.0, start_wait=60.0):
     """Plan and execute every pose through move_group; return (rows, failures, start). A row is one pose: the outcome, the largest joint
     error after settling, and whether it is under TOLERANCE. `start` records the wait for a valid start state (see
     MoveGroupClient.wait_inside_limits) and what it saw, so the start-up transient is on the record."""
-    inside, transient = client.wait_inside_limits(controlled_limits(), start_wait)
+    inside, transient = client.wait_inside_limits(controlled_limits(), start_wait, tolerance=EPSILON)
     start = {"start_state_inside_limits": inside, "out_of_limit_readings_seen_while_waiting":
              [{"joint": j, "value": v, "lower": lo, "upper": hi} for j, v, lo, hi in transient]}
     rows, failures = [], []
@@ -75,17 +73,27 @@ def run_sequence(client, plan, result_timeout=120.0, start_wait=60.0):
         return rows, failures, start
     for group, pose, goal in plan:
         outcome = client.move(group, goal, execute=True, velocity_scaling=VELOCITY_SCALING,
-                              acceleration_scaling=ACCELERATION_SCALING, result_timeout=result_timeout,
-                              start_state_retries=START_STATE_RETRIES)
+                              acceleration_scaling=ACCELERATION_SCALING, result_timeout=result_timeout)
         client.settle(SETTLE_SECONDS)
         error = client.max_error(goal) if all(j in client.joint_states for j in goal) else float("nan")
         ok = outcome.success and error < TOLERANCE
         rows.append({"group": group, "pose": pose, "goal": {j: round(v, 4) for j, v in goal.items()}, **outcome.as_dict(),
                      "final_max_joint_error_rad": round(error, 5), "under_tolerance": bool(error < TOLERANCE), "ok": ok})
         if not ok:
-            failures.append(f"{group}/{pose}: {outcome.name}, final error {error:.4f} rad (limit {TOLERANCE}), "
-                            f"{outcome.start_state_invalid_retries} START_STATE_INVALID retries")
+            failures.append(f"{group}/{pose}: {outcome.name}, final error {error:.4f} rad (limit {TOLERANCE})")
     return rows, failures, start
+
+
+def clamp_record(client):
+    """What the joint-state clamp did during this run, for the sidecar: its counters (activations, episodes, the largest magnitude, readings
+    beyond the epsilon), or the statement that no clamp ran. The counters are the point of the clamp: one that fires constantly, or by more
+    than its epsilon, says something other than float noise is moving a joint."""
+    stats = client.clamp_stats()
+    if stats is None:
+        return {"present": False, "note": "no /joint_state_clamp/get_stats: move_group planned from the raw /joint_states"}
+    return {"present": True, **stats,
+            "note": "joint_state_clamp.py: a reading past a joint limit by at most epsilon_rad is published at the limit, to move_group only; "
+                    "a reading further out is passed through and counted as over_epsilon. No limit was widened and no pose moved"}
 
 
 SIGSEGV = -11

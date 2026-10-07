@@ -5,6 +5,7 @@ trajectory execution manager, the moveit_simple_controller_manager and the contr
 
 Named poses come from the SRDF (named_poses.read_group_states): a named pose is a joint goal made of exactly the values the SRDF says.
 """
+import json
 import time
 
 from moveit_msgs.action import MoveGroup
@@ -12,6 +13,7 @@ from moveit_msgs.msg import Constraints, JointConstraint, MotionPlanRequest, Mov
 from moveit_msgs.srv import GetMotionPlan
 from rclpy.action import ActionClient
 from sensor_msgs.msg import JointState
+from std_srvs.srv import Trigger
 
 ERROR_NAMES = {value: name for name, value in vars(MoveItErrorCodes).items() if name.isupper() and isinstance(value, int)}
 # What counts as the pipeline REFUSING a goal, as opposed to searching and failing or running out of time. These are the codes MoveIt
@@ -28,10 +30,9 @@ def error_name(code):
 class Outcome:
     """What one request did. `accepted` is whether move_group took the goal at all; `code` is MoveItErrorCodes.val."""
 
-    def __init__(self, accepted, code, planning_time, wall_seconds, executed_points=0, start_state_invalid_retries=0):
+    def __init__(self, accepted, code, planning_time, wall_seconds, executed_points=0):
         self.accepted, self.code = accepted, code
         self.planning_time, self.wall_seconds, self.executed_points = planning_time, wall_seconds, executed_points
-        self.start_state_invalid_retries = start_state_invalid_retries
 
     @property
     def success(self):
@@ -43,8 +44,7 @@ class Outcome:
 
     def as_dict(self):
         return {"accepted": self.accepted, "error_code": self.code, "error_name": self.name,
-                "planning_time_s": round(self.planning_time, 3), "wall_s": round(self.wall_seconds, 3),
-                "start_state_invalid_retries": self.start_state_invalid_retries}
+                "planning_time_s": round(self.planning_time, 3), "wall_s": round(self.wall_seconds, 3)}
 
 
 class MoveGroupClient:
@@ -111,25 +111,28 @@ class MoveGroupClient:
         points = len(response.executed_trajectory.joint_trajectory.points)
         return Outcome(True, response.error_code.val, response.planning_time, time.monotonic() - started, points)
 
-    def move(self, group, joint_goal, execute=True, velocity_scaling=0.5, acceleration_scaling=0.5, planning_time=5.0,
-             result_timeout=90.0, start_state_retries=0):
-        """Plan (and execute) a joint goal. `start_state_retries`: how many times to ask again, half a second later, when MoveIt answers
-        START_STATE_INVALID. Every retry is counted in the Outcome, never hidden. Why it exists at all: a simulated joint resting on
-        its limit (openarm_*_joint4, lower limit 0, the `home` pose) can read 1e-7 rad past it, and MoveIt 2.12.4's start-state bounds
-        check has no tolerance (see the moveit package README); a client of the simulation has to wait and ask again."""
+    def move(self, group, joint_goal, execute=True, velocity_scaling=0.5, acceleration_scaling=0.5, planning_time=5.0, result_timeout=90.0):
+        """Plan (and execute) a joint goal, once. There is no retry: a request MoveIt refuses is an outcome of the check that sent it. (There
+        used to be a bounded retry for a start state 1e-7 rad past a joint limit; the joint-state clamp, joint_state_clamp.py, took that noise
+        off at its source, and a retry that never fires is dead code, and one that fires says something else is wrong.)"""
         goal = self.request(group, joint_goal, velocity_scaling, acceleration_scaling, planning_time)
-        retries = 0
-        while True:
-            outcome = self.send(goal, execute, result_timeout)
-            outcome.start_state_invalid_retries = retries
-            if outcome.name != "START_STATE_INVALID" or retries >= start_state_retries:
-                return outcome
-            retries += 1
-            self.settle(0.5)
+        return self.send(goal, execute, result_timeout)
 
-    def wait_inside_limits(self, limits, seconds, stable_seconds=1.0):
-        """Wait until every joint in `limits` ({joint: (lower, upper)}) has been inside its limits, in every /joint_states message, for
-        `stable_seconds`. Returns (ok, transient): `transient` lists the out-of-limit readings seen on the way, as (joint, value,
+    def clamp_stats(self, timeout=10.0):
+        """The counters of joint_state_clamp.py (its `~/get_stats` service) as a dict, or None when no clamp is running."""
+        client = self.node.create_client(Trigger, "/joint_state_clamp/get_stats")
+        try:
+            if not client.wait_for_service(timeout_sec=timeout):
+                return None
+            future = client.call_async(Trigger.Request())
+            self.spin_until(future.done, timeout)
+            return json.loads(future.result().message) if future.done() else None
+        finally:
+            self.node.destroy_client(client)
+
+    def wait_inside_limits(self, limits, seconds, stable_seconds=1.0, tolerance=0.0):
+        """Wait until every joint in `limits` ({joint: (lower, upper)}) has been inside its limits, widened by `tolerance` (the clamp's epsilon:
+        float noise that far out is the clamp's to count, not this wait's), in every /joint_states message, for `stable_seconds`. Returns (ok, transient): `transient` lists the out-of-limit readings seen on the way, as (joint, value,
         lower, upper), so a recording says what the start-up transient was instead of hiding it.
 
         Why: MoveIt's CheckStartStateBounds refuses a request whose start state is even slightly outside a joint's limit
@@ -139,7 +142,7 @@ class MoveGroupClient:
 
         def inside():
             bad = [(j, self.joint_states[j], lo, hi) for j, (lo, hi) in limits.items()
-                   if j in self.joint_states and not lo <= self.joint_states[j] <= hi]
+                   if j in self.joint_states and not lo - tolerance <= self.joint_states[j] <= hi + tolerance]
             now = time.monotonic()
             if bad:
                 clean_since[0] = None
