@@ -1,9 +1,10 @@
-"""M04: a goal that puts the left gripper inside the base-side collision volume is REJECTED by planning, and the test says which of the three
+"""M04: a goal that puts the left gripper inside the nearest REACHABLE structure volume is REJECTED by planning, and the test says which of the three
 things that could happen did: the pipeline refused it, the planner searched and failed, or the planner ran out of time. They are different
 claims: "rejected" is the pipeline looking at the goal and refusing it at once; "failed" is a search that gave up; "timed_out" is a search that
 used its whole budget. Only the first is the robot refusing to hurt itself; the other two would be a robot that tried.
 
-WHICH VOLUME: the arms cannot reach the platform's base body at all. In 6000 random left-arm states at mast_1350 the left gripper touched
+WHICH VOLUME (VERIFICATION.md M04, corrected 7 Oct: the row said "base collision volume", which was the wrong phrase): the arms cannot reach the
+platform's base body at all, so the volume under test is the nearest one they CAN reach. In 6000 random left-arm states at mast_1350 the left gripper touched
 `base_link`, the wheels, the casters, the lidar and the camera body in none of them (and M03's 8000 all-joint states found no collision of
 any arm link with `base_link` at any mast ID), while it touched `mast_base_link`, the mast structure on the base that the arms are mounted
 on, in 144. So the goal is inside `mast_base_link`'s collision volume, the nearest base-side volume that a left gripper can be put in, and the
@@ -114,12 +115,13 @@ class TestCollisionGoalRejected(unittest.TestCase):
         status = "PASS" if (joint.get("classification") == "rejected" and joint.get("planner_verdict_seen_in_move_group_log")
                             and record.get("control", {}).get("classification") == "succeeded"
                             and record.get("pose_goal", {}).get("classification") != "succeeded") else "FAIL"
-        write_sidecar("M04", "collision_goal", "a goal that puts the left gripper in a base-side collision volume is rejected by planning",
+        write_sidecar("M04", "collision_goal", "a goal inside the nearest reachable structure volume (mast_base_link) is rejected by planning; the base body itself is out of the arms' reach",
                       status, {"volume": VOLUME, "mast_id": "mast_1350", "planning_budget_s": PLANNING_BUDGET_S,
                                "rejected_means": f"the pipeline refused it with a goal/start/constraint error code in {list(REFUSAL_CODES)} "
                                                  f"within {REJECTED_WITHIN_S} s, far under the {PLANNING_BUDGET_S} s the planner was given; "
                                                  "'failed' is a search that gave up with PLANNING_FAILED; 'timed_out' used the budget",
-                               "base_link_volume_reachable_by_the_arms": False,
+                               "base_link_volume_reachable_by_the_arms": False,         # a reach fact for A4, not a defect: the lift will change it
+                               "volume_tested_is": "the nearest structure volume the arms can reach (VERIFICATION.md M04)",
                                "base_link_evidence": "0 of 6000 left-arm samples at mast_1350 put a left gripper link in collision with "
                                                      "base_link, the wheels, the casters, the lidar or the camera body (find_goal search, "
                                                      "seed 4242); M03's 8000 all-joint samples found none either",
@@ -139,7 +141,7 @@ class TestCollisionGoalRejected(unittest.TestCase):
         state.joint_state = JointState(name=list(joints), position=[float(v) for v in joints.values()])
         return state
 
-    def test_m04_1_a_goal_in_the_mast_volume_is_rejected_not_searched_for(self, proc_output):
+    def test_m04_1_a_goal_in_the_nearest_reachable_volume_is_rejected_not_searched_for(self, proc_output):
         self.assertTrue(self.client.wait_for_server(90.0), "move_group's /move_action did not appear")
         states = read_group_states(open(srdf_path()).read())
 

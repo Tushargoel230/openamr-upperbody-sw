@@ -1,5 +1,5 @@
-"""M05 (proposed; see the README): the two grippers take opposite-signed GripperCommand positions, and no named pose may close both
-hands from one number (ADR-009 point 5).
+"""M05 (adopted 7 Oct, VERIFICATION.md): the two grippers take opposite-signed GripperCommand positions, and no named pose may close both
+hands from one number (ADR-009 point 5), and the check fails the single-number version in both directions (the two `fails` tests below).
 
 The defect this guards is silent: left finger_joint1 ranges [0, 0.7854] and right [-0.7854, 0], so "close" written as +0.7854 for both
 hands is a valid number for one hand and out of range for the other, and nothing fails where it is written. The check reads the SRDF's
