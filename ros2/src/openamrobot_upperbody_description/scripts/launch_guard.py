@@ -9,8 +9,10 @@ the evidence (demonstrated with canaries, P12A task 0: both ended as a passing t
         def test_processes_started_and_exited_cleanly(self, proc_info):
             assert_launch_healthy(proc_info, expected=["move_group", ...], allowed={"move_group": [SIGSEGV]})
 
-`expected` lists the name prefix of every process the test cannot do without: a process that never started is not in `proc_info` at all, so
-only a list kept next to the launch description can notice it is missing. `allowed` lists the non-zero exit codes a process may end with, per
+`expected` lists the name prefix of every process the test cannot do without. Whether a process that cannot be started appears in `proc_info` depends on how it
+is launched (an ExecuteProcess with a missing executable is recorded as exited with an error code, found with the canaries; a launch that fails earlier records
+nothing), so a list kept next to the launch description is the one check that does not depend on that. A process that DIES during the tests is a different
+failure, caught by the last active test (`assert_no_process_died`), before the shutdown allowances below can hide it. `allowed` lists the non-zero exit codes a process may end with, per
 process, each one a known and documented behaviour of the installed software and nothing broader. `test_h01_harness_guards.py` fails any launch
 test module that does not call this, so a new launch test cannot be written without it.
 """
@@ -28,8 +30,18 @@ SIGABRT = -6        # ros_gz_bridge's parameter_bridge, once in a while, at shut
 #                           run in P12A: before this guard nothing looked at how the processes ended). Heap corruption is not benign. It is
 #                           allowed here only so that a shutdown abort of platform-sw's bridge does not make G01/G02/M02 flaky, and it is
 #                           a finding to take to platform-sw, not an approval
+#   joint_state_publisher  1  the stock node raises "RuntimeError: Unable to convert call argument '0' to Python object" from rclpy's take_message when
+#                           the SIGINT of the shutdown arrives (seen once in G02, P12A): a race in the stock node and rclpy, exit code 1; same status
 MOVE_GROUP_ALLOWED = {"move_group": [SIGSEGV]}
-SIM_ALLOWED = {"gazebo": [SIGINT, SIGTERM], "parameter_bridge": [SIGABRT], **MOVE_GROUP_ALLOWED}
+SIM_ALLOWED = {"gazebo": [SIGINT, SIGTERM], "parameter_bridge": [SIGABRT], "joint_state_publisher": [1], **MOVE_GROUP_ALLOWED}
+
+
+def assert_no_process_died(proc_info):
+    """For an ACTIVE test, the last one of a launch test: in the active phase `proc_info` holds the processes that have EXITED so far, so a process
+    that is in it with a non-zero code died while the tests were running, not at shutdown. No allowance applies: the shutdown behaviours listed above
+    happen after the launch is stopped, and the allowances of the post-shutdown check would otherwise hide a crash in the middle of a test."""
+    died = {name: proc_info[name].returncode for name in proc_info.process_names() if proc_info[name].returncode != EXIT_OK}
+    assert not died, f"processes of the launch died while the tests were running: {died}"
 
 
 def assert_launch_healthy(proc_info, expected, allowed=None):

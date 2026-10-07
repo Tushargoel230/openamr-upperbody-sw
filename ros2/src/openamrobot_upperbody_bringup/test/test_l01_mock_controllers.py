@@ -147,9 +147,14 @@ class TestMockControllers(unittest.TestCase):
 from ament_index_python.packages import get_package_prefix as _prefix  # noqa: E402
 
 sys.path.insert(0, os.path.join(_prefix("openamrobot_upperbody_description"), "lib", "openamrobot_upperbody_description"))
-from launch_guard import assert_launch_healthy  # noqa: E402
+from launch_guard import assert_launch_healthy, assert_no_process_died  # noqa: E402
 
 EXPECTED_PROCESSES = ["robot_state_publisher", "ros2_control_node", "spawner"]
+
+
+class TestProcessesAlive(unittest.TestCase):
+    def test_no_process_of_the_launch_died_while_the_tests_were_running(self, proc_info):
+        assert_no_process_died(proc_info)
 
 
 @launch_testing.post_shutdown_test()

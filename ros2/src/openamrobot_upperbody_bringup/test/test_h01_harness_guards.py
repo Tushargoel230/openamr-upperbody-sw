@@ -56,4 +56,6 @@ def test_h01_every_launch_test_checks_that_its_processes_started_and_exited_clea
     assert "launch_testing.post_shutdown_test" in text, f"{package}/test/{name}: no post-shutdown test: a crashed or never-started process would pass"
     assert re.search(r"assert_launch_healthy\(|stack_healthy\(", text), \
         f"{package}/test/{name}: no call to assert_launch_healthy (launch_guard.py) after the launch stops"
+    assert re.search(r"assert_no_process_died\(|stack_alive\(", text), \
+        f"{package}/test/{name}: no active test that no process died WHILE the tests ran (assert_no_process_died): the post-shutdown allowances would hide it"
     assert re.search(r"expected\s*=\s*\[|EXPECTED_PROCESSES", text), f"{package}/test/{name}: it does not name the processes it needs (expected=[...])"

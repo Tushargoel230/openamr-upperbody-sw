@@ -96,6 +96,13 @@ def clamp_record(client):
                     "a reading further out is passed through and counted as over_epsilon. No limit was widened and no pose moved"}
 
 
+def stack_alive(proc_info):
+    """Active phase, last test: no process of the stack died while the tests were running (launch_guard.assert_no_process_died)."""
+    description_scripts()
+    import launch_guard
+    launch_guard.assert_no_process_died(proc_info)
+
+
 def stack_healthy(proc_info, expected, simulator=False):
     """After the launch: every process in `expected` started and every process exited cleanly, allowing move_group's known SIGSEGV at stop and,
     with the simulator, its documented shutdown exits (launch_guard.py has the list and the reasons)."""

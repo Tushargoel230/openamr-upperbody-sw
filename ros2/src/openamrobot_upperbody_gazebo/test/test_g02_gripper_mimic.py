@@ -44,7 +44,7 @@ from sim_test_support import finger_angles, gz_link_poses, launch_engine_constan
 from ament_index_python.packages import get_package_prefix as _prefix  # noqa: E402
 
 sys.path.insert(0, os.path.join(_prefix("openamrobot_upperbody_description"), "lib", "openamrobot_upperbody_description"))
-from launch_guard import MOVE_GROUP_ALLOWED, SIM_ALLOWED, assert_launch_healthy  # noqa: E402
+from launch_guard import MOVE_GROUP_ALLOWED, SIM_ALLOWED, assert_launch_healthy, assert_no_process_died  # noqa: E402
 
 EXPECTED_PROCESSES = ["gazebo", "robot_state_publisher", "parameter_bridge", "create", "joint_state_publisher", "spawner"]
 
@@ -139,6 +139,11 @@ class TestGripperMimic(unittest.TestCase):
                                  "finger_joint1_physical_rad": round(j1, 4), "finger_joint2_physical_rad": round(j2, 4),
                                  "follow_tolerance_rad": FOLLOW_TOLERANCE,
                                  "measured_from": "gz /world/empty/dynamic_pose/info (link poses), not /joint_states"}
+
+
+class TestProcessesAlive(unittest.TestCase):
+    def test_no_process_of_the_launch_died_while_the_tests_were_running(self, proc_info):
+        assert_no_process_died(proc_info)
 
 
 @launch_testing.post_shutdown_test()
