@@ -42,7 +42,7 @@ from openamrobot_upperbody_moveit.move_group_client import MoveGroupClient  # no
 from openamrobot_upperbody_moveit.named_poses import ARM_GROUP, GRIPPER_JOINT, SIDES  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, assert_clean_exit, named_pose_plan, run_sequence,  # noqa: E402
+from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, assert_clean_exit, clamp_record, named_pose_plan, run_sequence,  # noqa: E402
                         write_run_sidecar)
 
 MAST_ID = _mast_id_from_arguments()
@@ -80,11 +80,9 @@ class TestNamedPosesOnMock(unittest.TestCase):
                    "velocity_scaling": VELOCITY_SCALING, "acceleration_scaling": ACCELERATION_SCALING,
                    "gripper_interface": "GripperCommand via moveit_simple_controller_manager (ADR-009 option 1)",
                    "poses_run": len(rows), "poses_ok": sum(1 for r in rows if r["ok"]),
-                   "start_state_invalid_retries_total": sum(r["start_state_invalid_retries"] for r in rows),
-                   "start_state_invalid_retries_note": "MoveIt 2.12.4 refuses a start state even 1e-7 rad outside a joint limit "
-                   "(START_STATE_INVALID, no tolerance); a simulated joint resting on its limit (joint4 = 0, the home pose) can read past "
-                   "it. Each retry is a re-request half a second later; at most 3 per pose are allowed",
+                   "requests_per_pose": 1,       # no retry: a refused request is a FAILed pose (see MoveGroupClient.move)
                    "worst_final_error_rad": max((r["final_max_joint_error_rad"] for r in rows), default=None),
+                   "clamp": clamp_record(cls.client),
                    "poses": rows, **{k: v for k, v in cls.record.items() if k != "poses"}}
         write_run_sidecar("M01", f"mock_{MAST_ID}", f"named poses plan and execute on mock at {MAST_ID}", "PASS" if ok else "FAIL", details)
         cls.node.destroy_node()
