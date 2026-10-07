@@ -57,21 +57,108 @@ def _sidecar(result, **details):
     ("T04", {**GOOD, "failures": 1}, _sidecar("PASS"), "FAIL"),            # a PASS sidecar cannot hide a failing test
     ("T04", GOOD, _sidecar("FAIL"), "FAIL"),                               # nor a passing test hide a FAIL sidecar
     ("T04", {**GOOD, "failures": 1}, _sidecar("WARN"), "FAIL"),            # nor a WARN
-    ("T10", GOOD, None, "FAIL"),                                           # sidecar required, test did not complete
-    ("E01", None, None, "FAIL"),
-    ("T05", None, None, "FAIL"),                                           # no result is not a pass
-    ("T14", None, None, "FAIL"),                                           # implemented since P06: no result is a FAIL
-    ("L01", None, None, "FAIL"),
+    ("T10", GOOD, None, "NOT_RUN"),                                        # sidecar required, test did not complete
+    ("E01", None, None, "NOT_RUN"),
+    ("T05", None, None, "NOT_RUN"),                                        # no result is not a pass
+    ("T14", None, None, "NOT_RUN"),                                        # implemented since P06: no result is NOT_RUN
+    ("L01", None, None, "NOT_RUN"),
     ("T01", {**GOOD, "skipped": 5}, None, "SKIP"),                         # every test skipped
     ("T01", {**GOOD, "skipped": 2}, None, "PASS"),                         # some ran and passed
     ("C01", {**GOOD, "skipped": 2}, _sidecar("PASS"), "PASS"),
     ("C02", GOOD, _sidecar("PASS"), "PASS"),
     ("C02", {**GOOD, "skipped": 1}, _sidecar("SKIP", reason="no checkout"), "SKIP"),   # the one legitimate SKIP, by sidecar
     ("C02", GOOD, _sidecar("FAIL"), "FAIL"),                                           # drift is never softened
-    ("C02", GOOD, None, "FAIL"),                                                       # the recording test did not complete
+    ("C02", GOOD, None, "NOT_RUN"),                                                    # the recording test did not complete
+    ("T04", None, _sidecar("PASS"), "NOT_RUN"),                                        # a sidecar with no test result behind it is not a pass (P12A)
+    ("T04", None, _sidecar("WARN"), "NOT_RUN"),                                        # nor a WARN
+    ("C01", {**GOOD, "skipped": 5}, _sidecar("PASS"), "SKIP"),                          # every test skipped: nothing ran behind the sidecar
 ])
 def test_combine(check_id, counts, sidecar, expected):
     assert be.combine(check_id, counts, sidecar)[0] == expected
+
+
+@pytest.mark.parametrize("counts,sidecar,missing,expected", [
+    (GOOD, None, ["t_b"], "NOT_RUN"),                                        # all that ran passed, but a registered test left no result
+    (GOOD, _sidecar("PASS"), ["t_b"], "NOT_RUN"),                            # a sidecar does not stand in for it
+    ({**GOOD, "failures": 1, "failed_tests": ["t"]}, None, ["t_b"], "FAIL"),  # a failure outranks a missing result
+    (None, None, ["t_b"], "NOT_RUN"),
+    (GOOD, _sidecar("FAIL"), ["t_b"], "FAIL"),
+])
+def test_a_registered_test_with_no_result_makes_its_check_not_run_and_never_a_pass(counts, sidecar, missing, expected):
+    result, details = be.combine("T01", counts, sidecar, missing)
+    assert result == expected
+    assert details["tests_without_a_result"] == missing
+
+
+def test_not_run_is_a_value_of_its_own_and_fails_the_exit_status():
+    assert be.NOT_RUN == "NOT_RUN" and be.NOT_RUN not in ("PASS", "WARN", "SKIP", "FAIL")
+    assert be.NOT_RUN in be.FAILING and "FAIL" in be.FAILING and "SKIP" not in be.FAILING
+    assert be.NOT_RUN in be.RESULT_ORDER
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("t04_frame_contract", "T04"), ("test_test_l01_mock_controllers.py", "L01"), ("m01_mock_mast_1350", "M01"), ("w01_kdl_root_inertia", "W01"),
+    ("s4_sensors", "AUX"), ("datums_revision", "REV"), ("canary_pytest_assert", "AUX"), ("joint_state_clamp_logic", "AUX"),
+])
+def test_a_registered_test_is_attributed_to_a_check_by_its_name(name, expected):
+    assert be.test_name_id(name) == expected
+
+
+def test_results_filed_under_an_id_the_report_does_not_list_are_folded_into_aux_not_dropped():
+    """A test named `test_q99_...` maps to check Q99, which no report lists: before P12A its failure was read by nobody."""
+    counts = {"T01": dict(GOOD), "Q99": {"tests": 1, "failures": 1, "skipped": 0, "failed_tests": ["test_q99_x"]},
+              "M01": {"tests": 2, "failures": 0, "skipped": 2, "failed_tests": []}}
+    unclaimed = be.fold_unclaimed(counts, {"T01", "AUX"})
+    assert set(unclaimed) == {"Q99", "M01"} and "Q99" not in counts
+    assert counts["AUX"] == {"tests": 3, "failures": 1, "skipped": 2, "failed_tests": ["test_q99_x"]}
+    assert be.combine("AUX", counts["AUX"], None)[0] == "FAIL"
+    assert be.missing_by_id([{"id": "Q99", "test": "q99_x", "package": "p"}, {"id": "T01", "test": "t01_a", "package": "p"}], {"T01", "AUX"}) == {
+        "AUX": ["q99_x"], "T01": ["t01_a"]}
+
+
+def _results(tmp_path, tests):
+    """A fake workspace: build/<pkg>/test_results/<pkg>/<test>.xunit.xml for {test: inner xml of a testcase or None for no file}."""
+    d = tmp_path / "build" / "pkg" / "test_results" / "pkg"
+    d.mkdir(parents=True, exist_ok=True)
+    for test, inner in tests.items():
+        if inner is not None:
+            name = f"{test}.xunit.missing_result" if inner == "MISSING" else "test_x"
+            body = "<error message='no result'/>" if inner == "MISSING" else inner
+            (d / f"{test}.xunit.xml").write_text(f'<testsuite><testcase classname="p.test" name="{name}">{body}</testcase></testsuite>')
+    return str(d)
+
+
+@pytest.mark.parametrize("inner,status", [("", "ok"), ("<failure message='x'/>", "ok"), ("MISSING", "did_not_complete"), (None, "no_result_file")])
+def test_result_status_tells_a_missing_a_stand_in_and_a_real_result_apart(tmp_path, inner, status):
+    d = _results(tmp_path, {"t01_a": inner})
+    assert be.result_status(d, "t01_a", since=time.time() - 3600) == status
+
+
+def test_result_status_stale_empty_and_unreadable(tmp_path):
+    d = _results(tmp_path, {"t01_a": ""})
+    os.utime(os.path.join(d, "t01_a.xunit.xml"), (1, 1))
+    assert be.result_status(d, "t01_a", since=time.time() - 3600) == "stale"
+    open(os.path.join(d, "t01_b.xunit.xml"), "w").write("<testsuite/>")
+    assert be.result_status(d, "t01_b", since=0) == "empty"
+    open(os.path.join(d, "t01_c.xunit.xml"), "w").write("not xml")
+    assert be.result_status(d, "t01_c", since=0) == "unreadable"
+
+
+def test_accounting_lists_registered_tests_without_a_result_and_a_package_with_none_registered(tmp_path, monkeypatch):
+    d = _results(tmp_path, {"t01_a": "", "t02_b": None, "canary_timeout": "MISSING"})
+    monkeypatch.setattr(be, "registered_tests", lambda ws, pkg: {"pkg": ["t01_a", "t02_b", "canary_timeout"], "empty": []}[pkg])
+    got = be.accounting(str(tmp_path), ["pkg", "empty"], since=time.time() - 3600)
+    assert got["registered"] == 3 and got["with_a_result"] == 1
+    assert {(p["package"], p["test"], p["status"], p["id"]) for p in got["problems"] if p["test"]} == {
+        ("pkg", "t02_b", "no_result_file", "T02"), ("pkg", "canary_timeout", "did_not_complete", "AUX")}
+    empty, = [p for p in got["problems"] if p["package"] == "empty"]
+    assert empty["test"] is None and "no registered tests" in empty["status"], "a suite that vanished must not look like a suite that passed"
+
+
+def test_a_package_whose_ctest_project_cannot_be_read_is_a_problem_not_a_pass(tmp_path):
+    assert be.registered_tests(str(tmp_path), "nonexistent_package") is None
+    got = be.accounting(str(tmp_path), ["nonexistent_package"], since=0)
+    assert got["problems"] and got["registered"] == 0
 
 
 def test_a_check_listed_as_not_implemented_is_a_skip_with_the_reason(monkeypatch):
@@ -180,12 +267,13 @@ def test_summary_and_exit_status_follow_the_checks(tmp_path):
     assert doc["schema"] == "openamr.evidence.v1" and doc["evidence_class"] == "static+mock" and doc["profile"] == "dev"
     assert doc["dirty"] is False and "dirty_files" not in doc
     by_id = {c["id"]: c["result"] for c in doc["checks"]}
-    assert by_id["T01"] == "FAIL" and by_id["T14"] == "FAIL" and by_id["L01"] == "FAIL" and by_id["V01"] == "WARN"
+    assert by_id["T01"] == "NOT_RUN" and by_id["T14"] == "NOT_RUN" and by_id["L01"] == "NOT_RUN" and by_id["V01"] == "WARN"
     assert by_id["AUX"] == "FAIL"                                          # the three steps were never run
+    assert by_id["H02"] == "NOT_RUN"                                       # and nothing was registered to account for: that is not a pass either
     assert set(doc["config_ids"]) and all(ev.SHA256_RE.match(v) for v in doc["config_ids"].values())
     assert len(doc["config_ids"]) == 14 and "mast_1350/openarm/mock" in doc["config_ids"]
     assert doc["limitations"] and all(isinstance(x, str) for x in doc["limitations"])
-    assert "Result: FAIL" in result.stdout and f"Evidence: {reports[0]}" in result.stdout
+    assert "Result: FAIL" in result.stdout and f"Evidence: {reports[0]}" in result.stdout and "NOT_RUN" in result.stdout
 
 
 def _run_gazebo_build(tmp_path, repo, *steps):
@@ -203,7 +291,7 @@ def test_the_gazebo_profile_writes_a_simulation_report_and_never_a_physical_clai
     assert doc["profile"] == "gazebo" and doc["evidence_class"] == "simulation" and doc["dirty"] is False
     assert [c["id"] for c in doc["checks"]] == [i for i, _ in be.GAZEBO_CHECKS]
     by_id = {c["id"]: c["result"] for c in doc["checks"]}
-    assert by_id["G01"] == "FAIL" and by_id["G02"] == "FAIL"                       # nothing ran: no result is not a pass
+    assert by_id["G01"] == "NOT_RUN" and by_id["G02"] == "NOT_RUN"                 # nothing ran: no result is not a pass
     assert by_id["V01"] == "WARN" and "pending" in next(c for c in doc["checks"] if c["id"] == "V01")["details"]["performed"]
     assert set(doc["config_ids"]) == {"mast_1350/openarm/gazebo", "mast_1300/openarm/gazebo"}
     assert set(doc["simulator"]) == {"gz_sim", "gz_ros2_control", "ros_gz_sim"}
@@ -218,9 +306,9 @@ def test_the_gazebo_profile_refuses_a_dirty_tree_like_the_dev_one(tmp_path):
     assert reports == [] and "Evidence: NOT WRITTEN" in result.stdout
 
 
-def test_a_gazebo_check_with_no_sidecar_is_a_fail_not_a_pass():
+def test_a_gazebo_check_with_no_sidecar_is_not_run_not_a_pass():
     assert {"G01", "G02"} <= be.SIDECAR_REQUIRED
-    assert be.combine("G01", GOOD, None)[0] == "FAIL"
+    assert be.combine("G01", GOOD, None)[0] == "NOT_RUN"
     assert be.combine("G01", GOOD, _sidecar("PASS"))[0] == "PASS"
     assert be.combine("G02", GOOD, _sidecar("FAIL"))[0] == "FAIL"
 
