@@ -5,6 +5,18 @@ All notable changes to this repository. Evidence for the description is static a
 
 ## [Unreleased]
 
+### Changed (P12A, the harness and the matrix)
+
+- **The evidence harness can no longer lie by omission.** Failures planted in each of the five packages (`scripts/harness_canary.py`) showed that the control package's tests were run and never read
+  (exit 3, 0 FAIL, ten failing canaries), that a result under a check ID no report lists was dropped, that `colcon test` exits 0 whatever its tests did, that a sidecar with no test behind it was a PASS, and that a process
+  of a launch test that dies of SIGSEGV or cannot start leaves the test passing. `NOT_RUN` is a new result value (never PASS, fails the exit status); every registered test must leave a result file (H02); every launch
+  test checks that its processes started, that none died while the tests ran, and how they exited (H01, `launch_guard.py`). The A6 and A7 numbers survived (22/6/0 and 13/1/0 with the two new checks); the guard found
+  a `parameter_bridge` abort, a `joint_state_publisher` exit 1 and a left-over gz server at shutdown, and the A7-gated M01/M02 launch tests failed two of three runs in a sample of three (they raced their own empty launch) while the A6 report dropped those failures.
+- **The collision matrix disables only what can be justified, and is derived, not sampled.** 113 pairs: 20 declared by upstream, 36 `Adjacent`, 77 `ConstantTransform`; 448 enabled. The 458 sampled `Never` pairs are
+  gone (upstream declares none; every one was written by our own Setup Assistant run). M03 recomputes the reasons and has no WARN class; the sampled part is information about the enabled pairs. Regenerating gives the
+  contract back every time. The named-pose plans take about 5 to 9 per cent longer offline and all still plan and execute.
+- The top-level `warnings` list of the A7 report is gone (every WARN has a check ID); a reduced M01 is a WARN. No reason code the library never returns is quoted anywhere.
+
 ### Changed (P11, A7 close-out)
 
 - `openamrobot_upperbody_moveit`: M03 splits the collision matrix by who owns the claim. A pair whose links are both upstream's is

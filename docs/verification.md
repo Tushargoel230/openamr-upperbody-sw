@@ -16,7 +16,7 @@ ros2 run openamrobot_upperbody_description verify_a6.sh                   # abou
 
 It prints a summary and writes `<workspace>/evidence/<UTC timestamp>_dev.json`, **from a clean tree only**: with uncommitted
 changes (untracked files included) it prints the results, says `Evidence: NOT WRITTEN` and names the files, because a report
-records a commit and a dirty tree is none. The exit status is 1 if a check is `FAIL`, 3 if everything passed but the tree was
+records a commit and a dirty tree is none. The exit status is 1 if a check is `FAIL` or `NOT_RUN`, 3 if everything passed but the tree was
 dirty, 2 if the evidence cannot be assembled. `OPENAMR_EVIDENCE_DIR` moves the output; `OPENAMR_WS` names the workspace.
 
 ## The evidence report (`openamr.evidence.v1`)
@@ -79,38 +79,28 @@ It runs the gazebo, moveit and bringup tests (`OPENAMR_A7=1`, which un-gates M01
 starts them), then `build_a7_evidence.py` writes `<workspace>/evidence/<UTC timestamp>_a7.json` with `profile: "a7"`, `evidence_class:
 "simulation"`, a `simulator` block (Gazebo, `gz_ros2_control`, `ros_gz_sim` and MoveIt versions) and a `moveit_config` block (hashes of the
 SRDF, which carries the collision matrix, and of the other configuration files). It inherits P08's rule: **a dirty tree writes no file**. The
-exit status is 1 if a check is `FAIL`, 3 if everything passed but the tree is dirty, 2 if the evidence cannot be assembled.
+exit status is 1 if a check is `FAIL` or `NOT_RUN`, 3 if everything passed but the tree is dirty, 2 if the evidence cannot be assembled.
 
 | ID | Proves |
 |---|---|
 | G01, G02 | as in the Gazebo report above (G01 on the default DART engine, G02 on Bullet-Featherstone passed explicitly) |
 | M01 | on `mock`, at **each of the four mast IDs**, every SRDF named pose plans and executes through `move_group` into the real controllers and ends under 0.01 rad of its goal: both arms (`hands_up`, `home`, `hands_up`, `park`) and both grippers (`closed` then `open`, each hand with its own value) |
 | M02 | the same in Gazebo at `mast_1350` (the release configuration), on Bullet-Featherstone passed explicitly because the gripper poses do not close on DART |
-| M03 | the collision matrix, split by who owns the claim. **Ours** (a pair with a link of the platform's or ours: base, wheels, casters, lidar, camera, mast): a colliding disabled pair is a `FAIL`; the pairs with no joint between their links (77) are **certified by construction**, evaluated once, and the rest (267) are sampled: 2000 random joint states per mast ID at seed 20261006. **Inherited** (both links upstream's): a collision is a `WARN` naming the pair, the seed and the sample index. What sampling does and does not establish is in the paragraph below |
+| M03 | the collision matrix disables only what can be justified. A pair is disabled for exactly three reasons: declared by upstream (the 20 pairs of section 1, all `Adjacent`), `Adjacent` (a structural neighbour) or `ConstantTransform` (no movable joint between the links, so one evaluation settles every configuration, and it found them clear: 77 pairs). Everything else, 448 pairs, is enabled. A disabled pair with no reason, a false label, a `ConstantTransform` pair that collides, or a constant pair left enabled that collides is a `FAIL`; **there is no `WARN` class**. The sampled part is information about the enabled pairs (below) |
 | M04 | a goal inside the nearest **reachable** structure volume (`mast_base_link`; the arms cannot reach the base body at all) is **rejected** by planning (the joint goal: answered at once; the reply is the generic `FAILURE`, and the planner's verdict `GOAL_STATE_INVALID` exists only in `move_group`'s log, which the check reads), not merely unsuccessful; the pose goal at the same place **times out**, and the record says which is which |
 | M05 | the per-hand gripper values: `closed` is each hand's own far limit, the signs are opposite, and the single-number version fails in both directions (ADR-009 point 5) |
 | M06 | the named-pose plans need some acceleration limit and are insensitive to our values across three orders of magnitude, which retires the stop condition "planning succeeds only because the limits we invented are generous"; **it does not make the limits any less of a placeholder** (ADR-009) |
+| H01 | every `test_*.py` is registered in its package's CMakeLists, and every launch test checks that its processes started and exited cleanly (`launch_guard.py`); static, over all five packages |
+| H02 | every test CMake registered left a fresh, complete result file; a timeout, a signal, a collection error or an empty package is listed by name and makes the checks it backs `NOT_RUN` |
 | L01, I01, V01, AUX | as in the A6 report, for the packages this one touches; V01 now has **eight** checklist items (item 8: an arm executes a named pose in RViz and the preview matches what the robot then does) and stays `WARN` until a person has answered them |
 
-Recorded run: commit `6871713` (code; later commits are documentation only), from a clean build of the five upper-body packages, evidence
-`20261007T110122Z_a7.json`: **11 `PASS`, 1 `WARN` (V01), 0 `FAIL`**, plus four M03 `WARN`s in the report's `warnings` (below). M01 passed 12 of 12 poses at
-each of the four mast IDs (worst final error 0.001 rad, one request per pose: there is no retry any more), M02 12 of 12 at `mast_1350` (0.00117 rad),
-M04 rejected the joint goal and timed out on the pose goal. M03: of our 344 `Never` pairs, **77 were certified by construction** and **267 sampled**
-(2000 states per mast ID, seed 20261006): no counterexample, at any mast ID. The one inherited pair that collides,
-`openarm_left_ee_link1` / `openarm_left_link2` (written by the Setup Assistant, not listed by Enactic), is a `WARN` at every mast ID: seed 20261006, sample
-index 1112. The clamp (epsilon 1e-5 rad): 0 activations in M01 (mock reads exact values); in M02 244 activations in 20 episodes, the largest 8.5e-7 rad
-(`openarm_left_joint4`), 0 readings beyond the epsilon. The A6 report is unchanged by A7: `verify_a6.sh` at the same commit gives 20 `PASS`, 6 `WARN`, 0
-`FAIL` and the same 14 config ids (`20261007T110438Z_dev.json`). The earlier report `20261007T104515Z_a7.json` describes `e15df81`, one commit before, which
-differed only in two check names.
+Recorded run: commit `bcd8059` (code; later commits are documentation only), from a clean build of the five upper-body packages, evidence `20261007T164239Z_a7.json`: **13 `PASS`, 1 `WARN` (V01), 0 `FAIL`, 0 `NOT_RUN`**, with no `warnings` list: M03 has no WARN class. M01 passed 12 of 12 poses at each of the four mast IDs (worst final error 0.001 rad), M02 12 of 12 at `mast_1350` (0.00111 rad), M04 rejected the joint goal and timed out on the pose goal. M03: 113 pairs disabled (36 `Adjacent`, 77 `ConstantTransform`, 20 of them declared by upstream), 448 enabled; every disabled pair has a reason that can be shown, the 77 constant pairs are clear in their one evaluation at every mast ID. The clamp (epsilon 1e-5 rad): 0 activations in M01; in M02 242 activations in 22 episodes, the largest 8.3e-07 rad, 0 readings beyond the epsilon. The A6 report: `verify_a6.sh` at the same commit gives 22 `PASS`, 6 `WARN`, 0 `FAIL`, 0 `NOT_RUN` and the same 14 config ids (`20261007T164436Z_dev.json`).
 
-**What the sampled part of M03 does and does not establish.** Sampling falsifies; it does not certify. Its result is a sentence with two
-numbers in it: *no counterexample was found among our 267 sampled pairs in N = 2000 random joint states at seed 20261006, at each of the four mast
-IDs.* It is not "validated", because the collisions it is looking for are rare (a 20000-sample run at seed 7 found 14 of the 458 `Never` pairs
-colliding, once to six times each, all arm-against-arm), and a larger N or another seed could find one. What does not depend on N or on the seed is
-the by-construction part: a pair with no joint between its links has a constant relative transform, so one evaluation settles every configuration
-(77 of our 344 `Never` pairs, tested against an independent forward kinematics). The matrix itself is a checked-in file (`config/openamrobot.srdf`,
-fingerprint in `config/acm/acm_generation.yaml`): its generator has no seed, so regenerating gives a different matrix and is a proposal for a
-new contract, not a verification step.
+**The harness fix did not change a number that mattered.** The suites re-run on the tree before the matrix changed, with the fixed harness: A6 `20261007T155047Z_dev.json` 22 `PASS` / 6 `WARN` / 0 `FAIL` (the 20 / 6 / 0 of P11 plus the new H01 and H02, every old check with the same result and the same 14 config ids), and A7 `20261007T160453Z_a7.json` 13 `PASS` / 1 `WARN` / 0 `FAIL` (the 11 / 1 / 0 of P11 plus H01 and H02). The runs between those and the recorded one are in the evidence directory and are failures worth reading: `e682825` failed G02 through the new process guard (`joint_state_publisher` exited 1 at shutdown, and the `gz` server of that run was left running after the launch ended), and `832b990` failed AUX on a bug in the guard itself, which the report named.
+
+**What the sampled part of M03 is now.** Information, not a result and not a reason: 2000 random joint states per mast ID at seed 20261006, and the ENABLED pairs found colliding with how often (37 of 448 enabled pairs collided in some of them, the same at every mast ID). Sampling falsifies and never certifies, so nothing in the matrix rests on it; a pair that collides often although the matrix is right tells A4 something about reach and clearance, and the commonest are arm links against `mast_base_link` (`mast_base_link` <-> `openarm_left_ee_base_link`: 48 of 2000). The by-construction part does not depend on N or on the seed: no movable joint between two links means a constant transform, one evaluation settles every configuration, tested against an independent forward kinematics. The matrix is a checked-in file (`config/openamrobot.srdf`, fingerprint in `config/acm/acm_generation.yaml`) and it is **derived, not sampled**: regenerating it gives the same matrix every time (`test_acm_generation.py` does it twice), where the Setup Assistant's sampler, which has no seed, gave a different one on every run.
+
+**Planning time before and after** the matrix went from 458 sampled `Never` pairs (plus 36 `Adjacent`) to 113 justified pairs, offline, 20 repeats x 2 rounds of the twelve named-pose plans (OMPL RRTConnect): the whole sequence took a median of 0.42 to 0.43 s before and 0.455 s after, every plan succeeded both times; per pose in the MoveIt package README. In the real stack (M01 and M02, through `move_group` and the controllers) every named pose still plans and executes. MoveIt does not expose a collision-check count to `moveit_py`.
 
 **What `simulation` permits here:** every claim reads *"plans and executes in simulation under declared OpenAMRobot limits"*. The limits
 are engineering defaults (`source: engineering_default`, `status: placeholder`) because upstream declares no acceleration limits
@@ -128,8 +118,55 @@ The A7 WARNs and findings, beyond the A6 ones (W01, W02, E01, T04, T08, V01 abov
 | gripper interface | option 1 is in use; the choice is open on manipulation#11 | Om and Adnan; the evidence is in the MoveIt package README |
 | start-state tolerance | MoveIt 2.12.4 refuses a start state any amount past a joint limit, and in Gazebo `home` (joint 4 on its lower limit 0) reads back up to 9.9e-7 rad past it. `move_group` plans from a joint state clamped to the limit by at most 1e-5 rad (`joint_state_clamp.py`); the clamp's count and largest magnitude are in the report (`clamp`); a reading beyond the epsilon is never clamped. Upstream's `home` on its own limit is itself reportable upstream | nothing here: the clamp is a simulation workaround, and the choice of where a tolerance may live on a real robot is not made |
 | `move_group` shutdown | exits with SIGSEGV when stopped; allowed for that one process | upstream MoveIt |
-| M03 WARN | inherited pairs (both links upstream's) that are disabled as `Never` and collide in sampled states, named in the report's `warnings` with pair, seed and sample index. At the recorded commit: `openarm_left_ee_link1` / `openarm_left_link2`, which the Setup Assistant wrote (Enactic did not list it) | an upstream-side decision, or enabling the pair in a new contract; it is not re-enabled by the check. Left-arm against right-arm pairs depend on how this model places the arms, which is ours |
-| M03 matrix | the matrix is a sampling conclusion from an unseeded generator | nothing: it is the contract, and M03 validates that file |
+| enabled pairs | the matrix disables 113 of 561 pairs of geometry-bearing links and enables the rest; planning pays for it (above); 37 enabled pairs collide in some random states, mostly an arm link against `mast_base_link` | nothing to clear: information for A4 (reach and clearance) |
+
+## The harness cannot lie (P12A)
+
+A report is only worth the failures it can show. P12A planted failures on purpose (`scripts/harness_canary.py`: an assertion, a collection error, a timeout, a
+self-inflicted SIGSEGV, a test named for an unlisted check ID, and for launch tests a process that dies of SIGSEGV or cannot start, with and without a process
+check) in each of the five packages that contribute checks, ran the real entry points, and read the reports.
+
+**Before the fix**, the holes (each demonstrated by running something, none argued from the code alone):
+
+| Hole | What happened |
+|---|---|
+| a package that is run but not read | `verify_a6.sh` ran the control package's tests and the report never opened its results: ten canaries failing, **exit 3 and 0 FAIL** (3 is "everything passed, tree dirty") |
+| a result under a check ID no report lists | `test_q99_*` fails in the xunit file and the report drops it: nothing says so. In A6 the same happened for real: the flaky failures of the A7-gated M01/M02 (two of three runs failed, "Processes under test stopped before tests completed") were dropped because A6 does not list M01/M02 |
+| the exit status | `colcon test` exits **0 whatever its tests did**; only `colcon test-result` exits 1. The scripts passed the former to the report, so a step "that exited 0" meant nothing |
+| a check with a sidecar and no test behind it | `combine("T04", None, <a PASS sidecar>)` returned `PASS`, so a test that wrote its sidecar and then died would leave its check green (shown on the function; no real suite produced it) |
+| a launch whose processes die | a process of a launch test that dies of SIGSEGV while the test passes, or that cannot be started, is a passing test: `launch_testing` never looks. The log of a real G01 run showed `parameter_bridge` aborting at shutdown (`corrupted double-linked list`), reported by nobody |
+
+What was **not** swallowed: assertion failures, collection errors, timeouts and pytest processes that die of a signal were all caught (ament writes a
+`missing_result` stand-in), as AUX failures, in the four packages that were read. The P10 M03 mutation test failed in P10's own xunit and the report did say
+`M03: FAIL` with that test named in `failed_tests`; what was missing was a reader. The scope is therefore specific, not general, and the numbers survive (below).
+
+**The mechanism now:**
+
+* `NOT_RUN` is a result of its own (above). A `PASS` needs a test that ran behind it; a sidecar alone is `NOT_RUN`.
+* **H02**: every test CMake registered (`ctest -N`) must have left a fresh, complete result file. A timeout, a signal, a collection error, a package with
+  nothing registered and a stale file are listed by name, and the checks they back are `NOT_RUN`.
+* results under an ID the report does not list are folded into AUX and fail it; every package a script runs is read, and cleared before the run; the scripts
+  take `colcon test-result`'s exit status.
+* **H01**: every `test_*.py` is registered in its package's CMakeLists, and every launch test module ends with a post-shutdown test that names the processes it
+  cannot do without and calls `launch_guard.assert_launch_healthy`, and its last active test calls `assert_no_process_died`: in the active phase `proc_info` holds the
+  processes that have exited so far, so a non-zero exit there is a crash in the middle of a test, caught before the shutdown allowances below can hide it. A process that
+  never started is not in `proc_info` at all (an ExecuteProcess with a missing executable: the launch carries on and the test passes), so only the list of expected processes notices it.
+  The non-zero exits it allows are listed with their reasons in `launch_guard.py`: `move_group` -11 (known, at every stop), the `gz sim` ruby wrapper -2 or -15
+  (the launch's own shutdown signals), and `parameter_bridge` -6, a heap-corruption abort at shutdown that is **a finding to take to platform-sw**, allowed only
+  so that it does not make G01/G02/M02 flaky.
+
+| Package | assert | collect | timeout | signal (pytest) | launch: process dies | launch: process never starts | unlisted ID |
+|---|---|---|---|---|---|---|---|
+| description | AUX → AUX | AUX → AUX | AUX → AUX, H02 | AUX → AUX, H02 | — → H01 / AUX | — → H01 / AUX | — → AUX |
+| control | — → AUX | — → AUX | — → AUX, H02 | — → AUX, H02 | — → H01 / AUX | — → H01 / AUX | — → AUX |
+| bringup | AUX → AUX | AUX → AUX | AUX → AUX, H02 | AUX → AUX, H02 | — → H01 / AUX | — → H01 / AUX | — → AUX |
+| gazebo † | AUX → AUX | AUX → AUX | AUX → AUX, H02 | AUX → AUX, H02 | — → H01 / AUX | — → H01 / AUX | — → AUX |
+| moveit † | AUX → AUX | AUX → AUX | AUX → AUX, H02 | AUX → AUX, H02 | — → H01 / AUX | — → H01 / AUX | — → AUX |
+
+Each cell is *the check that showed the failure before → after*; **—** means the report showed nothing and the entry point exited 0 (3 on the dirty tree, which is how the ten failing canaries of the control package ended). `H01 / AUX`: H01 fails an unguarded launch test statically, and a guarded one fails dynamically as an AUX failure. † gazebo and moveit were exercised in the combined A7 run (their tests only run there); description, control and bringup in `verify_a6.sh`, one package at a time, and bringup again in the A7 run.
+
+Re-run the canaries: `python3 scripts/harness_canary.py inject <package dirs>`, `colcon build`, run `verify_a6.sh` or `run_a7_regression.sh`, `... remove <package dirs>`.
+They are never left in a tree: a tree with canaries is dirty and a report is not written from it.
 
 ## Result values
 
@@ -138,9 +175,10 @@ The A7 WARNs and findings, beyond the A6 ones (W01, W02, E01, T04, T08, V01 abov
 | `PASS` | The check ran and its condition held |
 | `WARN` | It ran, and found something a reader must know; not a defect in this package. It is not `PASS` |
 | `SKIP` | It did not run, with the reason. Not `PASS`. The only legitimate `SKIP` is C02 with no `src/upstream/` checkout |
-| `FAIL` | A condition was violated, or no result was recorded. Always fails the run |
+| `FAIL` | A condition was violated. Always fails the run |
+| `NOT_RUN` | The check's backing test did not run to a result: no test for the check, a test that timed out or died of a signal, a sidecar with no test result behind it, a registered test that left no result file. **Never `PASS`, never `SKIP`**, and it fails the exit status like `FAIL`. Added in P12A; the shared vocabulary of `VERIFICATION.md` (H-CI-2) has four values and has to adopt it |
 
-Current result: 20 `PASS`, 6 `WARN`, 0 `SKIP`, 0 `FAIL` with the upstream checkout present.
+Current result (A6, `evidence/20261007T164436Z_dev.json`): 22 `PASS`, 6 `WARN`, 0 `SKIP`, 0 `FAIL`, 0 `NOT_RUN` with the upstream checkout present.
 
 ## The six WARNs
 
