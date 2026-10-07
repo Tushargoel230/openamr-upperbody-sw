@@ -16,11 +16,10 @@ from sensor_msgs.msg import JointState
 from std_srvs.srv import Trigger
 
 ERROR_NAMES = {value: name for name, value in vars(MoveItErrorCodes).items() if name.isupper() and isinstance(value, int)}
-# What counts as the pipeline REFUSING a goal, as opposed to searching and failing or running out of time. These are the codes MoveIt
-# uses for a request it will not plan (an invalid or colliding start/goal, an unknown group, constraints it cannot build).
-REFUSAL_CODES = ("GOAL_IN_COLLISION", "GOAL_STATE_INVALID", "GOAL_VIOLATES_PATH_CONSTRAINTS", "GOAL_CONSTRAINTS_VIOLATED",
-                 "INVALID_GOAL_CONSTRAINTS", "START_STATE_IN_COLLISION", "START_STATE_INVALID", "INVALID_GROUP_NAME",
-                 "INVALID_ROBOT_STATE", "UNRECOGNIZED_GOAL_TYPE", "NO_IK_SOLUTION")
+# There is no table of "refusal" codes here on purpose (there was one until P12A): MoveIt 2.12.4 answers the generic FAILURE (99999) to the action and
+# to /plan_kinematic_path alike, for a start state outside bounds and for a goal in collision, so a client cannot tell a refusal from a failed search
+# by the code. The reason exists only in move_group's log ("... outside bounds by", "Planner 'OMPL' failed with error code GOAL_STATE_INVALID"), which is
+# what M04 and the clamp's loop test read.
 
 
 def error_name(code):
@@ -136,7 +135,7 @@ class MoveGroupClient:
         lower, upper), so a recording says what the start-up transient was instead of hiding it.
 
         Why: MoveIt's CheckStartStateBounds refuses a request whose start state is even slightly outside a joint's limit
-        (START_STATE_INVALID), and a joint resting on its limit (the grippers' fingers at 0) can read a few 1e-5 rad past it while a
+        (the reply is the generic FAILURE; the reason is only in move_group's log), and a joint resting on its limit (the grippers' fingers at 0) can read a few 1e-5 rad past it while a
         simulated model settles after spawning. That is a property of the start-up of the stack, not of the poses under test."""
         transient, clean_since = [], [None]
 

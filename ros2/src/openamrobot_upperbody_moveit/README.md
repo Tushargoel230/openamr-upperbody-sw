@@ -155,7 +155,7 @@ because the arms cannot reach the base body) plans (plan only) to a left-arm joi
 |---|---|
 | a free named pose (`hands_up`), the control | planned |
 | the **joint goal** inside the mast volume | **rejected**: answered 0.019 s after the control; `move_group`'s log says OMPL found the contact, "Unable to sample any valid states for goal tree", "Invalid goal state", `Planner 'OMPL' failed with error code GOAL_STATE_INVALID` |
-| the **pose goal** at the same place | **timed out**: it searched 4.99 s more than the control (the whole budget) looking for a valid goal sample, then failed with the same code |
+| the **pose goal** at the same place | **timed out**: it searched 4.99 s more than the control (the whole budget) looking for a valid goal sample, then failed with the same log verdict |
 
 "Rejected" and "timed out" are different claims and MoveIt 2.12.4 reports both as `FAILURE (99999)` with a planning time of 0 at the
 action and at the service, so the check classifies on time spent beyond the control and asserts the planner's own log line for the joint
@@ -226,8 +226,8 @@ MoveIt 2.12.4 refuses a request whose start state is any amount outside a joint'
 ("Joint 'openarm_left_joint4' from the starting state is outside bounds by: [-2.5e-07] should be in the range [0], [2.4435]"), there is no
 `FixStartStateBounds` in the installed adapter set, and removing the adapter does not help because OMPL's planning context refuses the same state.
 `home` puts joint 4 exactly on its lower limit, and Gazebo reads a joint resting on a limit back a hair past it. **MoveIt answers the generic
-`FAILURE` (99999) to this, to the action and to the service alike** (an earlier version of this README said `START_STATE_INVALID`; that code is
-not what the installed MoveIt returns on this path, and the reason is only in `move_group`'s log).
+`FAILURE` (99999) to this, to the action and to the service alike** (an earlier version of this README, and the retry loop of M01/M02, named
+a specific reason code; this path never returns one, and the reason is only in `move_group`'s log).
 
 Of the three ways out the one taken is to clamp the joint state, and only that: widening a limit would invent vendor data (what ADR-009 exists to
 forbid), and moving `home` would invent a pose (what `park`'s placeholder comment refuses to do). `scripts/joint_state_clamp.py` subscribes to

@@ -1,6 +1,6 @@
 """The simulated start state's float noise, clamped to the joint limit, counted, and nothing else.
 
-Why it exists. MoveIt 2.12.4 answers START_STATE_INVALID to a request whose start state is any amount outside a joint's limits: the
+Why it exists. MoveIt 2.12.4 refuses a request whose start state is any amount outside a joint's limits (the reply is the generic FAILURE; the reason, "outside bounds by", is only in move_group's log): the
 `CheckStartStateBounds` adapter is strict, there is no `FixStartStateBounds` in the installed adapter set, and OMPL's planning context
 refuses the same state. Upstream's `home` puts `openarm_*_joint4` exactly on its lower limit (0), and in Gazebo a joint resting on a limit
 reads back a hair past it (-2.5e-7 and -9e-8 were seen). That is the simulator's float noise, not a robot state, so the one thing done about
