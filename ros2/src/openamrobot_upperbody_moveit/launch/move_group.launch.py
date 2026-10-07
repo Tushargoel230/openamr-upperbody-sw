@@ -3,11 +3,15 @@ is already running (robot_state_publisher, the controller manager, joint states)
 openamrobot_upperbody_bringup's moveit.launch.py, which starts the stack too.
 
     ros2 launch openamrobot_upperbody_moveit move_group.launch.py [mast_id:=mast_1350] [hardware_profile:=mock|gazebo] [rviz:=false]
+                                                                  [clamp_joint_states:=true]
 
 Args
   mast_id           mast_1300 | mast_1350 | mast_1400 | mast_1450   (default mast_1350, the release configuration)
   hardware_profile  mock | gazebo    which stack is running; `gazebo` also sets use_sim_time (the simulator's /clock)
   rviz              true | false     RViz2 with the MotionPlanning display (config/moveit.rviz)
+  clamp_joint_states  true | false   start joint_state_clamp.py and plan from /joint_states_clamped instead of /joint_states: the simulated
+                                     joint state with float noise past a limit (at most 1e-5 rad) taken off, counted and logged. Simulation only:
+                                     see joint_state_clamp.py for why it exists and what it is not. Nothing else reads the clamped topic
 
 The configuration comes from MoveItConfigsBuilder over the combined xacro and this package's own files (moveit_config.py). Everything is
 simulation: nothing here claims a physical limit (ADR-009).
@@ -28,6 +32,9 @@ TRAJECTORY_EXECUTION = {
 }
 
 
+CLAMPED_TOPIC = "/joint_states_clamped"       # what joint_state_clamp.py publishes
+
+
 def launch_setup(context, *args, **kwargs):
     from openamrobot_upperbody_moveit.moveit_config import moveit_config
 
@@ -37,7 +44,14 @@ def launch_setup(context, *args, **kwargs):
     config = moveit_config(mast_id, profile)
     parameters = [config.to_dict(), TRAJECTORY_EXECUTION, {"use_sim_time": use_sim_time, "publish_robot_description_semantic": True}]
 
-    nodes = [Node(package="moveit_ros_move_group", executable="move_group", output="screen", parameters=parameters)]
+    clamp = LaunchConfiguration("clamp_joint_states").perform(context) == "true"
+    # move_group plans from the clamped copy of /joint_states (a relative-name remap of the topic its planning scene monitor subscribes to);
+    # robot_state_publisher, RViz and everything else keep the raw one.
+    nodes = [Node(package="moveit_ros_move_group", executable="move_group", output="screen", parameters=parameters,
+                  remappings=[("joint_states", CLAMPED_TOPIC)] if clamp else [])]
+    if clamp:
+        nodes.append(Node(package="openamrobot_upperbody_moveit", executable="joint_state_clamp.py", name="joint_state_clamp", output="screen",
+                          parameters=[{"robot_description": config.robot_description["robot_description"], "use_sim_time": use_sim_time}]))
     if LaunchConfiguration("rviz").perform(context) == "true":
         rviz_config = get_package_share_directory("openamrobot_upperbody_moveit") + "/config/moveit.rviz"
         nodes.append(Node(package="rviz2", executable="rviz2", output="log", arguments=["-d", rviz_config],
@@ -52,5 +66,7 @@ def generate_launch_description():
         DeclareLaunchArgument("mast_id", default_value="mast_1350", description="mast_1300 | mast_1350 | mast_1400 | mast_1450"),
         DeclareLaunchArgument("hardware_profile", default_value="mock", description="mock | gazebo: which stack is running"),
         DeclareLaunchArgument("rviz", default_value="false", description="true | false. RViz2 with the MotionPlanning display"),
+        DeclareLaunchArgument("clamp_joint_states", default_value="true",
+                              description="true | false. Plan from /joint_states_clamped (float noise past a limit clamped, counted, logged)"),
         OpaqueFunction(function=launch_setup),
     ])

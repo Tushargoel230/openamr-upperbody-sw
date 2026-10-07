@@ -20,6 +20,10 @@
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>rviz2</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
+  <!-- joint_state_clamp.py and move_group_client.py: ROS core packages the workspace already has, declared where they are used -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
   <exec_depend>openamrobot_upperbody_description</exec_depend>
   <exec_depend>openamrobot_upperbody_control</exec_depend>
   <!-- M03 and M04 (collision sampling and planning, no controllers) are tests of this package. M01 and M02 start the mock bringup
