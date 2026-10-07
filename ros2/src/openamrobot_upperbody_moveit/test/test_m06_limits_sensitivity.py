@@ -1,4 +1,4 @@
-"""M06 (proposed; see the README): the named-pose plans NEED some acceleration limit and do not DEPEND on the values we invented (ADR-009).
+"""M06 (adopted 7 Oct, VERIFICATION.md): the named-pose plans NEED some acceleration limit and do not DEPEND on the values we invented (ADR-009).
 
 Runs scripts/limits_sensitivity.py: all twelve named-pose plans (both arms, both grippers) under the configured limits scaled by 1, 0.1, 0.01
 and 0.001, and under no acceleration limits at all (upstream's own state, manipulation#10). The A7 stop condition is "planning succeeds only
@@ -29,7 +29,7 @@ def test_m06_plans_succeed_at_every_scaling_of_the_configured_limits_and_fail_wi
     needs_some = result["without_limits"]["plans_ok"] < result["without_limits"]["plans"]
     write_sidecar("M06", "limits_sensitivity", "named-pose plans need some acceleration limit and do not depend on its value",
                   "FAIL" if load_bearing else "PASS",
-                  {"verdict": result["verdict"], "mast_id": result["mast_id"], "velocity_scaling": result["velocity_scaling"],
+                  {"verdict": result["verdict"], "conclusion": result["conclusion"], "mast_id": result["mast_id"], "velocity_scaling": result["velocity_scaling"],
                    "variants": [{k: v[k] for k in ("variant", "acceleration_scaling", "plans", "plans_ok", "total_duration_s")}
                                 for v in result["variants"]],
                    "without_limits": {k: result["without_limits"][k] for k in ("variant", "plans", "plans_ok")},
@@ -37,5 +37,7 @@ def test_m06_plans_succeed_at_every_scaling_of_the_configured_limits_and_fail_wi
                    "meaning": "the acceleration limits are engineering defaults tagged placeholder (ADR-009); the plans succeed with them scaled "
                               "down a thousandfold, so they are not what makes planning succeed, they are only what lets MoveIt's time "
                               "parameterisation run at all"})
+    # The conclusion has two halves or it is an overclaim: what the sensitivity retires, and that the limits stay placeholders.
+    assert "retires the A7 stop condition" in result["conclusion"] and "NOT make the limits any less of a placeholder" in result["conclusion"]
     assert not load_bearing, f"the plans depend on the invented values: fail under {load_bearing}"
     assert needs_some, "with no acceleration limits the plans still succeed: the premise of manipulation#10 no longer holds; re-read ADR-009"

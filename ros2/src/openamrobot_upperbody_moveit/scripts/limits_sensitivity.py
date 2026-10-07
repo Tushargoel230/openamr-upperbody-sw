@@ -117,6 +117,26 @@ def print_summary(out):
     if nl:
         print(f"  {nl['variant']:<58} {nl['plans_ok']:>2}/{nl['plans']} plans")
     print("  " + out["verdict"])
+    if out.get("conclusion"):
+        print("  " + out["conclusion"])
+
+
+PLACEHOLDER_CLAUSE = ("It does NOT make the limits any less of a placeholder: they stay engineering defaults (velocity / 2 s; source "
+                      "engineering_default, status placeholder; ADR-009) with no payload, torque or controller analysis behind them.")
+
+
+def conclusion(out):
+    """The conclusion in words, both halves, or it is an overclaim (VERIFICATION.md M06): what the sensitivity retires, and what it leaves."""
+    if out["result"] == "FAIL":
+        return ("The plans depend on the values we invented, so the A7 stop condition ('planning succeeds only because the acceleration limits "
+                "we invented are generous') HAS occurred. " + PLACEHOLDER_CLAUSE)
+    needs_some = out["without_limits"]["plans_ok"] < out["without_limits"]["plans"]
+    first = ("Planning requires that SOME acceleration limits exist and is insensitive to our values across three orders of magnitude "
+             "(x1 to x0.001), which retires the A7 stop condition 'planning succeeds only because the acceleration limits we invented are "
+             "generous'." if needs_some else
+             "Planning succeeds under every scaling and with no acceleration limits at all, so it does not even need our values, which retires "
+             "the A7 stop condition 'planning succeeds only because the acceleration limits we invented are generous'.")
+    return first + " " + PLACEHOLDER_CLAUSE
 
 
 def main(argv=None):
@@ -156,6 +176,7 @@ def main(argv=None):
         out["verdict"] = ("The plans succeed under every scaling of the configured limits (x1000 range) and fail with none: they need SOME "
                           "acceleration limit to exist and do not depend on its value; only the planned durations change.")
     out["result"] = "FAIL" if tight_fail else "PASS"
+    out["conclusion"] = conclusion(out)
     print_summary(out)
     if args.json:
         with open(args.json, "w") as f:
