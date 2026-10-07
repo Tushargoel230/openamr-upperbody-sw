@@ -92,11 +92,16 @@ exit status is 1 if a check is `FAIL`, 3 if everything passed but the tree is di
 | M06 | the named-pose plans need some acceleration limit and are insensitive to our values across three orders of magnitude, which retires the stop condition "planning succeeds only because the limits we invented are generous"; **it does not make the limits any less of a placeholder** (ADR-009) |
 | L01, I01, V01, AUX | as in the A6 report, for the packages this one touches; V01 now has **eight** checklist items (item 8: an arm executes a named pose in RViz and the preview matches what the robot then does) and stays `WARN` until a person has answered them |
 
-Recorded run: commit `4567b02` (code; later commits are documentation only), from a clean build of the five upper-body packages, evidence
-`20261006T212830Z_a7.json`: **10 `PASS`, 1 `WARN` (V01), 1 `FAIL` (M03)**. M01 passed 12 of 12 poses at each of the four mast IDs (worst final error
-0.001 rad, no start-state retries), M02 12 of 12 at `mast_1350` (0.00096 rad, no retries), M04 rejected the joint goal and timed out on the pose goal.
-M03 fails on one pair, `openarm_left_ee_link1` / `openarm_left_link2`, at every mast ID; the script therefore exits 1. The A6 report is unchanged
-by A7: `verify_a6.sh` at the same commit gives 20 `PASS`, 6 `WARN`, 0 `FAIL` (`20261006T213101Z_dev.json`).
+Recorded run: commit `6871713` (code; later commits are documentation only), from a clean build of the five upper-body packages, evidence
+`20261007T110122Z_a7.json`: **11 `PASS`, 1 `WARN` (V01), 0 `FAIL`**, plus four M03 `WARN`s in the report's `warnings` (below). M01 passed 12 of 12 poses at
+each of the four mast IDs (worst final error 0.001 rad, one request per pose: there is no retry any more), M02 12 of 12 at `mast_1350` (0.00117 rad),
+M04 rejected the joint goal and timed out on the pose goal. M03: of our 344 `Never` pairs, **77 were certified by construction** and **267 sampled**
+(2000 states per mast ID, seed 20261006): no counterexample, at any mast ID. The one inherited pair that collides,
+`openarm_left_ee_link1` / `openarm_left_link2` (written by the Setup Assistant, not listed by Enactic), is a `WARN` at every mast ID: seed 20261006, sample
+index 1112. The clamp (epsilon 1e-5 rad): 0 activations in M01 (mock reads exact values); in M02 244 activations in 20 episodes, the largest 8.5e-7 rad
+(`openarm_left_joint4`), 0 readings beyond the epsilon. The A6 report is unchanged by A7: `verify_a6.sh` at the same commit gives 20 `PASS`, 6 `WARN`, 0
+`FAIL` and the same 14 config ids (`20261007T110438Z_dev.json`). The earlier report `20261007T104515Z_a7.json` describes `e15df81`, one commit before, which
+differed only in two check names.
 
 **What the sampled part of M03 does and does not establish.** Sampling falsifies; it does not certify. Its result is a sentence with two
 numbers in it: *no counterexample was found among our 267 sampled pairs in N = 2000 random joint states at seed 20261006, at each of the four mast
