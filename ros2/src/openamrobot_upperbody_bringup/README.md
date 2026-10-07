@@ -65,8 +65,10 @@ simulator.
 send every SRDF named pose to `move_group` (both arms: `hands_up`, `home`, `hands_up`, `park`; both grippers: `closed`, `open`, each with its
 own value), which plans and executes through the trajectory execution manager into the real controllers, and require a **final joint error
 under 0.01 rad** after a one second settle. The record (a sidecar per run) holds every pose's outcome, planning and wall time and error, and
-the number of `START_STATE_INVALID` retries (see the MoveIt package README: MoveIt refuses a start state 1e-7 rad past a limit, and a
-simulated joint resting on its limit can read that way). M02 starts a headless Gazebo server in its own ROS domain and Gazebo partition and
+the joint-state clamp's counters (see the MoveIt package README, "The joint-state clamp": MoveIt refuses a start state any amount past a limit,
+and a simulated joint resting on its limit reads back a hair past it, so `move_group` plans from a copy of `/joint_states` with that noise taken
+off, at most 1e-5 rad of it, and the sidecar carries how often that happened and the largest amount). There is **no retry**: a refused request
+is a failed pose. M02 starts a headless Gazebo server in its own ROS domain and Gazebo partition and
 passes `bullet-featherstone` explicitly. `simulation` class throughout.
 
 They **skip unless `OPENAMR_A7=1`** (`run_a7_regression.sh` sets it): `verify_a6.sh` runs this package's whole `colcon test`, and it must neither

@@ -5,6 +5,10 @@ Numeric checks are not visual ones: the 80 mm square mast section passed every t
 **"Looks fine" does not clear it.** Answer each of the eight items below in your own words: what you saw, and for the "wrong would look like"
 case, that it did not.
 
+**The mast items describe the current build.** The 7 Oct hardware decisions replace the fixed mast with a lift (this branch implements the
+configuration in force when it was written, and the lift migration is tracked separately), so what items 1 to 4 describe will change. Answer for
+what is **on the screen now**, not for what is coming.
+
 ## Start the simulator and RViz
 
     export ROS_DOMAIN_ID=42 GZ_PARTITION=v01          # in every terminal you use below (see the note)
@@ -64,9 +68,9 @@ Look at both windows for each item. Gazebo shows what the physics built; RViz sh
    other arm in the preview, a gripper whose fingers do not close together, one hand closing while the other opens for the same named pose
    (the two hands take opposite-signed joint values, so each must close its own fingers), the robot in Gazebo and the Scene Robot in RViz
    in different poses afterwards.
-   *If RViz says "Planning failed" or the log says `START_STATE_INVALID` right after the arm has been at `home`:* press Plan again.
-   In Gazebo `home` sets elbow joint 4 exactly on its lower limit (0) and the simulator can read it 1e-7 rad past it, which MoveIt refuses
-   (see the MoveIt package README). That is a known limitation, not what this item is looking for.
+   *If RViz says "Planning failed" right after the arm has been at `home`:* that should not happen any more. In Gazebo `home` sets elbow
+   joint 4 exactly on its lower limit (0) and the simulator reads it a hair past it, which MoveIt refuses; `move_group` now plans from a
+   joint state with that noise clamped (see the MoveIt package README, "The joint-state clamp"). If you see it, say so: it is a finding.
 
 A trajectory to run for item 6 (moves the left arm's joints 1, 2 and 4 over 4 seconds):
 

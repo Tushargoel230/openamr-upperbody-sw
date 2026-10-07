@@ -32,16 +32,28 @@ package (ADR-007).
    `closed`. The virtual joint is fixed because the base does not move during manipulation (AD-30), and because of W02: KDL has no
    planar joint, so planning against a planar root would be planning against a joint `robot_state_publisher` has already turned
    into a fixed one. Base motion in simulation comes from Gazebo's `odom -> base_link`.
-3. **Generated:** the self-collision matrix for the combined model's own links, between the `BEGIN`/`END GENERATED ACM` markers.
+3. **Generated:** the self-collision matrix for the combined model's own links, between the `BEGIN`/`END GENERATED ACM` markers. Together
+   with the imported arm-internal pairs it is **the collision-matrix contract**: this checked-in file is what M03 validates, and its
+   fingerprint is recorded in `config/acm/acm_generation.yaml` (a test fails if the matrix changes without the record changing).
 
-### Regenerating the collision matrix (every setting)
+### The collision matrix is a checked-in contract; regenerating it only proposes
 
 ```bash
-ros2 run openamrobot_upperbody_moveit regenerate_acm.sh [--trials N] [--mast-id mast_1350]
+ros2 run openamrobot_upperbody_moveit regenerate_acm.sh [--trials N] [--mast-id mast_1350]         # a PROPOSAL: prints the diff, changes nothing
+ros2 run openamrobot_upperbody_moveit regenerate_acm.sh --write                                    # replaces the contract: a decision, read the diff
 ```
 
-It runs the MoveIt Setup Assistant's `collisions_updater` and `scripts/merge_acm.py` merges its output into the SRDF. Every setting
-is also written to `config/acm/acm_generation.yaml`, which `test_acm_generation.py` reads back.
+**`collisions_updater` takes no seed.** Checked on the installed tool: `--help` lists `--config-pkg --urdf --srdf --output --xacro-args
+--default --always --keep --verbose --trials --min-collision-fraction` and no seed, `ComputeDefaultCollisions` takes the number of trials and
+nothing else, and it samples with `RobotState::setToRandomPositions()`, whose generator is seeded from the system. Measured: two runs at the same
+settings gave 473 and 468 `Never` pairs at 3000 trials, three runs at 10000 gave 455, 456 and 458, and a fresh 10000-trial run against the contract
+below differs from it in 11 pairs (3 only in the run, 8 only in the contract; all of them left-arm against right-arm links). So **running the
+procedure again is not a verification step**: it is a proposal for a new contract. The contract is the SRDF in the repository, and what verifies
+it is `scripts/validate_acm.py` (M03, below), which is seeded.
+
+The script runs the MoveIt Setup Assistant's `collisions_updater`, `scripts/merge_acm.py` merges its output into a **copy** of the SRDF, and the
+diff against the contract is printed. Without `--write` the contract and its record are untouched; with `--write` the SRDF and
+`config/acm/acm_generation.yaml` (every setting, and the new fingerprint) are rewritten, and the commit that does it is a contract change.
 
 | Setting | Value | Note |
 |---|---|---|
@@ -49,20 +61,20 @@ is also written to `config/acm/acm_generation.yaml`, which `test_acm_generation.
 | Model | `combined_robot.xacro`, args `mast_id:=mast_1350 arm_package:=openarm hardware_profile:=mock` | the release configuration (rev 18.2) |
 | Input SRDF | `config/openamrobot.srdf` as it is; its own `disable_collisions` are **not** kept (`--keep` off) | the tool recomputes every pair |
 | Samples | `--trials 10000` (the script refuses fewer) | |
+| Seed | **none: the tool has no such option** | see above |
 | "Never in collision" | on (always on in the tool) | pairs that collided in no sample |
 | "Adjacent" | on (always on in the tool) | pairs adjacent in the kinematic tree |
 | "Default" | on (`--default`) | pairs that collide in the default state: the two finger links of each hand |
 | "Always in collision" | **off** (no `--always`) | the run found 0 such pairs; one would be a modelling question, not something to disable |
 | Min. collision fraction | the tool's default, unused because "always" is off | |
 
-Recorded run (2026-10-06): 46 links, 1035 possible pairs, 0 always, **458 never**, 2 default, 34 adjacent, 541 sometimes in
-collision; 494 disabled in total; 20 of them were already imported from upstream, so 474 are in the generated block.
+The contract (recorded 2026-10-06, `contract:` in `acm_generation.yaml`): 46 links, 1035 possible pairs, 494 disabled pairs (458 `Never`, 36
+`Adjacent`), of which 20 are imported from upstream and 474 are in the generated block; fingerprint
+`sha256:f8254fac4550ef1254034d477e406d69c725a8facd8d7c8402fcd4e371803e45`.
 
-**The GUI was not driven.** The Setup Assistant GUI cannot be operated from a non-interactive session, so the headless tool of the
-same package was used. The tool loaded the combined model without trouble (the stop condition "the Setup Assistant cannot load the
-combined model" did not occur); opening `moveit_setup_assistant` on the same model and pressing "Generate Collision Matrix" at 10000
-samples gives the same kind of matrix. The sampling is random, so the set of `Never` pairs differs by a few pairs from run to run (455,
-456 and 458 in the three runs made here): that is the reason for M03 below.
+**The GUI was not driven.** The Setup Assistant GUI cannot be operated from a non-interactive session, so the headless tool of the same
+package was used. The tool loaded the combined model without trouble (the stop condition "the Setup Assistant cannot load the combined model"
+did not occur).
 
 ## Named poses
 
@@ -81,41 +93,62 @@ samples gives the same kind of matrix. The sampling is random, so the set of `Ne
 `GripperCommand` positions are `[0, 0.7854]` on the left hand and `[-0.7854, 0]` on the right. A "close the gripper" written as one
 number is valid for one hand and out of range for the other, and nothing fails where it is written. So the values above are written
 **per hand**, `named_poses.closed_value(side, limits)` derives each hand's value from its own URDF limit, and
-`test/test_gripper_sign.py` (check **M05**, proposed) fails the single-number version in both directions, by hand, plus a state that
+`test/test_gripper_sign.py` (check **M05**, adopted 7 Oct) fails the single-number version in both directions, by hand, plus a state that
 is in range but not the far limit, a missing state and an extra joint. The sign is also exercised live: M01 and M02 close and open
 each hand with its own value through the real controllers.
 
-## The collision matrix is validated by sampling (M03)
+## The collision matrix, split by who owns the claim (M03)
 
-`scripts/validate_acm.py` draws 2000 random joint states inside the limits at each of the four mast IDs (numpy `default_rng(seed)`,
-the same states at every mast ID) and checks collision **ignoring** the SRDF's list: the check uses an allowed-collision matrix of its
-own that allows everything except the pairs under test (`moveit_py`; the colliding pairs are found by bisection, because the contact
-map is not readable from Python). A pair disabled as `Never` that collides in any sample is a FAIL with the pair and a reproducing
-sample; the `Never` pairs that never collided are listed, which is the expected outcome. Pairs disabled as `Adjacent` or `Default` touch
-by design and are counted, not failed.
+"Never in collision" in a generated matrix is a **sampling conclusion**, not a certification: the tool's own count of `Never` pairs changes
+from run to run (above), and 20000 samples at another seed (7) found 14 of the 458 `Never` pairs colliding (a P10 diagnostic), all of them
+arm-against-arm. So M03 says what each part of the matrix can and cannot be held to, and `scripts/validate_acm.py` derives the parts.
 
-**Result at the recorded commit: M03 FAILS, and that is the finding.** At all four mast IDs the same pair collides in sample 1112 of
-2000 (seed 20261006): **`openarm_left_ee_link1` <-> `openarm_left_link2`**, the left finger link against the upper-arm link. The pair is
-arm-internal, so it cannot depend on the mast, and it does not. The other 457 `Never` pairs did not collide at any mast ID, including every
-pair involving the base, the mast, the wheels, the casters, the lidar and the cameras.
-The pair is **not** re-enabled here: the ACM is wrong for it, and which pair is wrong is the finding. A reproducing sample, rounded, is in the
-evidence file; `python3 scripts/validate_acm.py --mast-id mast_1350 --samples 2000` reproduces it, and the sample can be applied to the model
-directly.
+**Inherited and ours, derived from link provenance** (`openamrobot_upperbody_moveit/acm_split.py`; nothing is a list somebody keeps up to date).
+A link is *upstream's* if the frame contract's `owner` column says so (`upstream: ...`), else if it is named `openarm_*`; a link that is neither
+listed nor prefixed is ours, so an unknown link cannot hide a defect behind someone else's name. A pair whose two links are both upstream's is
+**inherited** (Enactic's arm: a collision there is a **WARN** carrying the pair, the seed and the sample index, an upstream observation and not a
+defect of ours); every other pair is **ours** (base, wheels, casters, lidar, camera, mast, plates, whatever is added next, and ours against
+upstream's): a colliding disabled pair there is a **FAIL**. The sets partition the matrix by construction, and `test_acm_split.py` proves it at
+every mast ID, proves that a link added later lands on the right side without an edit, and fails on a contract that contradicts the prefix.
 
-How fragile the matrix is (a diagnostic, not part of the check): 20000 samples at `mast_1350` with another seed (7) found **14 of the 458 `Never`
-pairs colliding**, each in 1 to 6 samples of 20000. All 14 are arm-against-arm pairs (left against right arm links, plus the finger-link2
-pair above); none involves the base, mast, wheels, casters, lidar or cameras. So 10000 samples are too few to certify the rarest arm-arm pairs,
-and the "never" classification is statistical: roughly one state in 5000 to 20000 reaches those pairs. The options for the architecture chat
-are in the report: regenerate with far more samples, enable the arm-arm pairs that the larger run found, or keep M03's N and accept that a
-rare pair is the expected finding.
+**Certified by construction.** Between two links of a kinematic tree there is one path. If no joint on it can move (all `fixed`, none a mimic),
+their relative transform is a constant, so the pair collides in every configuration or in none, and **one evaluation settles it**. Of our 344
+`Never` pairs, **77 are certified by construction** (55 among the platform's rigid hardware: the base, the casters and their wheels, the lidar, the camera and
+the mast base; and 22 between those and the two arms' base links, which are rigid on the mast plates) and are
+evaluated once, in the default state, at each mast ID; the other **267 are sampled** (they have an arm joint or a wheel joint on the path).
+The reasoning is tested against an independent forward kinematics (`test_acm_split.py`): every one of the 77 has the same relative pose at random
+configurations. As a further check on the reasoning (not as a certification) the first 200 sampled states must agree with the one evaluation,
+pair for pair; a disagreement is a FAIL that says the tree reasoning is wrong.
 
-M03's mutation test relabels a pair that really collides (`openarm_left_link1` / `openarm_left_link2`, adjacent) as `Never` and expects
-exactly that pair to be reported, so the check is shown to be able to fail.
+**What sampling does.** It falsifies; it does not certify. The sampled part of M03 means exactly this and nothing more: *no counterexample was
+found among our 267 sampled pairs in 2000 random joint states at seed 20261006, at each of the four mast IDs.* Not "validated". Another seed or
+more samples could find one, which is what the 14-of-458 diagnostic did for the inherited arm-arm pairs. The states are numpy
+`default_rng(seed)` draws inside the joint limits (continuous joints in [-pi, pi]), the same states at every mast ID; collision is checked with an
+allowed-collision matrix of its own that allows everything except the pairs under test, so nothing the SRDF says is consulted. The contact map is
+not readable from Python (the `Contact` type is not bound), so the colliding pairs are found by bisection.
 
-## M04: a goal inside a base-side volume is refused
+**Result at the recorded commit** (see the A7 section of `docs/verification.md` for the evidence file): **M03 PASS**. No disabled pair of ours
+collides: the 77 by-construction pairs are clear in their one configuration at each mast ID, and none of the 267 sampled pairs collided in 2000
+samples at seed 20261006. One inherited pair collides, as a **WARN**: `openarm_left_ee_link1` <-> `openarm_left_link2`, disabled as `Never`,
+first at sample index 1112 of 2000 at seed 20261006, the same at every mast ID (it is arm-internal, so it cannot depend on the mast). It is
+**not** re-enabled: the matrix is the contract and the finding is that it is a sampling conclusion. Note what the WARN's `origin` says: this pair
+is not one of the 20 Enactic listed (`imported_from_upstream`); the Setup Assistant wrote it (`generated_for_upstream_links`), so "an upstream
+observation" is true of the geometry and not of the matrix entry. And a `left_vs_right` pair is two Enactic links whose relative pose is set by
+**our** mast plates (datums), so a collision there is arguably ours; the rule as specified treats it as inherited and the WARN says `arms:
+left_vs_right`. Both are raised in the report.
 
-`test/test_m04_collision_goal_rejected.py` plans (plan only) to a left-arm joint state in which a left gripper link collides with
-`mast_base_link`, through `move_group`'s `/plan_kinematic_path`:
+**The mutation tests** (`test_m03_acm_sampling.py`) disable a pair that really collides as `Never` and require M03 to name exactly that pair by
+the route that applies: `mast_base_link` <-> `openarm_left_ee_base_link` (ours, sampled: 7 of 300 states), `base_link` <-> `mast_base_link` (ours,
+no joint between: by construction), and `openarm_left_link5` <-> `openarm_left_link6` (inherited: a WARN, exit 0). **The P10 version of this test
+never worked**: it relabelled `openarm_left_link1` / `openarm_left_link2` and expected more than 10 hits in 100 samples; those links collide in
+about 5 of 300 states, so it failed in P10's own run (`expected exit 1, got 0`) behind M03's real FAIL. The pairs above were measured to collide
+with nothing ignored before they were used.
+
+## M04: a goal inside the nearest reachable volume is refused
+
+`test/test_m04_collision_goal_rejected.py` (VERIFICATION.md's M04 row used to say "base collision volume"; it is corrected to *reachable*,
+because the arms cannot reach the base body) plans (plan only) to a left-arm joint state in which a left gripper link collides with
+`mast_base_link`, the nearest structure volume they can reach, through `move_group`'s `/plan_kinematic_path`:
 
 | Request | What happened |
 |---|---|
@@ -130,7 +163,7 @@ goal. Only the first is the robot refusing to hurt itself; the second would be a
 **The arms cannot reach the platform's base body.** In 6000 random left-arm states at `mast_1350` the left gripper touched `base_link`, the
 wheels, the casters, the lidar and the camera body in none of them, and M03's 8000 all-joint states found no collision of any arm link with
 `base_link`; the left gripper touched `mast_base_link` in 144 of the 6000. So the refused goal is inside `mast_base_link`'s volume, the nearest
-base-side volume a gripper can be put in. That the base body is out of reach is a reach fact for A4, not a defect here.
+base-side volume a gripper can be put in. That the base body is out of reach is a reach fact for A4, not a defect here (and the lift decided on 7 Oct will change it).
 
 ## The gripper fork (ADR-009 point 4, manipulation#11): what the installed plugins support
 
@@ -169,11 +202,14 @@ sets `has_acceleration_limits: false` on every joint), and MoveIt 2.12's time pa
 limit). It is **not vendor data**, and no payload, torque, inertia or controller analysis stands behind it. Velocity and position limits come from the
 URDF (upstream's) and are not repeated.
 
-`scripts/limits_sensitivity.py` (check **M06**, proposed) plans all twelve named poses under the configured limits scaled by 1, 0.1, 0.01
+`scripts/limits_sensitivity.py` (check **M06**, adopted 7 Oct) plans all twelve named poses under the configured limits scaled by 1, 0.1, 0.01
 and 0.001 and under no acceleration limits at all. Result: **12 of 12 succeed under every scaling** (planned duration 16 s in total at x1,
 517 s at x0.001: the effective limits go down to about 0.003 to 0.01 rad/s²) **and 0 of 12 succeed with none** (which reproduces #10). The plans
 need *some* acceleration limit to exist and do not depend on how generous ours are, so the A7 stop condition ("planning succeeds only because
-the limits we invented are generous") did not occur.
+the limits we invented are generous") did not occur. **Both halves of the conclusion, or it is an overclaim:** planning requires that some
+acceleration limits exist and is insensitive to our values across three orders of magnitude, which retires that stop condition; **and that does
+not make the limits any less of a placeholder**: they stay engineering defaults (`source: engineering_default`, `status: placeholder`), with no
+payload, torque or controller analysis behind them. The test fails if either half is missing from the recorded conclusion.
 
 ## Which physics engine M02 runs under, and why
 
@@ -182,6 +218,37 @@ the limits we invented are generous") did not occur.
 `closed` gripper pose may not close. **M02 passes `physics_engine:=gz-physics-bullet-featherstone-plugin` explicitly**, as G02 does, because
 its poses include the grippers and the per-hand sign is part of what it checks; the arm poses do not depend on the engine. The base's contact
 behaviour was compared on neither engine. `moveit.launch.py`'s `physics_engine` is empty by default, which means the simulator's default.
+
+## The joint-state clamp: simulator float noise, and nothing else
+
+MoveIt 2.12.4 refuses a request whose start state is any amount outside a joint's limits. The `CheckStartStateBounds` adapter is strict
+("Joint 'openarm_left_joint4' from the starting state is outside bounds by: [-2.5e-07] should be in the range [0], [2.4435]"), there is no
+`FixStartStateBounds` in the installed adapter set, and removing the adapter does not help because OMPL's planning context refuses the same state.
+`home` puts joint 4 exactly on its lower limit, and Gazebo reads a joint resting on a limit back a hair past it. **MoveIt answers the generic
+`FAILURE` (99999) to this, to the action and to the service alike** (an earlier version of this README said `START_STATE_INVALID`; that code is
+not what the installed MoveIt returns on this path, and the reason is only in `move_group`'s log).
+
+Of the three ways out the one taken is to clamp the joint state, and only that: widening a limit would invent vendor data (what ADR-009 exists to
+forbid), and moving `home` would invent a pose (what `park`'s placeholder comment refuses to do). `scripts/joint_state_clamp.py` subscribes to
+`/joint_states` and republishes it on `/joint_states_clamped`, which **only** `move_group` is remapped to (`move_group.launch.py`, argument
+`clamp_joint_states`, default true; the raw topic everything else reads is untouched). Its logic, and the reasons, are in
+`openamrobot_upperbody_moveit/joint_state_clamp.py`:
+
+| | |
+|---|---|
+| **Epsilon** | `EPSILON = 1e-5` rad, a named constant. Measured in Gazebo here: `openarm_left_joint4` read back up to **9.9e-7** rad past its limit from a cold start (2585 of 3356 messages), 8.0e-7 at idle, `openarm_right_joint4` 2.6e-7 after a pose sequence; earlier sessions saw 2.5e-7 and 9e-8. A 1e-6 epsilon would clear the worst of those by one per cent, so it is ten times the largest value seen |
+| **Clamps TO the limit** | a reading past a limit by at most epsilon is published *at* the limit, never beyond it |
+| **Beyond epsilon is not noise** | a reading further out is published unchanged, logged as an error, counted as `over_epsilon`, and the request is still refused (`test_joint_state_clamp_loop.py` shows it); the clamp does not hide a real drift |
+| **Logs** | every *episode* of clamping (a joint resting on its limit is one episode of many activations) is logged at WARN with the joint and the magnitude; each activation is logged at DEBUG and counted |
+| **Counts** | `~/get_stats` returns `activations`, `episodes`, `max_magnitude_rad`, `over_epsilon`, per joint; M01 and M02 put them in their sidecars and the A7 report sums them in `clamp` |
+
+A deterministic reproduction needs no Gazebo: `test_joint_state_clamp_loop.py` holds `openarm_left_joint4` at -2.5e-7 and shows the request
+refused without the clamp (`clamp:=false`) and planning with it. The start gate of M01/M02 (wait until the joints are inside their limits for a
+second) stays, widened by the epsilon: it waits out spawn transients, which the clamp does not touch.
+
+**The retry loop is gone.** M01 and M02 used to retry a refused start state up to three times and count the retries. It never fired in the P10
+record (0 retries at every mast ID and in Gazebo), it was keyed on a code MoveIt does not return here, and with the clamp a retry that never fires
+is dead code and one that fires says something else is wrong. A refused request is now a failed pose.
 
 ## Known limitations
 
@@ -194,14 +261,11 @@ behaviour was compared on neither engine. `moveit.launch.py`'s `physics_engine` 
 * **The gripper fork is open** on manipulation#11; this package is option 1 because it is the combination known to work, and the evidence above
   is for Om and Adnan.
 * **The mimic needs `bullet-featherstone`**: `finger_joint2` follows `finger_joint1` only on that engine.
-* **M03 FAILS** for `openarm_left_ee_link1` / `openarm_left_link2` (above): the matrix is not certified.
-* **MoveIt's start-state check has no tolerance.** `home` sets `openarm_*_joint4 = 0`, exactly that joint's lower limit. In Gazebo the joint
-  can read 1e-7 rad past the limit (-2.5e-7 and -9e-8 were seen), and MoveIt 2.12.4 answers `START_STATE_INVALID` to any request from such a
-  state: the default `CheckStartStateBounds` adapter is strict, there is no `FixStartStateBounds` in the installed adapter set, and removing the
-  adapter does not help because OMPL's planning context refuses the same state. Planning from `home` in Gazebo is therefore intermittently
-  refused: planning again a moment later works. M01 and M02 retry at most three times per pose and **count every retry** in the evidence. Mock
-  reads exact values and is not affected. Nothing was changed to hide this: widening MoveIt's bounds would be an invented limit, moving `home`
-  off the limit would invent a pose.
+* **M03 is a sampling result, not a certification** (above): it passes with one inherited WARN, and the sampled part means "no counterexample in
+  2000 samples at seed 20261006", nothing stronger. The matrix is a checked-in contract that cannot be regenerated reproducibly.
+* **MoveIt's start-state check has no tolerance, so the simulated joint state is clamped** (next section). `home` sets `openarm_*_joint4 = 0`,
+  exactly that joint's lower limit, which is upstream's pose and is itself reportable upstream: it breaks planning from `home` for any
+  float-valued state source.
 * **`move_group` exits with SIGSEGV when it is stopped** (MoveIt 2.12.4, observed on every stop, with and without a test around it). The
   launch tests allow exit code -11 for that one process and no other.
 * **The wheel joints are not under `ros2_control`**, so on `mock` nothing reports them and MoveIt would warn every second that the robot's
@@ -220,17 +284,20 @@ whole A7 report.
 |---|---|---|
 | `test_srdf.py` | AUX | names exist at every mast ID; groups, virtual joint (fixed, not planar), poses inside the limits; `park` is a copy of `home` and says it is a placeholder; each pair disabled once |
 | `test_srdf_import.py` | AUX | the imported elements equal upstream's at the pinned commit (SKIP, with the reason, only if there is no checkout) |
-| `test_acm_generation.py` | AUX | the recorded settings are the ones asked for (at least 10000 samples at `mast_1350`, never/adjacent/default on, always off) and the SRDF holds exactly what they say |
+| `test_acm_generation.py` | AUX | the recorded settings are the ones asked for (at least 10000 samples at `mast_1350`, never/adjacent/default on, always off), the SRDF holds exactly what they say, **the matrix's fingerprint is the one on record**, and a merge proposes and leaves the contract alone unless `--write` |
+| `test_acm_split.py` | AUX | inherited/ours is derived from link provenance and partitions the matrix at every mast ID; a link added later lands on the right side; the by-construction pairs have a constant relative pose in an independent forward kinematics |
+| `test_joint_state_clamp_logic.py` | AUX | the clamp: to the limit and never past it, nothing beyond epsilon, the counters, the limits are the URDF's, no named pose is touched |
+| `test_joint_state_clamp_loop.py` | AUX | with a real `move_group`: the refusal without the clamp, the plan with it, and a reading beyond epsilon still refused and counted |
 | `test_config_files.py` | AUX | limit tags and rule, controller names against `arm_controllers.yaml`, option 1 unchanged, OMPL defaults are MoveIt's |
-| `test_gripper_sign.py` | M05 | per-hand gripper values; the single-number version fails |
-| `test_m03_acm_sampling.py` | M03 | no `Never` pair collides (currently FAILS, see above); the mutation test; the bisection |
-| `test_m04_collision_goal_rejected.py` | M04 | a goal in the mast volume is rejected; the pose goal times out |
+| `test_gripper_sign.py` | M05 | per-hand gripper values; the single-number version fails, in both directions |
+| `test_m03_acm_sampling.py` | M03 | no disabled pair of ours collides (by construction, or in 2000 samples at seed 20261006 at each mast ID); inherited collisions are WARNs; three mutation tests (ours sampled, ours by construction, inherited), and the bisection |
+| `test_m04_collision_goal_rejected.py` | M04 | a goal in the nearest reachable volume (`mast_base_link`) is rejected; the pose goal times out |
 | `test_m06_limits_sensitivity.py` | M06 | the plans need some acceleration limit and do not depend on its value |
 
 M01 (mock, every mast ID) and M02 (Gazebo, `mast_1350`) are tests of `openamrobot_upperbody_bringup`: they start the stacks, and that package
 depends on this one (a test dependency back would be a colcon cycle).
 
-M05 and M06 are checks this step proposes; they are not in `design/VERIFICATION.md`.
+M05 and M06 were proposed by P10 and are adopted in `design/VERIFICATION.md` (7 Oct); the tests follow those rows.
 
 See [`openamrobot_upperbody_description`](../openamrobot_upperbody_description/README.md) and
 [`openamrobot_upperbody_bringup`](../openamrobot_upperbody_bringup/README.md).
