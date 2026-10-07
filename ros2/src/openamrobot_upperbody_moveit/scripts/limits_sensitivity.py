@@ -33,10 +33,10 @@ ARM_SEQUENCE = ("hands_up", "home", "hands_up", "park")
 GRIPPER_SEQUENCE = ("closed", "open")
 
 
-def make_moveit_py(mast_id, strip_acceleration_limits=False):
+def make_moveit_py(mast_id, strip_acceleration_limits=False, srdf_file=None):
     from moveit.planning import MoveItPy
     from openamrobot_upperbody_moveit.moveit_config import moveit_config
-    cfg = moveit_config(mast_id, "mock").to_dict()
+    cfg = moveit_config(mast_id, "mock", srdf_file=srdf_file).to_dict()
     if strip_acceleration_limits:
         for entry in cfg["robot_description_planning"]["joint_limits"].values():
             entry["has_acceleration_limits"] = False

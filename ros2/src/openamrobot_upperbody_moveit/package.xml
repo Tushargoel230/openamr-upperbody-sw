@@ -13,8 +13,7 @@
   <exec_depend>moveit_planners_ompl</exec_depend>
   <exec_depend>moveit_simple_controller_manager</exec_depend>
   <exec_depend>moveit_ros_visualization</exec_depend>
-  <!-- scripts/regenerate_acm.sh runs the Setup Assistant's collision-matrix tool; scripts/validate_acm.py (M03) uses moveit_py -->
-  <exec_depend>moveit_setup_assistant</exec_depend>
+  <!-- scripts/derive_acm.py and scripts/validate_acm.py (M03) use moveit_py; the Setup Assistant's collision-matrix tool is no longer used (P12A) -->
   <exec_depend>moveit_py</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>

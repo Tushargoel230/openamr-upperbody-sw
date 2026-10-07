@@ -5,11 +5,11 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from conftest import MAST_IDS, SRDF_FILE, read_text, srdf_root, srdf_text, urdf_root, urdf_text
+from conftest import MAST_IDS, SRDF_FILE, load_yaml, read_text, srdf_root, srdf_text, urdf_root, urdf_text
 from openamrobot_upperbody_moveit.named_poses import ARM_GROUP, ARM_POSES, GRIPPER_JOINT, read_group_states, urdf_joint_limits
 
 ARM_JOINTS = {side: [f"openarm_{side}_joint{i}" for i in range(1, 8)] for side in ("left", "right")}
-REASONS = {"Adjacent", "Never", "Default"}
+REASONS = {"Adjacent", "ConstantTransform"}          # P12A: the only reasons a pair may be disabled for besides upstream's own (which are Adjacent)
 
 
 def link_and_joint_names(root):
@@ -101,7 +101,7 @@ def test_passive_joints_are_the_urdf_mimic_finger_joints():
 
 def test_each_disabled_pair_is_listed_once_with_a_known_reason_and_two_different_links():
     pairs = [(frozenset((d.get("link1"), d.get("link2"))), d.get("reason")) for d in srdf_root().findall("disable_collisions")]
-    assert len(pairs) > 400, "the generated matrix is missing (scripts/regenerate_acm.sh)"
+    assert len(pairs) == load_yaml("acm/acm_generation.yaml")["counts"]["disabled_total"] > 100, "the derived matrix is missing (scripts/regenerate_acm.sh)"
     keys = [p for p, _ in pairs]
     duplicates = {tuple(sorted(k)) for k in keys if keys.count(k) > 1}
     assert not duplicates, f"pairs disabled more than once: {sorted(duplicates)[:5]}"
@@ -114,4 +114,5 @@ def test_the_srdf_is_well_formed_and_the_generated_block_sits_between_its_marker
     ET.fromstring(text)
     assert text.count("<!-- BEGIN GENERATED ACM -->") == 1 and text.count("<!-- END GENERATED ACM -->") == 1
     block = text.split("<!-- BEGIN GENERATED ACM -->")[1].split("<!-- END GENERATED ACM -->")[0]
-    assert block.count("<disable_collisions") > 400
+    counts = load_yaml("acm/acm_generation.yaml")["counts"]
+    assert block.count("<disable_collisions") == counts["adjacent_derived"] + counts["constant_transform"] > 50

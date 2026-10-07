@@ -1,15 +1,13 @@
-"""M03: the SRDF's collision matrix, split by who owns the claim (scripts/validate_acm.py, moveit_py, acm_split.py).
+"""M03: the SRDF's collision matrix disables only what can be justified (scripts/validate_acm.py, acm_derive.py, moveit_py).
 
-The matrix has two parts. INHERITED pairs have two upstream links (Enactic's: the frame contract's owner column, else the `openarm_` prefix);
-a colliding one is a WARN naming the pair, the seed and the sample index. OUR pairs have at least one link of ours (base, wheels, casters,
-lidar, camera, mast, carriage, whatever is added next, because the split is derived); a colliding disabled pair there is a FAIL. Within
-our `Never` pairs, those with no movable joint between their links are certified by construction (one evaluation settles every
-configuration); sampling is applied only to the rest, and sampling can only falsify: its result is "no counterexample in N samples at
-seed S", never "validated".
+A pair may be disabled for exactly three reasons: declared by upstream (section 1 of the SRDF, the 20 pairs upstream states), `Adjacent` (a structural
+neighbour) or `ConstantTransform` (no movable joint between the links: one evaluation settles every configuration, and it found them clear). Everything
+else is ENABLED, including every pair whose only credential would be that a sampler saw no collision. M03 recomputes the reasons from the model and
+FAILs a disabled pair with no reason, a label that is not true, a ConstantTransform pair that collides, and an enabled constant pair that collides (a
+permanent collision). There is no WARN class. The sampled part is information about the ENABLED pairs, for A4.
 
-THIS TEST IS NOT SOFTENED: when M03 finds a disabled pair of ours that collides, the ACM is wrong, and the test fails with that pair and
-sample. It must not be satisfied by re-enabling the pair and moving on. The mutation tests below show the check CAN fail, by each of its two
-routes, and that the same defect in an inherited pair is a WARN."""
+THIS TEST IS NOT SOFTENED: the mutation tests below show that each way the matrix can be wrong fails the check, by planting that defect in a copy of the
+SRDF, and that the defects are real: every pair they use is one that really collides or really has a movable joint between its links."""
 import json
 import os
 import re
@@ -20,6 +18,7 @@ import tempfile
 from ament_index_python.packages import get_package_prefix
 
 from conftest import SRDF_FILE, load_yaml, read_text, write_sidecar
+from openamrobot_upperbody_moveit.acm_scene import colliding_pairs
 
 SCRIPT = os.path.join(get_package_prefix("openamrobot_upperbody_moveit"), "lib", "openamrobot_upperbody_moveit", "validate_acm.py")
 SAMPLES = 2000
@@ -32,37 +31,38 @@ def run_validate(*args, timeout):
     return subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True, timeout=timeout, env=env)
 
 
-# Pairs that REALLY collide, measured with nothing ignored (nothing is assumed from a link being `Adjacent`: the P10 version of this test
-# relabelled openarm_left_link1 / link2 and expected more than 10 hits in 100 samples, and it never got them: it failed in P10's own run).
-#   base_link / mast_base_link          ours, no joint between: collides in the default state, so in every state (certified by construction)
-#   mast_base_link / openarm_left_ee_base_link   ours, arm joints between: collides in 7 of 300 states at seed 20261006 (sampled)
-#   openarm_left_link5 / openarm_left_link6      inherited (both upstream's): collides in every one of 300 states
-BY_CONSTRUCTION = ("base_link", "mast_base_link")
-BY_SAMPLING = ("mast_base_link", "openarm_left_ee_base_link")
-INHERITED = ("openarm_left_link5", "openarm_left_link6")
-
-
-def mutated_srdf(pair, add=False):
-    """The installed SRDF's text with `pair` disabled as `Never`: relabelled if it is disabled already, added if it is not."""
-    text = read_text(SRDF_FILE)
+def mutate(text, *, remove=None, relabel=None, add=None):
+    """The installed SRDF's text with one defect: `remove` a pair (enable it), `relabel` (pair, from, to), or `add` (pair, label)."""
+    if remove:
+        text, count = re.subn(rf'    <disable_collisions link1="{remove[0]}" link2="{remove[1]}" reason="[A-Za-z]+"/>\n', "", text)
+        assert count == 1, f"{remove} is not disabled in the SRDF"
+    if relabel:
+        pair, was, now = relabel
+        text, count = re.subn(rf'(link1="{pair[0]}" link2="{pair[1]}" reason=")({was})(")', rf"\g<1>{now}\3", text)
+        assert count == 1, f"{pair} is not disabled as {was}"
     if add:
+        pair, label = add
         assert f'link1="{pair[0]}" link2="{pair[1]}"' not in text, f"{pair} is disabled already"
-        return text.replace("    <!-- END GENERATED ACM -->", f'    <disable_collisions link1="{pair[0]}" link2="{pair[1]}" reason="Never"/>\n    <!-- END GENERATED ACM -->')
-    mutated, count = re.subn(rf'(link1="{pair[0]}" link2="{pair[1]}" reason=")(Adjacent)(")', r"\1Never\3", text)
-    assert count == 1, f"the SRDF no longer has {pair} disabled as Adjacent"
-    return mutated
+        text = text.replace("    <!-- END GENERATED ACM -->", f'    <disable_collisions link1="{pair[0]}" link2="{pair[1]}" reason="{label}"/>\n    <!-- END GENERATED ACM -->')
+    return text
 
 
-def validate_mutated(pair, tmp, samples, add=False):
+def validate_mutated(tmp, mast_id="mast_1350", samples=20, **defect):
     srdf, out = os.path.join(tmp, "mutated.srdf"), os.path.join(tmp, "m03.json")
     with open(srdf, "w") as f:
-        f.write(mutated_srdf(pair, add))
-    done = run_validate("--mast-id", "mast_1350", "--samples", str(samples), "--srdf", srdf, "--json", out, timeout=300)
+        f.write(mutate(read_text(SRDF_FILE), **defect))
+    done = run_validate("--mast-id", mast_id, "--samples", str(samples), "--srdf", srdf, "--json", out, timeout=300)
     with open(out) as f:
         return done, json.load(f)["results"][0]
 
 
-def test_m03_1_no_disabled_pair_of_ours_collides_by_construction_or_in_any_sample_at_any_mast_id():
+# Pairs measured to behave as the mutation says, with nothing ignored (the P10 mutation never worked because it assumed instead of measuring):
+CONSTANT_AND_COLLIDING = ("base_link", "mast_base_link")                     # no joint between them, collides in the default state, so in every state
+COLLIDES_SOMETIMES = ("mast_base_link", "openarm_left_ee_base_link")         # arm joints between them; collides in about 2 of 100 random states
+UNJUSTIFIED = ("openarm_left_link1", "openarm_left_link3")                   # the old sampled `Never` pair: arm joints between, no neighbour, not upstream's
+
+
+def test_m03_1_every_disabled_pair_has_a_reason_that_can_be_shown_at_every_mast_id():
     with tempfile.TemporaryDirectory() as tmp:
         out = os.path.join(tmp, "m03.json")
         done = run_validate("--samples", str(SAMPLES), "--json", out, timeout=2400)
@@ -73,85 +73,92 @@ def test_m03_1_no_disabled_pair_of_ours_collides_by_construction_or_in_any_sampl
     results = summary["results"]
     first = results[0] if results else {}
     status = "PASS" if summary["result"] == "PASS" else "FAIL"
-    failing = {r["mast_id"]: {"sampled": r["our_pairs_that_collided"], "by_construction": r["by_construction"]["colliding"],
-                              "cross_check_disagreements": r["by_construction"]["cross_check_with_sampled_states"]["disagreements"]}
+    failing = {r["mast_id"]: {"unjustified": r["unjustified"], "bad_labels": r["bad_labels"], "constant_transform_colliding": r["constant_transform"]["colliding"],
+                              "cross_check_disagreements": r["constant_transform"]["cross_check_with_sampled_states"]["disagreements"],
+                              "enabled_constant_pairs_colliding": r["enabled_constant_pairs_colliding"]}
                for r in results if r["result"] == "FAIL"}
     n, seed = summary["samples_per_mast"], summary["seed"]
-    write_sidecar("M03", "acm_sampling", "ACM: no disabled pair of ours collides (by construction or in N=2000 samples at each mast id); "
-                  "inherited collisions are WARNs", status, {
-        "claim": f"no counterexample found among our sampled pairs in {n} samples at seed {seed} (per mast id); our by-construction pairs are "
-                 "clear in the one configuration that decides them. Sampling falsifies and never certifies: this is not 'validated'",
-        "samples_per_mast_id": n, "seed": seed, "mast_ids": [r["mast_id"] for r in results],
-        "pairs": {"disabled_total": first.get("disabled_pairs", {}).get("total"),
-                  "ours": first.get("our_pairs"), "inherited": first.get("inherited_pairs")},
-        "certified_by_construction": {"count": {r["mast_id"]: r["our_pairs"]["certified_by_construction"] for r in results},
-                                      "colliding": {r["mast_id"]: r["by_construction"]["colliding"] for r in results},
-                                      "evaluated": first.get("by_construction", {}).get("evaluated"),
-                                      "cross_check_with_sampled_states": {r["mast_id"]: r["by_construction"]["cross_check_with_sampled_states"]
-                                                                          for r in results},
-                                      "pairs_at_the_first_mast_id": first.get("by_construction", {}).get("pairs")},
-        "sampled": {"count": {r["mast_id"]: r["our_pairs"]["sampled"] for r in results}, "samples": n, "seed": seed},
-        "warnings": summary["warnings"],
-        "warnings_note": "inherited pairs (both links upstream's) that collided although disabled `Never`: an observation about the matrix's "
-                         "upstream-owned part, not a defect of ours. `origin` says whether Enactic listed the pair (imported_from_upstream) "
-                         "or the collision-matrix tool wrote it (generated_for_upstream_links); `arms: left_vs_right` pairs depend on how this "
-                         "model places the two arms, which is ours",
-        "method": "random joint states inside the limits (numpy default_rng(seed), same states at every mast id); collision checked through "
-                  "moveit_py with an allowed-collision matrix of its own that allows everything except the pairs under test, so the SRDF's "
-                  "disabled list is never consulted; colliding pairs found by bisection",
-        "link_provenance": {"ours": first.get("link_provenance", {}).get("ours"), "upstream": first.get("link_provenance", {}).get("upstream"),
-                            "derived_from": "frame_contract.yaml owner column, else the openarm_ prefix; unlisted links are ours"},
-        "acm_generation": {k: meta[k] for k in ("tool", "moveit_version", "date", "mast_id", "trials", "categories", "command",
-                                                "tool_statistics", "written", "imported_before_the_markers")},
-        "ours_never_pairs_that_collided": failing,
-        "adjacent_or_default_pairs_that_touched": {r["mast_id"]: [r["adjacent_or_default_pairs_that_touched"], r["adjacent_or_default_pairs_total"]]
-                                                   for r in results},
+    write_sidecar("M03", "acm_justification", "ACM: every disabled pair has a reason that can be shown (upstream-declared, Adjacent, ConstantTransform); everything "
+                  "else is enabled", status, {
+        "claim": "every disabled pair is declared by upstream, a structural neighbour, or has no movable joint between its links and is clear in the one "
+                 "evaluation that settles every configuration; every other pair is enabled. Nothing in the matrix rests on sampling",
+        "disabled_pairs": first.get("disabled_pairs"), "enabled_pairs": first.get("enabled_pairs"),
+        "by_construction": {"constant_transform_pairs": len(first.get("constant_transform", {}).get("pairs", [])),
+                            "evaluated": first.get("constant_transform", {}).get("evaluated"),
+                            "colliding": {r["mast_id"]: r["constant_transform"]["colliding"] for r in results},
+                            "cross_check_with_sampled_states": {r["mast_id"]: r["constant_transform"]["cross_check_with_sampled_states"] for r in results},
+                            "pairs_at_the_first_mast_id": first.get("constant_transform", {}).get("pairs")},
+        "unjustified": {r["mast_id"]: r["unjustified"] for r in results}, "bad_labels": {r["mast_id"]: r["bad_labels"] for r in results},
+        "enabled_constant_pairs_colliding": {r["mast_id"]: r["enabled_constant_pairs_colliding"] for r in results},
+        "information_enabled_pairs_sampled": {
+            "note": "INFORMATION, not a result: the enabled pairs found colliding in random joint states inside the limits, and how often. Sampling "
+                    "falsifies and never certifies: a pair absent here may still collide. For A4 (reach and clearance)",
+            "samples_per_mast_id": n, "seed": seed,
+            "per_mast_id": {r["mast_id"]: {"colliding_pairs": r["enabled_pairs_sampled"]["colliding_pairs"],
+                                           "never_collided": r["enabled_pairs_sampled"]["never_collided"]} for r in results},
+            "most_often_at_the_first_mast_id": first.get("enabled_pairs_sampled", {}).get("most_often")},
+        "method": "the reasons are recomputed from the URDF's kinematic tree and the SRDF; collision is checked through moveit_py with an allowed-collision "
+                  "matrix of its own that allows everything except the pairs under test, so the SRDF's disabled list is never consulted",
+        "acm_record": {k: meta[k] for k in ("method", "date", "mast_id", "counts", "deterministic")},
+        "failures": failing,
         "seconds_per_mast_id": {r["mast_id"]: r["seconds"] for r in results},
-        "stop_condition": "A7: a disabled pair of ours that collides means our part of the ACM is wrong; report the pair and the sample, do not "
-                          "re-enable it and move on" if failing else None,
+        "stop_condition": "A disabled pair that cannot be justified, or a constant-transform pair that collides, means the matrix is wrong: report the pair, "
+                          "do not re-disable it on statistics" if failing else None,
     })
     assert summary["result"] == "PASS", "\n" + done.stdout[-3500:]
     assert [r["mast_id"] for r in results] == list(MASTS)
-    assert all(r["our_pairs"]["certified_by_construction"] > 0 and r["our_pairs"]["sampled"] > 0 for r in results)
-    assert all(not r["by_construction"]["cross_check_with_sampled_states"]["disagreements"] for r in results)
+    assert all(len(r["constant_transform"]["pairs"]) == 77 for r in results)
+    assert all(not r["constant_transform"]["cross_check_with_sampled_states"]["disagreements"] for r in results)
 
 
-def test_m03_2_the_check_can_fail_a_pair_of_ours_by_sampling_and_by_construction():
-    """Mutation: a pair of ours that really collides is disabled as `Never`, and the check must name exactly that pair, by the route that applies
-    to it: sampled (arm joints between the links) and by construction (no joint between them)."""
+def test_m03_2_a_pair_disabled_without_a_reason_is_a_fail_there_is_no_warn_class():
+    """The old claim, `Never`, on a pair that has arm joints between its links, is neither upstream's nor a neighbour: unjustified, whatever a sampler saw."""
     with tempfile.TemporaryDirectory() as tmp:
-        done, sampled = validate_mutated(BY_SAMPLING, tmp, 300, add=True)
-        assert done.returncode == 1, f"expected exit 1, got {done.returncode}:\n{done.stdout[-1200:]}\n{done.stderr[-800:]}"
-        assert sampled["result"] == "FAIL"
-        hit, = [h for h in sampled["our_pairs_that_collided"] if tuple(h["pair"]) == BY_SAMPLING]
-        assert hit["collided_in_samples"] >= 1 and hit["seed"] == 20261006 and "openarm_left_joint1" in hit["reproducing_sample"]
-        assert not sampled["by_construction"]["colliding"]
-        assert f"{BY_SAMPLING[0]} <-> {BY_SAMPLING[1]}" in done.stdout
-
-        done, constructed = validate_mutated(BY_CONSTRUCTION, tmp, 20)
-        assert done.returncode == 1, f"expected exit 1, got {done.returncode}:\n{done.stdout[-1200:]}\n{done.stderr[-800:]}"
-        assert constructed["result"] == "FAIL"
-        assert [tuple(c["pair"]) for c in constructed["by_construction"]["colliding"]] == [BY_CONSTRUCTION]
-        assert not constructed["our_pairs_that_collided"], "a pair settled by construction is not sampled"
-        assert constructed["our_pairs"]["certified_by_construction"] == sampled["our_pairs"]["certified_by_construction"] + 1
-        assert f"FAIL by construction: {BY_CONSTRUCTION[0]} <-> {BY_CONSTRUCTION[1]}" in done.stdout
+        done, result = validate_mutated(tmp, add=(UNJUSTIFIED, "Never"))
+    assert done.returncode == 1, f"expected exit 1, got {done.returncode}:\n{done.stdout[-1200:]}\n{done.stderr[-800:]}"
+    assert result["result"] == "FAIL"
+    assert [tuple(u["pair"]) for u in result["unjustified"]] == [UNJUSTIFIED]
+    assert f"FAIL: {UNJUSTIFIED[0]} <-> {UNJUSTIFIED[1]} is disabled with no reason" in done.stdout
+    assert "WARN" not in done.stdout
 
 
-def test_m03_3_the_same_defect_in_an_inherited_pair_is_a_warn_with_the_pair_the_seed_and_the_sample_index():
-    """Both links are upstream's, so the pair is inherited: a collision is a WARN naming the pair, the seed and the sample index, and exit 0."""
+def test_m03_3_a_label_that_is_not_true_and_a_constant_pair_that_collides_are_fails():
     with tempfile.TemporaryDirectory() as tmp:
-        done, result = validate_mutated(INHERITED, tmp, 50)
-    assert done.returncode == 0, f"an inherited collision must not fail M03; exit {done.returncode}:\n{done.stdout[-1200:]}"
-    assert result["result"] == "PASS" and not result["our_pairs_that_collided"] and not result["by_construction"]["colliding"]
-    hit, = [h for h in result["inherited_pairs_that_collided"] if tuple(h["pair"]) == INHERITED]
-    assert hit["collided_in_samples"] == 50 and hit["seed"] == 20261006 and hit["first_sample_index"] == 0
-    assert hit["origin"] == "imported_from_upstream" and hit["arms"] == "same_arm"
-    assert f"WARN: inherited {INHERITED[0]} <-> {INHERITED[1]}" in done.stdout
+        # a pair that collides SOMETIMES, disabled as if it had a constant transform: the label is false (arm joints lie between its links)
+        done, sometimes = validate_mutated(tmp, add=(COLLIDES_SOMETIMES, "ConstantTransform"))
+        assert done.returncode == 1 and sometimes["result"] == "FAIL", done.stdout[-1200:]
+        assert [tuple(b["pair"]) for b in sometimes["bad_labels"]] == [COLLIDES_SOMETIMES] and "movable joint" in sometimes["bad_labels"][0]["problem"]
+        # a constant pair that really collides (it is Adjacent by design), relabelled as clear-by-construction: the evaluation finds the collision
+        done, constant = validate_mutated(tmp, relabel=(CONSTANT_AND_COLLIDING, "Adjacent", "ConstantTransform"))
+        assert done.returncode == 1 and constant["result"] == "FAIL", done.stdout[-1200:]
+        assert [tuple(p) for p in constant["constant_transform"]["colliding"]] == [CONSTANT_AND_COLLIDING]
+        assert f"FAIL: {CONSTANT_AND_COLLIDING[0]} <-> {CONSTANT_AND_COLLIDING[1]} is disabled as ConstantTransform" in done.stdout
 
 
-def test_m03_4_bisection_finds_every_colliding_pair_and_calls_the_check_once_when_nothing_collides():
-    sys.path.insert(0, os.path.dirname(SCRIPT))
-    import validate_acm as v
+def test_m03_4_a_permanent_collision_that_is_not_disabled_is_a_fail():
+    """Enable the pair that overlaps by design (constant transform, Adjacent): every state of the model is then invalid, and M03 must say so."""
+    with tempfile.TemporaryDirectory() as tmp:
+        done, result = validate_mutated(tmp, remove=CONSTANT_AND_COLLIDING)
+    assert done.returncode == 1 and result["result"] == "FAIL", done.stdout[-1200:]
+    assert [tuple(p) for p in result["enabled_constant_pairs_colliding"]] == [CONSTANT_AND_COLLIDING]
+    assert "a permanent collision" in done.stdout
+
+
+def test_m03_5_the_enabled_pairs_that_collide_are_information_and_never_change_the_result():
+    """The sampled part reports the enabled pairs that collide in random states, and a clean matrix stays PASS whatever it finds."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out = os.path.join(tmp, "m03.json")
+        done = run_validate("--mast-id", "mast_1350", "--samples", "150", "--json", out, timeout=300)
+        with open(out) as f:
+            result = json.load(f)["results"][0]
+    assert done.returncode == 0 and result["result"] == "PASS"
+    info = result["enabled_pairs_sampled"]
+    assert info["colliding_pairs"] > 0 and info["colliding_pairs"] + info["never_collided"] == result["enabled_pairs"]["total"]
+    assert all(row["collided_in_samples"] >= 1 and row["of"] == 150 for row in info["most_often"])
+    assert "information, not a result" in done.stdout
+
+
+def test_m03_6_bisection_finds_every_colliding_pair_and_calls_the_check_once_when_nothing_collides():
     pairs = [(f"a{i}", f"b{i}") for i in range(37)]
     for hits in (set(), {pairs[0]}, {pairs[36]}, {pairs[3], pairs[4], pairs[30]}, set(pairs)):
         calls = []
@@ -160,6 +167,6 @@ def test_m03_4_bisection_finds_every_colliding_pair_and_calls_the_check_once_whe
             calls.append(len(subset))
             return any(p in hits for p in subset)
 
-        assert sorted(v.colliding_pairs(check, pairs)) == sorted(hits)
+        assert sorted(colliding_pairs(check, pairs)) == sorted(hits)
         if not hits:
             assert calls == [37]
