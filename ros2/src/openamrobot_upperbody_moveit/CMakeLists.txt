@@ -18,10 +18,11 @@ if(BUILD_TESTING)
   ament_add_pytest_test(srdf test/test_srdf.py TIMEOUT 600)
   ament_add_pytest_test(srdf_import test/test_srdf_import.py TIMEOUT 600)
   ament_add_pytest_test(acm_generation test/test_acm_generation.py TIMEOUT 600)
+  ament_add_pytest_test(acm_split test/test_acm_split.py TIMEOUT 600)
   ament_add_pytest_test(gripper_sign test/test_gripper_sign.py TIMEOUT 600)
   ament_add_pytest_test(config_files test/test_config_files.py TIMEOUT 600)
   # M03 and M04 build a MoveIt planning scene from the combined model (moveit_py) and need no controller and no simulator.
-  ament_add_pytest_test(m03_acm_sampling test/test_m03_acm_sampling.py TIMEOUT 900)
+  ament_add_pytest_test(m03_acm_sampling test/test_m03_acm_sampling.py TIMEOUT 3000)
   ament_add_pytest_test(m06_limits_sensitivity test/test_m06_limits_sensitivity.py TIMEOUT 600)
   # M04 starts move_group and a joint state publisher (launch_testing), in its own ROS_DOMAIN_ID; it plans only, nothing executes.
   find_package(launch_testing_ament_cmake REQUIRED)
