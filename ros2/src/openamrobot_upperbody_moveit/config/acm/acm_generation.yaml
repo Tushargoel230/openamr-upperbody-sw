@@ -30,3 +30,18 @@ written:
 written_total: 474
 imported_before_the_markers: 20
 imported_not_in_the_tool_output: []
+contract:
+  file: config/openamrobot.srdf
+  what: 'every <disable_collisions> of the SRDF (section 1, imported from upstream, and the generated block). This file is the contract: M03 validates
+    it, and a change to it is a change to the contract'
+  fingerprint: sha256:f8254fac4550ef1254034d477e406d69c725a8facd8d7c8402fcd4e371803e45
+  pairs:
+    total: 494
+    Never: 458
+    Adjacent: 36
+    Default: 0
+  generation_is_seeded: false
+  regeneration: approximate. moveit_setup_assistant's collisions_updater has no --seed option and samples with an unseeded generator (two runs
+    at the same settings gave 473 and 468 `Never` pairs at 3000 trials; three runs at 10000 gave 455, 456 and 458). Re-running scripts/regenerate_acm.sh
+    therefore proposes a new contract and is not a verification step; scripts/validate_acm.py (M03) is the verification, and it validates THIS
+    file
