@@ -199,7 +199,7 @@ def limitations(sidecars):
         "run, is no longer used. The checked-in SRDF is the contract and M03 validates that file",
         "M03's sampled part is information about the ENABLED pairs, never a reason: sampling falsifies and does not certify. It lists the enabled pairs "
         "that collide in random states and how often (for A4); nothing in the matrix rests on it",
-        "V01: no human has answered the eight-item visual checklist yet; nothing in this report is a visual inspection",
+        be.V01_LIMITATION,
         "no physical evidence; simulation only. This report is not a statement about hardware",
     ]
     if m03.get("result") == "FAIL":
@@ -244,10 +244,7 @@ def build(args):
         elif check_id == "M02":
             result, details = combine_multi("M02", counts.get("M02"), docs, ("mast_1350",), missing.get("M02"))
         elif check_id == "V01":
-            result, details = "WARN", {
-                "performed": "pending: docs/v01_visual_check.md has eight items (item 8: an arm executes a named pose in RViz and the preview "
-                             "matches what the robot then does); no answers are recorded, and 'looks fine' would not clear it",
-                "checklist": "docs/v01_visual_check.md"}
+            result, details = "WARN", be.v01_details(8)
         elif check_id == "I01":
             result, details = ("FAIL", {"differing": differing, "hint": "run colcon build, then run_a7_regression.sh again"}) if differing \
                 else ("PASS", {"compared": ["description: urdf, config, launch, meshes", "control: config", "gazebo: launch, config, worlds",
