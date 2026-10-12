@@ -268,12 +268,31 @@ def test_summary_and_exit_status_follow_the_checks(tmp_path):
     assert doc["dirty"] is False and "dirty_files" not in doc
     by_id = {c["id"]: c["result"] for c in doc["checks"]}
     assert by_id["T01"] == "NOT_RUN" and by_id["T14"] == "NOT_RUN" and by_id["L01"] == "NOT_RUN" and by_id["V01"] == "WARN"
+    v01 = next(c for c in doc["checks"] if c["id"] == "V01")
+    assert [f["id"] for f in v01["details"]["findings"]] == ["V01-F1", "V01-F2"]            # the look found two defects: they are in the report
+    assert any("V01-F1" in line for line in doc["limitations"])
     assert by_id["AUX"] == "FAIL"                                          # the three steps were never run
     assert by_id["H02"] == "NOT_RUN"                                       # and nothing was registered to account for: that is not a pass either
     assert set(doc["config_ids"]) and all(ev.SHA256_RE.match(v) for v in doc["config_ids"].values())
     assert len(doc["config_ids"]) == 14 and "mast_1350/openarm/mock" in doc["config_ids"]
     assert doc["limitations"] and all(isinstance(x, str) for x in doc["limitations"])
     assert "Result: FAIL" in result.stdout and f"Evidence: {reports[0]}" in result.stdout and "NOT_RUN" in result.stdout
+
+
+def test_v01_records_what_the_looking_found_and_stays_warn():
+    """V01 was WARN with 'nobody has looked'. A person has now looked and found two defects no test was checking. The record must say
+    so, and must not become a PASS: only item 1 has an answer, and a check whose value was finding defects is not 'found nothing'."""
+    details = be.v01_details(8)
+    assert [f["id"] for f in details["findings"]] == ["V01-F1", "V01-F2"]
+    assert set(details["answered_items"]) == {"1"} and details["unanswered_items"] == [2, 3, 4, 5, 6, 7, 8]
+    text = json.dumps(details)
+    assert "probably rotated 90 degrees" in text and "implausible" in text
+    assert "found what the automated ones could not" in details["reading"] and "not PASS" in details["reading"]
+    assert "no human has" not in text and "nobody has" not in text           # the record no longer says the check found nothing
+    for finding in details["findings"]:
+        assert finding["proposed_rule"] and finding["not_fixed_because"]    # a finding with no rule and no reason is a complaint
+    details["findings"][0]["id"] = "changed"                                 # callers get copies: one report cannot edit the next
+    assert be.v01_details(8)["findings"][0]["id"] == "V01-F1"
 
 
 def _run_gazebo_build(tmp_path, repo, *steps):
@@ -292,7 +311,8 @@ def test_the_gazebo_profile_writes_a_simulation_report_and_never_a_physical_clai
     assert [c["id"] for c in doc["checks"]] == [i for i, _ in be.GAZEBO_CHECKS]
     by_id = {c["id"]: c["result"] for c in doc["checks"]}
     assert by_id["G01"] == "NOT_RUN" and by_id["G02"] == "NOT_RUN"                 # nothing ran: no result is not a pass
-    assert by_id["V01"] == "WARN" and "pending" in next(c for c in doc["checks"] if c["id"] == "V01")["details"]["performed"]
+    v01 = next(c for c in doc["checks"] if c["id"] == "V01")
+    assert by_id["V01"] == "WARN" and [f["id"] for f in v01["details"]["findings"]] == ["V01-F1", "V01-F2"]
     assert set(doc["config_ids"]) == {"mast_1350/openarm/gazebo", "mast_1300/openarm/gazebo"}
     assert set(doc["simulator"]) == {"gz_sim", "gz_ros2_control", "ros_gz_sim"}
     text = " ".join(doc["limitations"])

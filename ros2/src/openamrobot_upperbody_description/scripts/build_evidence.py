@@ -99,6 +99,43 @@ PROFILES = {"dev": "static+mock", "gazebo": "simulation"}
 # (C02 SKIPs by its own sidecar, only when there is no upstream checkout; that is a result, not a missing test.)
 NOT_IMPLEMENTED = {}
 BRINGUP_PKG = "openamrobot_upperbody_bringup"
+
+# V01 after a person looked (P14; the architecture chat's V01_MAST_VISUAL finding, recorded in docs/v01_visual_check.md). It stays WARN, and
+# the report says in words what the looking found. Two things about it are deliberate. It is not PASS: PASS needs every checklist item answered,
+# and only item 1 (the mast) has an answer on record. And it is not recorded as a check that found nothing: its value was that it found two
+# defects no automated check was looking for. build_a7_evidence.py reads these constants, so the three reports cannot tell different stories.
+V01_FINDINGS = [
+    {"id": "V01-F1", "item": 1,
+     "found": "the mast profile is probably rotated 90 degrees: mast_section [0.060, 0.120] puts 60 mm fore-aft and 120 mm lateral; option B "
+              "(P-03 rev18.9 item 18) orients the same HFS6-60120 cross-section (its 340 mm arm profile, not a full-height mast) 120 mm "
+              "fore-aft and 60 mm lateral, the stiff direction against the arms' forward cantilever. The value is right. Its axis "
+              "assignment was only a prose note in the datum ('orientation unconfirmed') and no test asserts it",
+     "proposed_rule": "every datum that is a pair or triple of dimensions declares its axis convention, and a test asserts the assignment",
+     "not_fixed_because": "mast.xacro is replaced when option B is adopted; the arm mounts at y = +/-0.060 are coupled to this orientation, so "
+                          "turning the box alone would be wrong"},
+    {"id": "V01-F2", "item": 1,
+     "found": "mast_mass is 3.0 kg (placeholder) for 1.2365 m of HFS6-60120: about 337 kg/m3 over the bounding box, low by roughly 2.5 to 4 "
+              "times for an aluminium extrusion (an estimate; the MISUMI datasheet is the source). Labelled placeholder, so nothing lied, but "
+              "the placeholder is implausible and nothing checked plausibility",
+     "proposed_rule": "the density implied by a mass over its bounding-box volume must fall in a sane range or WARN, placeholders included",
+     "not_fixed_because": "the mast and its mass are replaced when option B is adopted; the figure to land needs the datasheet"},
+]
+V01_ANSWERED = {"1": "the mast reads as a thin spike. Its dimensions are those of an HFS6-60120 profile 14 mm shorter than the 1250 mm Alex "
+                     "specified on 28 Sep, so the appearance is an accurate thin extrusion and not a sizing defect; its orientation and its "
+                     "mass are defects (V01-F1, V01-F2)"}
+V01_READING = ("The manual check found what the automated ones could not: no test of ours examines an axis assignment or the plausibility "
+               "of a placeholder. V01 stays WARN with these findings attached, not PASS (no other item has a recorded answer) and not a check "
+               "that found nothing")
+V01_LIMITATION = ("V01 is WARN with two findings from a manual look at the mast (V01-F1 the profile is probably rotated 90 degrees, V01-F2 "
+                  "the mast mass is implausible); the other checklist items have no recorded answer. This report launches nothing for V01 "
+                  "and records no inspection of its own")
+
+
+def v01_details(items, **extra):
+    """The details of V01 in every report: what was answered, what was found, what is still open. `items` is the checklist's length."""
+    return {"performed": "a person looked at the simulation and answered item 1 (the mast); items 2 to %d have no recorded answer" % items,
+            "answered_items": dict(V01_ANSWERED), "unanswered_items": list(range(2, items + 1)),
+            "findings": [dict(f) for f in V01_FINDINGS], "reading": V01_READING, "checklist": "docs/v01_visual_check.md", **extra}
 # Checks whose sidecar is where their details (and any WARN) live: no sidecar means the test did not complete.
 SIDECAR_REQUIRED = {"T02", "T04", "T07", "T08", "T09", "T10", "T13", "E01", "C01", "C02", "W01", "W02", "G01", "G02"}
 # Test modules with no check ID in their name.
@@ -345,7 +382,7 @@ def limitations(datums, sidecars):
         "W01: KDL consumers (robot_state_publisher, MoveIt in A7) do not see base_link's inertia",
         "W02: with enable_planar_base:=true KDL consumers see world -> base_link as static; planar base motion can "
         "never come from robot_state_publisher (A7: it comes from Gazebo's odom -> base_link, ADR-003 / ADR-005)",
-        "V01: no human has looked at an RViz window; nothing in this report is a visual inspection",
+        V01_LIMITATION,
         "config ids are hashes of xacro's output text: a different xacro version that formats a number differently "
         "gives a different id for the same sources",
         "`static+mock` names the evidence class: expansions of every hardware_profile, plus a headless launch of the mock "
@@ -379,7 +416,7 @@ def gazebo_limitations(datums, sidecars, simulator):
         "factor below 1); they are not requirements on the robot",
         "the gripper controller is still the deprecated position_controllers/GripperActionController on purpose "
         "(manipulation#11 / ADR-009 point 4, open): nothing here chooses between the gripper interfaces",
-        "V01: no human has answered the visual checklist yet; nothing in this report is a visual inspection",
+        V01_LIMITATION,
         "no physical evidence; simulation only. This report is not a statement about hardware",
     ]
 
@@ -437,15 +474,10 @@ def build(args):
     checks = []
     for check_id, name in check_list:
         if check_id == "V01" and profile == "gazebo":
-            result, details = "WARN", {
-                "performed": "pending: the checklist in docs/v01_visual_check.md is printed for a person to run with the simulator "
-                             "open and RViz beside it; no answers are recorded yet, and 'looks fine' would not clear it",
-                "checklist": "docs/v01_visual_check.md"}
+            result, details = "WARN", v01_details(8)
         elif check_id == "V01":
-            result, details = "WARN", {
-                "performed": "no human has looked at an RViz window; this report does not launch RViz",
-                "last_launch": "S4: robot_state_publisher + joint_state_publisher_gui + rviz2 started with no xacro or "
-                               "mesh errors (evidence/S4.json)"}
+            result, details = "WARN", v01_details(8, last_launch="S4: robot_state_publisher + joint_state_publisher_gui + rviz2 started "
+                                                                 "with no xacro or mesh errors (evidence/S4.json)")
         elif check_id == "I01" and profile == "gazebo":
             problems = sorted(gazebo_differ + [f"{ev.PKG}/{d}" for d in differ])
             result, details = ("FAIL", {"differing": problems, "hint": "run colcon build, then verify_gazebo.sh again"}) if problems \
