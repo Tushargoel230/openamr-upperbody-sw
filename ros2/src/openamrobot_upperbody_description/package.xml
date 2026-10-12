@@ -2,11 +2,25 @@
 <package format="3">
   <name>openamrobot_upperbody_description</name>
   <version>0.0.0</version>
-  <description>Combined base + lift + arm description (URDF/xacro).</description>
+  <description>Canonical OpenAMRobot 2.0 robot description (URDF/xacro): the platform base, a MISUMI mast selected by mast_id, and two OpenArm v2.0 arms composed from the upstream macro, with datum and frame-contract configuration.</description>
   <maintainer email="info@botshare.ai">OpenAMRobot</maintainer>
   <license>MIT</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
   <exec_depend>xacro</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>openamrobot_description</exec_depend>
+  <exec_depend>openarm_description</exec_depend>
+  <!-- view.launch.py moved to openamrobot_upperbody_bringup; its launch, rviz2 and joint_state_publisher_gui depends went with it -->
+  <!-- T15 reads the plugin names out of the installed gz_ros2_control. The controller yaml's package is not resolved by this
+       package at all: the gazebo profile takes its path as the controllers_file xacro arg (P10), supplied by the launch -->
+  <test_depend>gz_ros2_control</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
+  <test_depend>python3-jsonschema</test_depend>
+  <!-- urdf_utils.py (T05, E01) -->
+  <test_depend>python3-numpy</test_depend>
+  <!-- check_urdf (T02, W02) -->
+  <test_depend>liburdfdom-tools</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>

@@ -2,7 +2,7 @@
 <package format="3">
   <name>openamrobot_upperbody_bringup</name>
   <version>0.0.0</version>
-  <description>Launch files composing base + lift + arm in simulation.</description>
+  <description>Launch files for the OpenAMRobot 2.0 upper body (fixed mast, two OpenArm v2.0 arms): the model viewer and a mock bringup with the arm controllers.</description>
   <maintainer email="info@botshare.ai">OpenAMRobot</maintainer>
   <license>MIT</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
@@ -10,5 +10,25 @@
   <exec_depend>openamrobot_upperbody_control</exec_depend>
   <exec_depend>openamrobot_upperbody_gazebo</exec_depend>
   <exec_depend>openamrobot_upperbody_moveit</exec_depend>
+  <!-- view.launch.py, mock.launch.py -->
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>joint_state_publisher_gui</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <!-- L01 -->
+  <test_depend>launch_testing</test_depend>
+  <test_depend>launch_testing_ament_cmake</test_depend>
+  <test_depend>launch_testing_ros</test_depend>
+  <test_depend>rclpy</test_depend>
+  <test_depend>control_msgs</test_depend>
+  <test_depend>controller_manager_msgs</test_depend>
+  <test_depend>sensor_msgs</test_depend>
+  <test_depend>trajectory_msgs</test_depend>
+  <test_depend>builtin_interfaces</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>

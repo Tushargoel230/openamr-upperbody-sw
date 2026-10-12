@@ -2,4 +2,28 @@ cmake_minimum_required(VERSION 3.8)
 project(openamrobot_upperbody_bringup)
 find_package(ament_cmake REQUIRED)
 install(DIRECTORY launch config DESTINATION share/openamrobot_upperbody_bringup)
+install(PROGRAMS
+  scripts/base_joint_states_stub.py
+  scripts/build_a7_evidence.py
+  scripts/run_a7_regression.sh
+  DESTINATION lib/${PROJECT_NAME})
+
+if(BUILD_TESTING)
+  find_package(launch_testing_ament_cmake REQUIRED)
+  find_package(ament_cmake_pytest REQUIRED)
+  # H01: every test file is registered, and every launch test checks that its processes started and exited cleanly (static, over all five packages).
+  ament_add_pytest_test(h01_harness_guards test/test_h01_harness_guards.py TIMEOUT 120)
+  # L01 starts a real controller_manager: it picks its own ROS_DOMAIN_ID (see the test), so it cannot see or be seen by
+  # another stack on the machine.
+  add_launch_test(test/test_l01_mock_controllers.py TIMEOUT 60)
+  # M01 (A7): every named pose plans and executes on mock through move_group, once per release-candidate mast ID. Each run starts the
+  # whole mock stack in its own ROS_DOMAIN_ID (see the test) and records its own sidecar.
+  foreach(mast mast_1300 mast_1350 mast_1400 mast_1450)
+    add_launch_test(test/test_m01_mock_named_poses.py TARGET m01_mock_${mast} ARGS "mast_id:=${mast}" TIMEOUT 240)
+  endforeach()
+  # M02: the same in Gazebo at mast_1350 only (the release configuration). It starts a headless Gazebo server and picks its own
+  # ROS_DOMAIN_ID and GZ_PARTITION, like G01 and G02; startup alone is about a minute, so the budget is large.
+  add_launch_test(test/test_m02_gazebo_named_poses.py TARGET m02_gazebo_mast_1350 TIMEOUT 600)
+endif()
+
 ament_package()

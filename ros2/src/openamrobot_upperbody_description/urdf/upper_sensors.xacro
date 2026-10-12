@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<!--
+  Upper-body sensor frames (FRAMES.md, DESIGN_LOG 2026-09-21: plain frames, the ZED wrapper is deferred).
+  Emitted by combined_robot.xacro when arm_package == 'openarm'.
+
+    head_camera_link           on mast_mount_link             pose = datum head_camera_pose
+    left_wrist_camera_link     on openarm_left_ee_base_link   pose = datum left_wrist_camera_pose
+    right_wrist_camera_link    on openarm_right_ee_base_link  pose = datum right_wrist_camera_pose
+    each with a <name>_optical_frame child (REP-103: z forward, x right, y down)
+
+  Each camera link carries a small box VISUAL and no <collision> and no <inertial>: the box is a marker for where the
+  frame is, not a model of the sensor. Frame contract entries say collision_free: true with the reason.
+
+  Needs mast.xacro included first (openamr_origin_from_pose). The parents of the wrist cameras are links of the
+  upstream openarm_v20_robot macro, so this file must be instantiated after both macro calls.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Visualization constant (DATUMS.md): edge, in metres, of the marker box drawn for each camera frame. It describes
+       how the model is drawn, not the robot, so it is not a datum. It may appear only inside a <visual>: no collision,
+       no inertial, no joint origin and no datum depends on it (T13 enforces this). -->
+  <xacro:property name="openamr_sensor_marker_edge" value="0.04"/>
+
+  <xacro:macro name="openamr_camera_frames" params="name parent pose">
+    <link name="${name}_link">
+      <visual>
+        <geometry><box size="${openamr_sensor_marker_edge} ${openamr_sensor_marker_edge} ${openamr_sensor_marker_edge}"/></geometry>
+      </visual>
+    </link>
+    <joint name="${name}_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${name}_link"/>
+      <xacro:openamr_origin_from_pose pose="${pose}"/>
+    </joint>
+
+    <!-- Optical frame: ROS convention (z forward, x right, y down), the same rotation the base uses for
+         camera_optical_frame. -->
+    <link name="${name}_optical_frame"/>
+    <joint name="${name}_optical_joint" type="fixed">
+      <parent link="${name}_link"/>
+      <child link="${name}_optical_frame"/>
+      <origin xyz="0 0 0" rpy="${-pi / 2} 0 ${-pi / 2}"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="openamr_upper_sensors" params="datums">
+    <xacro:property name="dt" value="${datums['datums']}"/>
+    <xacro:openamr_camera_frames name="head_camera" parent="mast_mount_link"
+                                 pose="${dt['head_camera_pose']['value']}"/>
+    <xacro:openamr_camera_frames name="left_wrist_camera" parent="openarm_left_ee_base_link"
+                                 pose="${dt['left_wrist_camera_pose']['value']}"/>
+    <xacro:openamr_camera_frames name="right_wrist_camera" parent="openarm_right_ee_base_link"
+                                 pose="${dt['right_wrist_camera_pose']['value']}"/>
+  </xacro:macro>
+
+</robot>

@@ -1,0 +1,108 @@
+<?xml version="1.0"?>
+<!--
+  OpenAMRobot 2.0 combined robot description (ARCHITECTURE.md s3-5, ADR-001/004/005/006/008).
+
+    base_link (platform-sw, included unchanged)
+      -> mast_base_link -> mast_mount_link                      (mast.xacro, datums + mast_ids)
+           -> mast_{left,right}_arm_mount_link                  (declared by the upstream macro, see below)
+                -> openarm_{left,right}_* arms + grippers        (upstream openarm_v20_robot, one call per arm)
+                     -> {left,right}_wrist_camera_*              (upper_sensors.xacro)
+           -> head_camera_link / head_camera_optical_frame       (upper_sensors.xacro, on mast_mount_link)
+           -> so101_mount_link                                   (arm_package == so101: stub, A9 owns the rest)
+    world -> base_planar_joint -> base_link                      (only with enable_planar_base:=true)
+
+  ros2_control (ros2_control.xacro): arms only, none for the base. hardware_profile picks the arm plugin: mock =
+  mock_components/GenericSystem, gazebo = gz_ros2_control/GazeboSimSystem, real = openarm_hardware/OpenArmHW (ADR-003).
+
+  Args: an unknown value for any arg fails expansion with the list of accepted values.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="openamrobot">
+
+  <xacro:arg name="mast_id" default="mast_1350"/>
+  <xacro:arg name="arm_package" default="openarm"/>
+  <xacro:arg name="hardware_profile" default="mock"/>
+  <xacro:arg name="enable_planar_base" default="false"/>
+  <xacro:arg name="datums_file" default="$(find openamrobot_upperbody_description)/config/datums.yaml"/>
+  <!-- Absolute path of the controller parameter file the gazebo profile hands to gz_ros2_control. Empty by default: the
+       description declares the hardware contract and knows nothing about where a controller config lives (ADR-003); the launch
+       that starts the simulation supplies it. Only the gazebo profile reads it. -->
+  <xacro:arg name="controllers_file" default=""/>
+
+  <!-- Args are read as raw strings: xacro would otherwise turn "false"/"true" (any case) and numerals into
+       bool/number, and the accepted-value check below compares strings. The quotes + lazy_eval="false" keep them str. -->
+  <xacro:property name="mast_id" lazy_eval="false" value="'$(arg mast_id)'"/>
+  <xacro:property name="arm_package" lazy_eval="false" value="'$(arg arm_package)'"/>
+  <xacro:property name="hardware_profile" lazy_eval="false" value="'$(arg hardware_profile)'"/>
+  <xacro:property name="enable_planar_base" lazy_eval="false" value="'$(arg enable_planar_base)'"/>
+  <xacro:property name="datums_file" lazy_eval="false" value="'$(arg datums_file)'"/>
+  <xacro:property name="controllers_file" lazy_eval="false" value="'$(arg controllers_file)'"/>
+  <xacro:property name="mast_ids_file" value="$(find openamrobot_upperbody_description)/config/mast_ids.yaml"/>
+
+  <xacro:property name="datums" value="${xacro.load_yaml(datums_file)}"/>
+  <xacro:property name="mast_ids" value="${xacro.load_yaml(mast_ids_file)}"/>
+
+  <!-- Arg validation: xacro.fatal() raises XacroException carrying this message (no Python traceback to read). -->
+  <xacro:macro name="openamr_require_one_of" params="arg value accepted">
+    <xacro:unless value="${value in accepted}">
+      <xacro:property name="openamr_arg_check_failed_${arg}" lazy_eval="false"
+                      value="${xacro.fatal('Invalid xacro arg ' + arg + ':=' + value + '. Accepted values: ' + ', '.join(accepted))}"/>
+    </xacro:unless>
+  </xacro:macro>
+
+  <xacro:openamr_require_one_of arg="mast_id" value="'${mast_id}'" accepted="${list(mast_ids['mast_ids'].keys())}"/>
+  <xacro:openamr_require_one_of arg="arm_package" value="'${arm_package}'" accepted="${['openarm', 'so101', 'none']}"/>
+  <xacro:openamr_require_one_of arg="hardware_profile" value="'${hardware_profile}'" accepted="${['mock', 'gazebo', 'real']}"/>
+  <xacro:openamr_require_one_of arg="enable_planar_base" value="'${enable_planar_base}'" accepted="${['true', 'false']}"/>
+
+  <!-- Base: a full <robot> file from platform-sw, included unchanged; xacro merges its content. -->
+  <xacro:include filename="$(find openamrobot_description)/urdf/robo_urdf.urdf.xacro"/>
+
+  <!-- A6: planar base joint — present, DISABLED by default (AD-30: base and arm never move together in OpenAMRobot 2.0). Enable only for future whole-body planning experiments. -->
+  <xacro:if value="${enable_planar_base == 'true'}">
+    <link name="world"/>
+    <!-- A planar joint moves in the plane normal to its axis; the URDF default axis is x, so z is set explicitly. -->
+    <joint name="base_planar_joint" type="planar">
+      <parent link="world"/>
+      <child link="base_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+    </joint>
+  </xacro:if>
+
+  <xacro:include filename="$(find openamrobot_upperbody_description)/urdf/mast.xacro"/>
+  <xacro:openamr_mast mast_id="${mast_id}" datums="${datums}" mast_ids="${mast_ids}"
+                      arm_mounts="${arm_package == 'openarm'}"/>
+
+  <!-- so101: stub only. A9 (Jonathan) owns everything below so101_mount_link; nothing else is emitted for it here.
+       none: mast only. -->
+  <xacro:if value="${arm_package == 'so101'}">
+    <link name="so101_mount_link"/>
+    <joint name="so101_mount_joint" type="fixed">
+      <parent link="mast_mount_link"/>
+      <child link="so101_mount_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+  </xacro:if>
+  <xacro:if value="${arm_package == 'openarm'}">
+    <xacro:include filename="$(find openarm_description)/assets/robot/openarm_v2.0/urdf/utils/openarm_v20_robot.xacro"/>
+    <xacro:property name="openarm_config_root" value="$(find openarm_description)/assets/robot/openarm_v2.0/config"/>
+    <xacro:property name="left_preset_file" value="$(find openamrobot_upperbody_description)/config/openarm_preset_left.yaml"/>
+    <xacro:property name="right_preset_file" value="$(find openamrobot_upperbody_description)/config/openarm_preset_right.yaml"/>
+
+    <!-- ADR-008: no OpenArm body. One macro call per arm, each rooted on its mast plate link.
+         Upstream rejects two enabled root components, so the bimanual preset cannot be reparented. -->
+    <xacro:openarm_v20_robot config_root="${openarm_config_root}" robot_preset="${xacro.load_yaml(left_preset_file)}"
+                             collapse_internal_empty_links="true" emit_grasp_frame="true"/>
+    <xacro:openarm_v20_robot config_root="${openarm_config_root}" robot_preset="${xacro.load_yaml(right_preset_file)}"
+                             collapse_internal_empty_links="true" emit_grasp_frame="true"/>
+
+    <!-- Needs the openarm_*_ee_base_link links the two calls above emit. -->
+    <xacro:include filename="$(find openamrobot_upperbody_description)/urdf/upper_sensors.xacro"/>
+    <xacro:openamr_upper_sensors datums="${datums}"/>
+
+    <!-- Arms only, and only here: so101 and none get no ros2_control. Needs the arm joints emitted above. -->
+    <xacro:include filename="$(find openamrobot_upperbody_description)/urdf/ros2_control.xacro"/>
+    <xacro:openamr_arm_ros2_control hardware_profile="${hardware_profile}" controllers_file="${controllers_file}"/>
+  </xacro:if>
+
+</robot>
