@@ -5,6 +5,24 @@ All notable changes to this repository. Evidence for the description is static a
 
 ## [Unreleased]
 
+### Changed (P14, publish and record)
+
+- **V01 records what the first manual look found, and stays WARN.** A person looked at the mast (item 1) and found two defects no automated
+  check was examining: the mast profile is probably rotated 90 degrees (`mast_section` `[0.060, 0.120]` is 60 mm fore-aft; option B orients the
+  same HFS6-60120 cross-section 120 mm fore-aft; the value was right and its axis assignment was only a prose note no test asserted), and
+  `mast_mass = 3.0` kg is implausible for 1.2365 m of that profile (about 337 kg/m3 over the bounding box, low by roughly 2.5 to 4 times; an
+  estimate, the datasheet is the source). The dimensions themselves are a real HFS6-60120 profile 14 mm from Alex's 1250 mm. The reports of
+  all three profiles carry the findings (`details.findings`, `answered_items`, `unanswered_items`) and a limitation line; V01 is not PASS (items
+  2 to 8 have no recorded answer) and is not recorded as having found nothing. Neither defect is fixed: both go with `mast.xacro` when option B
+  is adopted. Two rules are proposed to the design owners and implemented nowhere: a dimension-pair or -triple datum declares its axis
+  convention with a test asserting it, and a mass is checked for plausible implied density, placeholders included. `docs/v01_visual_check.md`
+  has the status, and item 1 no longer lists "a thin spike" as a wrong thing to see (a 60 x 120 x 1236.5 mm section reads as one from the side).
+- **The A6 expansion set is published** under `evidence/frozen_a6_993b000/`: the 14 expansions of the contract matrix at `993b000`, each with
+  its configuration id (plain text, 487 KB), an index with the commit, datums revision and pins, and `verify_config_ids.py`, which recomputes
+  every id from the files with the standard library only. It is the **fixed-mast** configuration (P-03 rev18.2) that option B supersedes, and
+  says so. `mast_1350/openarm/gazebo` is the only id that differs between the A6 and A7 heads (A7 adds the `gz_ros2_control` model plugin); its
+  A7 expansion is kept apart in `a7_variant/`. No configuration id was changed by this step.
+
 ### Changed (P12A, the harness and the matrix)
 
 - **The evidence harness can no longer lie by omission.** Failures planted in each of the five packages (`scripts/harness_canary.py`) showed that the control package's tests were run and never read

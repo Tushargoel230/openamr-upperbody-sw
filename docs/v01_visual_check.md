@@ -5,6 +5,43 @@ Numeric checks are not visual ones: the 80 mm square mast section passed every t
 **"Looks fine" does not clear it.** Answer each of the eight items below in your own words: what you saw, and for the "wrong would look like"
 case, that it did not.
 
+## Status: WARN. One item answered, two defects found
+
+A person has now looked, at the mast (item 1), and the look found two things that no automated check was examining. V01 stays
+**WARN**: items 2 to 8 have no recorded answer, and a check whose value was finding defects is not recorded as having found nothing.
+The manual check found what the automated ones could not.
+
+**What the look established.** The dimensions are right: `0.060 x 0.120 x 1.2365` m is a real MISUMI HFS6-60120 profile, 14 mm shorter
+than the 1250 mm Alex specified on 28 Sep. Seen side-on (the 60 mm face) it is about 20:1 and reads as a spike; from the front (the
+120 mm face) it is about 10:1. That is an accurate thin extrusion, not a sizing defect.
+
+**What it found**
+
+- **V01-F1, the profile is probably rotated 90 degrees.** Ours is 60 mm fore-aft and 120 mm across the robot. In Alex's option B the same
+  MISUMI HFS6-60120 cross-section (his `arm_profile`, a 340 mm piece on the column top, not a full-height mast) is 120 mm fore-aft and
+  60 mm across, which is the stiff direction against the arms' forward cantilever; his lift column is likewise "mounted with its 240 mm
+  side fore-aft". It is the same section turned the other way, which is why this says "probably": he does not model a 1.24 m member.
+  `mast_section` is `[0.060, 0.120]` with `source: plan`: the value is right, and its axis assignment was only a prose note in the datum
+  ("orientation unconfirmed") that no test asserts. It also explains the spike: orbiting in RViz, the side view of this model is the
+  60 mm face. The arm-mount poses at y = +/-0.060 sit on the side faces of the 120 mm width, so the box cannot be turned on its own.
+- **V01-F2, the mast mass is implausible.** `mast_mass = 3.0` kg (placeholder) for 1.2365 m of that profile is about 337 kg/m3 over its
+  bounding box, low by roughly 2.5 to 4 times for an aluminium extrusion. That is an estimate: the MISUMI datasheet is the source for the
+  real figure. It is honestly labelled `placeholder`, so nothing lied, but nothing in the harness asks whether a placeholder is plausible.
+  The modelled total of 21.96 kg is light by the difference, which makes the 93 kg F2S vehicle estimate printed beside it in T10 more
+  load-bearing, not less.
+
+**Neither is fixed here.** Both die with `mast.xacro` when option B (P-03 rev18.9 item 18) is adopted: his profile is 340 mm on the
+carriage, oriented his way, and he models no masses. The rules they point to are carried forward as proposals for the design owners
+(neither is in `design/VERIFICATION.md`, and nothing implements them yet):
+
+1. every datum that is a pair or triple of dimensions declares its axis convention, and a test asserts the assignment;
+2. the density implied by a mass over its bounding-box volume must fall in a sane range, or WARN, placeholders included.
+
+**The checklist's own wording was part of it.** Item 1 below used to list "a thin spike" among the wrong things to see, and the rule
+under "Record the answers" turns a wrong thing seen into `FAIL`. A 60 x 120 mm section over 1.24 m reads as a spike from the side, so
+the item described its own correct answer as wrong. V01 is recorded as `WARN` (the decision of the architecture chat, P14), and item 1
+is reworded so that a later reader is not given the same contradiction.
+
 **The mast items describe the current build.** The 7 Oct hardware decisions replace the fixed mast with a lift (this branch implements the
 configuration in force when it was written, and the lift migration is tracked separately), so what items 1 to 4 describe will change. Answer for
 what is **on the screen now**, not for what is coming.
@@ -34,10 +71,11 @@ where it may not. `sim:=mock rviz:=true` shows the same preview with no Gazebo w
 
 Look at both windows for each item. Gazebo shows what the physics built; RViz shows what the description says.
 
-1. **The mast.** A 60 x 120 mm rectangular section, taller than it is wide.
-   *Wrong:* a square column, or a thin spike. Look at it from the front and from the side: the long side of the section runs along
-   the robot's width (y), so it is wider from the front than from the side. That orientation is an assumption in `datums.yaml`
-   (`mast_section`: "orientation unconfirmed"); say so if the geometry looks the wrong way round to you.
+1. **The mast.** A 60 x 120 mm rectangular section, about 1.24 m tall: a thin extrusion, and it reads as a spike from the side.
+   *Wrong:* a square column, or a section that is not 60 x 120. Look at it from the front and from the side: the long side of the
+   section runs along the robot's width (y), so it is wider from the front than from the side. That orientation is an assumption in
+   `datums.yaml` (`mast_section`: "orientation unconfirmed"), and option B has it the other way round (V01-F1); say so if the geometry
+   looks the wrong way round to you. *Answered once, see Status above.*
 2. **The two arms.** Rooted on the plate at the top of the mast, symmetric about the robot's centreline, with no limb passing
    through the mast or through each other at the home pose.
    *Wrong:* an arm starting somewhere else, one arm higher than the other, an arm reaching through the mast, two arms overlapping.
@@ -81,3 +119,5 @@ A trajectory to run for item 6 (moves the left arm's joints 1, 2 and 4 over 4 se
 
 One line per item: the item number and what you saw. They go into the step's report and into the evidence for V01; the check
 turns `PASS` only when all eight have an answer that says what was seen, and `FAIL` if any item shows the wrong thing.
+
+Recorded so far: item 1 (the mast), see Status above. Items 2 to 8 are open, so the check is `WARN`.
