@@ -38,7 +38,7 @@
   "known_defects_in_every_file": [
     {
       "id": "V01-F1",
-      "what": "mast_base_link box is size 0.060 x 0.120 (x fore-aft, y lateral): probably rotated 90 degrees relative to option B (0.120 fore-aft x 0.060 lateral). The value of mast_section is right, the axis assignment was never specified as a convention or tested."
+      "what": "mast_base_link box is size 0.060 x 0.120 (x fore-aft, y lateral): probably rotated 90 degrees. Option B orients the same HFS6-60120 cross-section (its 340 mm arm_profile, not a full-height mast) 0.120 fore-aft x 0.060 lateral. The value of mast_section is right; the axis assignment was a prose note ('orientation unconfirmed') and no test asserted it."
     },
     {
       "id": "V01-F2",

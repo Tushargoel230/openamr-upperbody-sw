@@ -18,7 +18,8 @@ forward is the structure: the frame contract, the two-call arm composition, how 
 ### Two defects in every file, found by looking at it (V01)
 
 - **V01-F1, the mast section is probably rotated 90°.** The mast box is `0.060 x 0.120` (x fore-aft, y lateral). Option B
-  has the same profile 120 mm fore-aft and 60 mm across, the stiff direction against the arms' forward cantilever.
+  orients the same HFS6-60120 cross-section (its 340 mm `arm_profile`, not a full-height mast) 120 mm fore-aft and 60 mm
+  across, the stiff direction against the arms' forward cantilever; so "probably".
   `mast_section = [0.060, 0.120]` is a right value; its axis assignment was only a prose note ("orientation
   unconfirmed") and no test asserted it. It is coupled to `left/right_arm_mount_pose` (y = +/-0.060), which sit on the
   side faces of the 120 mm width, so it cannot be turned in isolation.
