@@ -16,11 +16,12 @@
 #   assets/robot/openarm_v2.0/config/robot_presets/right_arm_with_pinch_gripper.yaml
 #   @ 14ff67b638ff1c738a1b9a6be8aaa5ce5ed2c831 (pinned, ADR-001)
 # Derived, Apache-2.0. Modified by OpenAMRobot: only `robot.root_frame` and
-# `primary_arm.connection.parent`, both now `mast_right_arm_mount_link` (ADR-008).
-# Everything else is verbatim upstream.
+# `primary_arm.connection.parent`, both now `lift_carriage_link`, option B's carriage (ADR-008, P15).
+# Everything else is verbatim upstream, including the zero `connection.origin`: combined_robot.xacro
+# sets the mount pose from option B's own config (geometry.arm_mount), so that there is one source.
 
 robot:
-  root_frame: mast_right_arm_mount_link
+  root_frame: lift_carriage_link
   components:
     - primary_arm
     - primary_arm_end_effector
@@ -55,7 +56,7 @@ primary_arm:
   inertials: nominal
   prefix: openarm_right_
   connection:
-    parent: mast_right_arm_mount_link
+    parent: lift_carriage_link
     origin:
       x: 0.0
       y: 0.0

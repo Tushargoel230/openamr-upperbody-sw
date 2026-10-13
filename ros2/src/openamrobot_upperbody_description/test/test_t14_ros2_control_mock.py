@@ -5,7 +5,7 @@ use_fake_hardware:=true: "exactly as upstream does" is asserted, not assumed.
 """
 import pytest
 
-from conftest import ARM_PACKAGES, HARDWARE_PROFILES, MASTS, expand
+from conftest import ARM_PACKAGES, BASE_PLATES, HARDWARE_PROFILES, expand
 from ros2_control_utils import (BASE_JOINT_HINTS, arm_joints_needing_an_interface, blocks, controlled_joints, element_text,
                                 normalised, plugins, upstream_blocks)
 
@@ -18,9 +18,9 @@ def test_t14_mock_arms_use_generic_system():
                                                          ("openarm_right_hardware_interface", MOCK)]
 
 
-@pytest.mark.parametrize("mast_id", MASTS)
-def test_t14_mock_has_no_hardware_or_gazebo_plugin_for_any_mast(mast_id):
-    text = element_text(expand(hardware_profile="mock", mast_id=mast_id))
+@pytest.mark.parametrize("base_plate", BASE_PLATES)
+def test_t14_mock_has_no_hardware_or_gazebo_plugin_for_any_base_plate(base_plate):
+    text = element_text(expand(hardware_profile="mock", base_plate=base_plate))
     for forbidden in FORBIDDEN:
         assert forbidden not in text, f"{forbidden} appears in the mock expansion"
 

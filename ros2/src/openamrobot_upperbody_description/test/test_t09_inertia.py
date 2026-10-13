@@ -57,11 +57,11 @@ def massed_links(root):
 
 def test_t09_every_massed_link_in_every_expansion_is_physically_possible():
     problems, checked, names = [], 0, set()
-    for mast_id, arm_package in MATRIX:
-        for name, inertial in massed_links(expand(mast_id=mast_id, arm_package=arm_package)):
+    for base_plate, arm_package in MATRIX:
+        for name, inertial in massed_links(expand(base_plate=base_plate, arm_package=arm_package)):
             checked += 1
             names.add(name)
-            problems += [f"[{mast_id}/{arm_package}] {p}" for p in inertia_problems(name, inertial)]
+            problems += [f"[{base_plate}/{arm_package}] {p}" for p in inertia_problems(name, inertial)]
     write_sidecar("T09", "inertia", "massed links: mass > 0, principal moments > 0, triangle inequality, tensor PD",
                   "FAIL" if problems else "PASS",
                   {"massed_links": len(names), "link_instances_checked": checked, "failures": problems,
@@ -72,7 +72,7 @@ def test_t09_every_massed_link_in_every_expansion_is_physically_possible():
 def test_t09_the_default_expansion_has_massed_links_from_all_three_owners():
     # guards against the check passing because it found nothing to check
     names = [n for n, _ in massed_links(expand())]
-    assert "base_link" in names and "mast_base_link" in names and "openarm_left_link1" in names
+    assert "base_link" in names and "lift_column_base_link" in names and "openarm_left_link1" in names
     assert len(names) >= 30
 
 

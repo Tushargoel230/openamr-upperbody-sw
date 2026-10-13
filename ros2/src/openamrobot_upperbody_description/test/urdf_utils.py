@@ -63,16 +63,40 @@ def position(pose):
     return pose[:3, 3].copy()
 
 
-def zero_pose_poses(root):
-    """{link name: 4x4 pose in the root link} with every joint at zero position (movable joints contribute only their
-    <origin>). For flagging, not for kinematics: fixed_fk is the one that refuses movable joints."""
+def joint_motion(joint, position):
+    """4x4 child-frame displacement of a joint at `position` (prismatic: metres along its axis; revolute and continuous:
+    radians about it). Fixed, planar and floating joints contribute nothing."""
+    kind = joint.get("type")
+    t = np.eye(4)
+    if kind not in ("prismatic", "revolute", "continuous"):
+        return t
+    axis = joint.find("axis")
+    a = np.array([float(v) for v in (axis.get("xyz") if axis is not None else "1 0 0").split()])
+    a = a / np.linalg.norm(a)
+    if kind == "prismatic":
+        t[:3, 3] = a * position
+    elif kind in ("revolute", "continuous"):
+        x, y, z = a
+        k = np.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
+        t[:3, :3] = np.eye(3) + np.sin(position) * k + (1 - np.cos(position)) * (k @ k)
+    return t
+
+
+def zero_pose_poses(root, positions=None):
+    """{link name: 4x4 pose in the root link}. Every joint is at zero unless `positions` ({joint name: value}) says otherwise:
+    a movable joint then contributes its <origin> and its displacement (prismatic, revolute, continuous). For flagging, not for
+    kinematics: fixed_fk is the one that refuses movable joints."""
+    positions = positions or {}
     by_child = parent_joints(root)
     poses = {}
 
     def pose(link):
         if link not in poses:
             joint = by_child.get(link)
-            poses[link] = np.eye(4) if joint is None else pose(joint.find("parent").get("link")) @ joint_origin(joint)
+            if joint is None:
+                poses[link] = np.eye(4)
+            else:
+                poses[link] = pose(joint.find("parent").get("link")) @ joint_origin(joint) @ joint_motion(joint, positions.get(joint.get("name"), 0.0))
         return poses[link]
 
     for element in root.findall("link"):

@@ -5,7 +5,7 @@ import re
 import pytest
 import xacro
 
-from conftest import ARM_PACKAGES, COMBINED, MASTS, expand, expand_xml, tree_facts
+from conftest import ARM_PACKAGES, BASE_PLATES, COMBINED, expand, expand_xml, tree_facts
 
 COMMENT = ("A6: planar base joint — present, DISABLED by default (AD-30: base and arm never move together in "
            "OpenAMRobot 2.0). Enable only for future whole-body planning experiments.")
@@ -24,29 +24,29 @@ def test_t11_default_has_no_world_and_no_planar_joint(arm_package):
 
 
 @pytest.mark.parametrize("arm_package", ARM_PACKAGES)
-def test_t11_enabled_has_world_and_a_planar_joint_world_to_base_link(arm_package):
+def test_t11_enabled_has_world_and_a_planar_joint_world_to_base_footprint(arm_package):
     root = expand(arm_package=arm_package, enable_planar_base="true")
     links, joints, child_of = tree_facts(root)
     assert "world" in links and "base_planar_joint" in joints
     joint = root.find("joint[@name='base_planar_joint']")
     assert joint.get("type") == "planar"
     assert joint.find("parent").get("link") == "world"
-    assert joint.find("child").get("link") == "base_link"
+    assert joint.find("child").get("link") == "base_footprint"
     # a planar joint moves in the plane normal to its axis; the URDF default (x) would be a vertical plane
     assert joint.find("axis").get("xyz").split() == ["0", "0", "1"]
-    # the root moves from base_link to world, and nothing else changes
+    # the root moves from base_footprint to world, and nothing else changes (base_link stays base_footprint's child)
     assert sorted(set(links) - set(child_of)) == ["world"]
-    assert child_of["base_link"] == "world"
+    assert child_of["base_footprint"] == "world" and child_of["base_link"] == "base_footprint"
     default_links, default_joints, _ = tree_facts(expand(arm_package=arm_package))
     assert sorted(set(links) - set(default_links)) == ["world"]
     assert sorted(set(joints) - set(default_joints)) == ["base_planar_joint"]
 
 
-def test_t11_planar_flag_leaves_the_mast_and_arms_untouched():
-    for mast_id in MASTS:
-        a = expand(mast_id=mast_id)
-        b = expand(mast_id=mast_id, enable_planar_base="true")
-        for name in ("mast_mount_joint", "left_arm_mount_joint", "head_camera_joint"):
+def test_t11_planar_flag_leaves_the_lift_and_arms_untouched():
+    for base_plate in BASE_PLATES:
+        a = expand(base_plate=base_plate)
+        b = expand(base_plate=base_plate, enable_planar_base="true")
+        for name in ("lift_column_base_joint", "lift_joint", "openarm_left_base_link_mount_joint", "head_camera_mount_joint"):
             assert a.find(f"joint[@name='{name}']/origin").attrib == b.find(f"joint[@name='{name}']/origin").attrib
 
 
@@ -61,7 +61,8 @@ def test_t11_the_comment_block_precedes_the_planar_block_in_the_source():
 
 # --- the arg quoting in combined_robot.xacro is load-bearing (DESIGN_LOG 2026-10-05): do not "clean it up" ---------
 
-@pytest.mark.parametrize("arg", ["mast_id", "arm_package", "hardware_profile", "enable_planar_base", "datums_file"])
+@pytest.mark.parametrize("arg", ["column", "base_plate", "head_pitch", "base_tilt", "arm_package", "hardware_profile",
+                                  "enable_planar_base", "datums_file"])
 def test_t11_args_stay_quoted_and_eager(arg):
     src = _source()
     assert re.search(rf'<xacro:property name="{arg}" lazy_eval="false" value="\'\$\(arg {arg}\)\'"/>', src), (

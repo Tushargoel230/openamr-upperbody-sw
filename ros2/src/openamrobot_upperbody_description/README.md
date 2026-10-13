@@ -1,51 +1,85 @@
 # openamrobot_upperbody_description
 
-The canonical OpenAMRobot 2.0 robot description: the platform base, a fixed MISUMI mast selected by `mast_id`, and two
-OpenArm v2.0 arms, expanded from one xacro entry point.
+The OpenAMRobot 2.0 robot description, in two layers that do not edit each other:
 
-> **Evidence class: static + mock.** Everything here is verified by xacro expansion, `check_urdf`, zero-pose
-> forward kinematics and unit tests, plus one headless launch of the mock bringup (L01). Nothing has been launched on
-> hardware or in Gazebo; the `gazebo` and `real` `ros2_control` blocks are checked by expansion only. Read [Known limitations](#known-limitations) before relying on any number in the model.
+- **option B**, Alex's upper-body model (P-03 rev18.9 item 18, rev19.0 item 19), merged on `main`: the lift column on a two-position
+  base plate, a prismatic `lift_joint`, the lift carriage, the arm profile, the OpenArm mount points and the head camera.
+  `urdf/openamrobot_upperbody.xacro` (the macro), `urdf/openamrobot_upperbody.urdf.xacro` (its standalone wrapper),
+  `config/upperbody_configuration.yaml` (the one source of the configuration IDs, the baseline and the geometry) and
+  `launch/upperbody_description.launch.py` are his, and `test/test_upperbody_*.py` are his tests of them;
+- **the combined robot**, ours: `urdf/combined_robot.xacro` composes option B with platform-sw's base and the two upstream OpenArm
+  v2.0 arms, and adds the datums, the frame contract, the `ros2_control` profiles, the configuration id and the verification.
+
+> **Evidence class: static + mock.** Everything here is verified by xacro expansion, `check_urdf`, forward kinematics and unit
+> tests, plus one headless launch of the mock bringup (L01). Nothing has been launched on hardware; the `gazebo` and `real`
+> `ros2_control` blocks are checked by expansion here (the Gazebo ones run in `openamrobot_upperbody_gazebo`). Read
+> [Known limitations](#known-limitations) before relying on any number in the model.
 
 ## What it is
 
-`urdf/combined_robot.xacro` composes, without editing any of them:
+`urdf/combined_robot.xacro` composes, without editing upstream's files:
 
 ```
-base_link                       platform-sw (openamrobot_description), included unchanged
-  -> mast_base_link             mast.xacro, placeholder box + inertial
-       -> mast_mount_link       the plate reference frame; height set by mast_id
-            -> mast_{left,right}_arm_mount_link    emitted by the upstream OpenArm macro
-                 -> openarm_{left,right}_*         two calls of upstream `openarm_v20_robot`, one per arm
-                      -> {left,right}_wrist_camera_link -> *_optical_frame     upper_sensors.xacro
-            -> head_camera_link -> head_camera_optical_frame                   upper_sensors.xacro
-            -> so101_mount_link                    only with arm_package:=so101 (stub)
-world -> base_planar_joint -> base_link             only with enable_planar_base:=true
+base_footprint                  platform-sw (openamrobot_description), included unchanged; the root, on the floor (REP 105)
+  -> base_link                  0.098 m up, the drive-axle midpoint; the wheels, casters, lidar, base camera, IMU and the six
+                                near-field sensor frames (us_*, tof_*) are platform-sw's and hang from it
+  -> lift_column_base_link      option B: on the base plate, 0.304 m up, x +0.060 (bp000) or +0.110 (bp050) from base_link
+       -> lift_joint            option B: prismatic, 0 .. 0.350 m, effort 0 and velocity 0 (we have no authority to command it)
+            -> lift_carriage_link
+                 -> arm_profile_link                       option B: HFS6-60120, 340 mm, the one collision body of the structure
+                 -> head_camera_mount_link -> head_camera_link -> head_camera_optical_frame     option B (ZED Mini)
+                 -> openarm_{left,right}_base_link         x +0.180, y +-0.031, z +0.166 from the carriage (option B's pose)
+                      -> openarm_{left,right}_*            two arm calls of the upstream OpenArm macros, one per arm
+                           -> {left,right}_wrist_camera_link -> *_optical_frame     upper_sensors.xacro
+                 -> so101_mount_link                       only with arm_package:=so101 (stub)
+world -> base_planar_joint -> base_footprint               only with enable_planar_base:=true
 ```
 
-The default expansion has 40 links and one root, `base_link`. There is no OpenArm body: the arms bolt to the mast, so
-each arm is rooted on its own plate link. Upstream `openarm_description` is a pinned dependency and is never modified.
+The default expansion has 57 links and one root, `base_footprint`. There is no OpenArm body (ADR-008) and there is no mast: the
+shoulder height is the **position of `lift_joint`**, `1.000 m + lift` from the floor (0.304 base plate + 0.530 retracted column +
+0.166 mount), so 1.000 m at lift 0 and 1.350 m at the 0.350 m stroke. Upstream `openarm_description` is a pinned dependency and
+is never modified.
 
-The mast height is **configuration, not state**. `mast_id` selects one of four shoulder-axis heights; changing it is a
-different robot configuration, not a joint to move. Every combination of the args below has its own
-configuration id (see [Configuration id](#configuration-id)).
+**The lift is state, not configuration.** Its three calibration stops `L1000`, `L1175`, `L1350` (shoulder 1.000, 1.175, 1.350 m;
+`lift_joint` 0, 0.175, 0.350 m) are **calibration IDs**: a joint position with a calibration, never an argument of the model and
+never an input of the configuration id. ADR-010 had them as configuration IDs and was wrong; option B's own config says so.
+
+### How the arms attach, and the one edit this makes to option B's file
+
+Option B declares `openarm_{left,right}_base_link` and a mount joint of the same name as upstream's arm macro emits
+(`openarm_left_base_link_mount_joint`): the arm's base link IS its mount frame. Declaring both is a duplicate link, so the
+combined robot has the upstream arm macro emit them, at option B's pose read from `upperbody_configuration.yaml`
+(`geometry.arm_mount`), and tells option B's macro not to (`emit_arm_mounts:=false`, an opt-in parameter that defaults to his
+behaviour). It adds one more opt-in parameter, `column_inertial`, which carries the lift's catalogue mass on
+`lift_column_base_link` (he models no masses). With both at their defaults the macro expands exactly as on `main`, which
+`test_t04_optb_composition.py` asserts, and that test also asserts that **every frame of his standalone model is in the combined
+robot at the same pose**, at every lift position, base plate and head pitch.
+
+The two upstream calls are the macro that `openarm_v20_robot` itself calls (`openarm_v20_emit_attached_components`), because
+`openarm_v20_robot` declares its `root_frame` as a link and option B already declares `lift_carriage_link`. Pinned to the upstream
+commit of `config/upstream_pins.yaml` (C02); the preset files keep upstream's zero `connection.origin` and the pose is set in
+`combined_robot.xacro`, so there is one source for it.
 
 ## Arguments
 
 | Arg | Values | Default | Effect |
 |---|---|---|---|
-| `mast_id` | `mast_1300`, `mast_1350`, `mast_1400`, `mast_1450` | `mast_1350` | Shoulder-axis height above the floor in mm. `mast_1350` is the installed release configuration; the other three are analysis positions, not installed configurations. Mast top is 1500 mm; 1700 mm is the maximum assembled robot height, not a shoulder height. |
-| `arm_package` | `openarm`, `so101`, `none` | `openarm` | `openarm`: two upstream OpenArm v2.0 arms. `so101`: a single `so101_mount_link` stub on `mast_mount_link`, nothing below it. `none`: base and mast only. |
+| `column` | `dold_v4_350`, `tl3_400` | `dold_v4_350` | Option B's lift column. `tl3_400` has `null` supplier data and **does not expand** (a configuration that cannot expand, not a placeholder that does). |
+| `base_plate` | `bp000`, `bp050` | `bp000` | Option B's two base-plate positions: the column axis at x +0.060 m or +0.110 m from `base_link` (330 mm behind the chassis front edge; not on the drive axle). |
+| `head_pitch` | `hp15`, `hp20`, `hp25`, `hp30`, `hp35` | `hp25` | Head-camera pitch down, degrees. |
+| `base_tilt` | `bt05`, `bt10`, `bt15` | `bt10` | Base-camera up-tilt, degrees: the same arg platform-sw's base file reads for `base_camera_link`. |
+| `arm_package` | `openarm`, `so101`, `none` | `openarm` | `openarm`: two upstream OpenArm v2.0 arms. `so101`: a single `so101_mount_link` stub on `lift_carriage_link`, nothing below it. `none`: base and upper structure only. Option B's mount frames are there with every package. |
 | `hardware_profile` | `mock`, `gazebo`, `real` | `mock` | Selects the arm `ros2_control` plugin (ADR-003): `mock` = `mock_components/GenericSystem` and `real` = `openarm_hardware/OpenArmHW`, both through the upstream bimanual macro; `gazebo` = our own block with `gz_ros2_control/GazeboSimSystem`. Part of the configuration id. See [ros2_control](#ros2_control). |
-| `enable_planar_base` | `true`, `false` | `false` | `true` adds a `world` link and `base_planar_joint` (type `planar`, axis `0 0 1`) above `base_link`. Off by default: base and arm never move together in OpenAMRobot 2.0. |
+| `enable_planar_base` | `true`, `false` | `false` | `true` adds a `world` link and `base_planar_joint` (type `planar`, axis `0 0 1`) above `base_footprint`. Off by default: base and arm never move together in OpenAMRobot 2.0. |
 | `datums_file` | path | `config/datums.yaml` | Alternative datum file, used by the tests. |
 | `controllers_file` | absolute path | empty | The controller parameter file the `gazebo` profile hands to `gz_ros2_control`. Empty: no `<parameters>` element. Supplied by the simulation launch; ignored by `mock` and `real`. See [ros2_control](#ros2_control). |
 
-An unknown value for any arg stops expansion with an error that lists the accepted values.
+The defaults of the first four are option B's `baseline:`; T01 asserts they match. An unknown value for any arg stops expansion
+with an error that lists the accepted values. There is no `mast_id`.
 
 ```bash
 xacro $(ros2 pkg prefix openamrobot_upperbody_description)/share/openamrobot_upperbody_description/urdf/combined_robot.xacro \
-      mast_id:=mast_1400 arm_package:=openarm > /tmp/robot.urdf
+      base_plate:=bp050 arm_package:=openarm > /tmp/robot.urdf
 check_urdf /tmp/robot.urdf
 ```
 
@@ -65,22 +99,23 @@ The tests and the evidence report describe the **installed** package, so rebuild
 ## View it
 
 ```bash
-ros2 launch openamrobot_upperbody_bringup view.launch.py mast_id:=mast_1350
+ros2 launch openamrobot_upperbody_bringup view.launch.py base_plate:=bp000
 ```
 
-The launch file lives in `openamrobot_upperbody_bringup`; the model and the RViz config stay here. It starts `robot_state_publisher`, `joint_state_publisher_gui` and RViz2 (fixed frame `base_link`). Source the workspace
+The launch file lives in `openamrobot_upperbody_bringup`; the model and the RViz config stay here. It starts `robot_state_publisher`, `joint_state_publisher_gui` and RViz2 (fixed frame `base_link`; the GUI's sliders move `lift_joint` too). Source the workspace
 overlay first: the OpenArm and base meshes are `package://` URIs that only resolve through it, and without it RViz loads
-the model but draws the arms and base as missing geometry. The launch accepts `mast_id`, `arm_package` and
+the model but draws the arms and base as missing geometry. The launch accepts the four configuration IDs, `arm_package` and
 `enable_planar_base`. With `enable_planar_base:=true` the robot cannot be driven from here: `robot_state_publisher` treats
 the planar joint as fixed (check W02).
 
-The launch has started without xacro or mesh errors, but **no person has looked at the RViz window yet** (check V01 is a
-WARN until someone does).
+A person looked at the mast version of this model once (P14, V01 item 1); the lift model has not been looked at, and check V01 is a
+WARN until someone answers `docs/v01_visual_check.md`.
 
 ## ros2_control
 
 `urdf/ros2_control.xacro` defines `openamr_arm_ros2_control(hardware_profile, controllers_file)`, called from `combined_robot.xacro` for
-`arm_package:=openarm` only. The mobile base never gets a `<ros2_control>` block (ADR-003).
+`arm_package:=openarm` only. The mobile base never gets a `<ros2_control>` block (ADR-003), and neither does the lift: `lift_joint` has no interface because this
+repository has no authority to command it.
 
 | `hardware_profile` | Arm plugin | How |
 |---|---|---|
@@ -112,40 +147,28 @@ cannot have command interfaces"). The gazebo package's README has the measuremen
 upstream's `joint_mimics.yaml`, never written in `ros2_control.xacro` (`test_t15_finger_mimic_multiplier.py` fails on a
 literal, including one equal to today's value).
 
-## Add a mast ID
+## Add a configuration ID
 
-A mast ID is one entry in `config/mast_ids.yaml`:
-
-```yaml
-mast_ids:
-  mast_1500: {shoulder_height: 1.500, class: analysis}     # metres above the floor; class: release | analysis
-```
-
-The accepted-value check in `combined_robot.xacro`, the mast offset (`mast.xacro`), the expansion matrix and the tests
-all read this file, so nothing else needs a code change. Then:
-
-1. Only one ID may be `class: release`, and it must be `default`; `analysis` IDs are not installed configurations.
-2. The shoulder height must be compatible with the mast top and the maximum assembled height in the same file.
-3. Update the ID lists in the `view.launch.py` and `mock.launch.py` description strings (`openamrobot_upperbody_bringup`) and in this README.
-4. Run `verify_a6.sh`: T05 asserts that `openarm_left_base_link` sits at exactly the new shoulder height, and the
-   configuration id of the new mast ID will differ from every existing one.
-
-A mast ID that does not follow a recorded decision should not be `class: release`.
+The IDs are option B's: add a value under `configuration_axes` in `config/upperbody_configuration.yaml` (and its data), and
+everything here reads it: the accepted-value check in `combined_robot.xacro`, the expansion matrix, the tests and the
+configuration ids. A value whose supplier data is `null` is accepted as an ID and refused at expansion, as `tl3_400` is. Change
+that file only with its owner (Alex): it is the single source of the IDs for his tests and for ours, and it is the hash input
+set of his declaration.
 
 ## Add an arm package
 
 `arm_package` selects a model subtree and nothing more. It does **not** define what an arm can do: capability semantics,
 the Device Package schema and its interfaces are the Manipulation team's I2 work (Om Mangesh Jagtap, Adnan Khalid). This
-package only decides which links and joints are attached to the mast.
+package only decides which links and joints are attached to the lift carriage.
 
 To add a package:
 
 1. Add the value to the accepted list and a new `xacro:if` block in `urdf/combined_robot.xacro`, attached to
-   `mast_mount_link` (or to `mast_left_arm_mount_link` / `mast_right_arm_mount_link` if it uses the OpenArm plates).
+   `lift_carriage_link` (or to `openarm_{left,right}_base_link` if it uses the OpenArm mount points).
 2. Add the frames to `config/frame_contract.yaml` with `req: C` and `condition: "arm_package == <value>"`. T04 fails on
    any link in our namespaces that the contract does not list.
-3. Add the value to `ARM_PACKAGES` in `test/conftest.py` and to `expansion_matrix` / `planar_extras` in
-   `scripts/evidence_common.py`, so T01, T02 and the configuration ids cover it.
+3. Add the value to `ARM_PACKAGES` in `scripts/evidence_common.py` (`test/conftest.py` reads it from there), so T01, T02 and the
+   configuration ids cover it.
 4. Every number the new subtree needs goes in `config/datums.yaml` (below), not in the xacro.
 
 The `so101` stub is the model: a link, a fixed joint, and a note in the frame contract that A9 owns everything below it.
@@ -153,17 +176,20 @@ The `so101` stub is the model: a link, a fixed joint, and a note in the frame co
 ## Datums
 
 Every number in the model that is not owned by upstream OpenArm lives in `config/datums.yaml`, with its provenance.
-Computed values (for example the mast offset) are not stored; upstream values are read from upstream YAML, not copied.
+Computed values (for example the lift's inertia tensor) are not stored; upstream values, option B's geometry included, are read
+from their YAML, not copied.
 
 ```yaml
 datums:
   <name>:
-    value: <number | [x, y, z] | {xyz: [..], rpy: [..]}>
+    value: <number | [x, y] | [x, y, z] | {xyz: [..], rpy: [..]} | null>
     source: <measured | contractor_m01 | f2s | supplier | plan | upstream | derived | placeholder>
     status: <placeholder | provisional | verified>
     ref: "<document, drawing number, file:line, or person + date>"
     owner: "<who can change it>"
     note: "<optional>"
+    axis_convention: {x: fore_aft, y: lateral}       # required for a list of two or three dimensions
+    density_band: {min, max, reason, bounding_box}   # a mass of ours: the density it is expected to imply, declared by its author
 ```
 
 Rules, enforced by tests T12 and T13 (`config/datums.schema.json` holds the schema):
@@ -178,8 +204,18 @@ Rules, enforced by tests T12 and T13 (`config/datums.schema.json` holds the sche
    if the content changed against `HEAD~` and the revision did not.
 6. A number that only affects how the model is *drawn* (the camera marker cube edge, `openamr_sensor_marker_edge`) is a
    named visual-only constant in the xacro, not a datum. It may appear only inside a `<visual>`.
+7. **A `null` value is a hard-fail.** Supplier data that does not exist yet is `value: null` with `source` and `status`
+   `placeholder`, and the xacro that reads it stops with `datum <name> is null` instead of expanding with a guess (option B's
+   `xacro.fatal` on `tl3_400`, adopted). `lift_mass_tl3_400` is the one today.
+8. **A list of dimensions declares its axis convention** (`x: fore_aft`, `y: lateral`, `z: vertical`), and T12 asserts the
+   assignment against an expansion: a pair whose axes are only a note in prose is how the mast profile was probably rotated
+   90 degrees for six steps (V01-F1, confirmed by Alex 12 Oct).
+9. **A mass of ours declares a `density_band`**, and T10 reports its implied density (mass over its bounding box) and WARNs
+   outside the band, placeholders included. The band is per datum and the check is scoped to our own masses: upstream's
+   inertials are not ours to judge (arm `link2` implies 297 kg/m3 over its bounding box, which is mostly air).
 
-Current state (revision `2026-10-08.e`): **15 datums: 8 placeholder, 6 provisional, 1 verified.**
+Current state (revision `2026-10-13.a`): **13 datums: 4 placeholder, 8 provisional, 1 verified.** Four of them are placeholders:
+`lift_mass_tl3_400` (null, hard-fail), `lift_column_section` (the lift's lateral side is in no document we hold), and the two wrist-camera poses.
 `ros2 run openamrobot_upperbody_description datums_report.py` lists them with their owners.
 
 ## Verify
@@ -204,70 +240,84 @@ Result vocabulary: `PASS`, `FAIL`, `WARN`, `SKIP`. **`SKIP` and `WARN` are not `
 
 | Check | What it proves |
 |---|---|
-| T01 | all four `mast_id` x three `arm_package` on `mock`, plus `openarm` on `gazebo` and `real` at `mast_1350`, expand |
-| T02 | `check_urdf` accepts every T01 expansion, the planar-flag expansions and `openarm` on `gazebo` and `real` at `mast_1300` (the last two groups are labelled extra) |
+| T01 | 14 expansions, one factor at a time around option B's baseline (every `base_plate` x `arm_package` on `mock`, every other `head_pitch` and `base_tilt`, `openarm` on `gazebo` and `real`) expand; there is no mast anywhere; the arg defaults are the baseline; a `null`-data column does not expand |
+| T02 | `check_urdf` accepts every T01 expansion, the planar-flag expansions and `openarm` on `gazebo` and `real` at `bp050` (the last two groups are labelled extra) |
 | T03 | exactly one root and no duplicate link names |
-| T04 | the frame contract: required frames and parents, conditional frames, the expected-from-other-owner frames |
-| T05 | `openarm_left_base_link` is at the shoulder height of its `mast_id`, within 1 mm, for all four IDs |
+| T04 | the frame contract: required frames and parents, conditional frames; the near-field frames are **consumed from platform-sw, not declared** (`consumed_from`); and `test_t04_optb_composition.py`: every frame of option B's standalone model is in the combined robot at the same pose, the rev19.0 numbers, `base_link` 0.098 m up |
+| T05 | shoulder height per lift stop: `openarm_{left,right}_base_link` is 1.000 / 1.175 / 1.350 m above the floor at `L1000` / `L1175` / `L1350`, within 1 mm, by forward kinematics through the lift joint |
 | T06 | an unknown arg value fails with the accepted values named |
 | T07 / T08 | collision geometry exists or is declared absent; a collision mesh that is the visual mesh is reported |
-| T09 / T10 | every massed link has positive mass and a physically valid inertia; the modelled mass is reported by owner against 120 kg, next to the F2S vehicle estimate (93 kg, `f2s_vehicle_mass_estimate`), with "per-link masses still placeholders" printed while any mass group is `placeholder` in `config/mass_provenance.yaml` (three states, `placeholder` / `external_nominal` / `verified`, over base, mast, openarm and sensors), and a separate line naming the `external_nominal` groups |
-| T11 | no planar joint by default; with `enable_planar_base:=true` a `planar` joint, parent `world`, child `base_link` |
-| T12 / T13 | datum schema, provenance rules and references |
+| T09 / T10 | every massed link has positive mass and a physically valid inertia; the modelled mass is reported by owner against 120 kg, next to the F2S vehicle estimate (93 kg, `f2s_vehicle_mass_estimate`), with "per-link masses still placeholders" printed while any mass group is `placeholder` in `config/mass_provenance.yaml` (three states, `placeholder` / `external_nominal` / `verified`, over base, lift, openarm and sensors), plus the density plausibility of our masses, and a separate line naming the `external_nominal` groups |
+| T11 | no planar joint by default; with `enable_planar_base:=true` a `planar` joint, parent `world`, child `base_footprint` |
+| T12 / T13 | datum schema, provenance rules (null is a hard-fail; a dimension list declares and asserts its axes) and references |
 | C01 | every configuration id is `sha256:` plus 64 hex characters and matches the C9 dataset schema pattern; every pin equals the `openamrobot-manipulation` baseline pin |
 | C02 | every pin in `config/upstream_pins.yaml` is a quoted full 40-hex hash, and equals `HEAD` of its clean checkout under `src/upstream/` when there is one (a pin with no checkout is listed as not compared; SKIP only when no pin has one) |
 | I01 | the installed package matches the source tree (catches evidence generated against a stale install) |
 | REV | a datum change carries a revision change |
 | T14 / T15 / T16 | `ros2_control` per profile, by expansion only: `mock` has `GenericSystem` and no `OpenArmHW`, `gazebo` has `GazeboSimSystem` for the same joints and interfaces plus the model plugin with the controller yaml, `real` has `OpenArmHW` with its CAN parameters; the base has none in any profile; `mock` and `real` equal upstream's own expansion; the finger-mimic multiplier is read from upstream's yaml (T15) |
 | L01 | launch test in `openamrobot_upperbody_bringup`: `mock.launch.py` brings all five controllers to `active` within 30 s and a trajectory on `left_arm_controller` moves `/joint_states` to the target |
-| E01 | **WARN, never PASS**: height, width and depth as lower bounds, see below |
-| W01, W02, V01 | **WARN**: see Known limitations |
+| E01 | **WARN, never PASS**: height, width and depth as lower bounds, per lift stop |
+| W01 | **PASS** since P15: the root is `base_footprint` and carries no inertial, so KDL consumers lose nothing (was a WARN) |
+| W02, V01 | **WARN**: see Known limitations |
 
 ### Configuration id
 
-`ros2 run openamrobot_upperbody_description print_config_id.py mast_id:=mast_1350 arm_package:=openarm hardware_profile:=mock` prints the id of one expansion:
-`sha256:` followed by the SHA-256 (64 hex characters) of the canonicalised expanded URDF, the three args, the datum revision
-and the pinned upstream commit. A 12-character prefix is for log lines only and is labelled as a prefix wherever it is
-shown. `hardware_profile` is part of the id because the id names the configuration, not just the geometry.
-The upstream commit is read from the git checkout of `openarm_description` in the workspace. With no checkout (CI, an
-installed package without sources) it falls back to the pin in `config/upstream_pins.yaml`, and the report says so in its
-limitations; a checkout with local changes is an error, never replaced by the pin. A test fails if a pin disagrees with
-its checkout (C02) or with the `openamrobot-manipulation` baseline pin (C01), so it moves in the same commit as the
-checkout does. Every pin is a full 40-hex hash in quotes: unquoted, YAML reads an all-digit hash as a number, and a prefix
-cannot be compared exactly.
+`ros2 run openamrobot_upperbody_description print_config_id.py column:=dold_v4_350 base_plate:=bp000 head_pitch:=hp25 base_tilt:=bt10 arm_package:=openarm hardware_profile:=mock`
+prints the id of one expansion: `sha256:` followed by the SHA-256 (64 hex characters) of the canonicalised expanded URDF, the
+six args, the datum revision and **every** upstream pin (`config/upstream_pins.yaml`). A 12-character prefix is for log lines
+only and is labelled as a prefix wherever it is shown. `hardware_profile` is part of the id because the id names the
+configuration, not just the geometry.
+
+| | Inputs |
+|---|---|
+| before P15 | canonical URDF, `mast_id`, `arm_package`, `hardware_profile`, datums revision, `openarm_description` commit |
+| now | canonical URDF, `column`, `base_plate`, `head_pitch`, `base_tilt`, `arm_package`, `hardware_profile`, datums revision, **all** upstream pins |
+
+The format is unchanged and still validates against C9, **so nothing fails to say that the meaning changed: an id recorded before
+P15 is not comparable with one computed now.** The lift stop is not an input (a calibration ID), and `enable_planar_base` is not a
+separate member (it is already in the URDF text). The pins are read from the git checkout of each upstream repository in the
+workspace; with no checkout (CI, an installed package without sources) they fall back to `config/upstream_pins.yaml` and the
+report says so; a checkout with local changes is an error, never replaced by the pin. A test fails if a pin disagrees with its
+checkout (C02) or with the `openamrobot-manipulation` baseline pin (C01), so it moves in the same commit as the checkout does.
+Every pin is a full 40-hex hash in quotes: unquoted, YAML reads an all-digit hash as a number, and a prefix cannot be compared
+exactly.
 
 ## Known limitations
 
 Nothing in this package is a measured value or a hardware result. In particular:
 
 - **Base inertials are platform-sw CAD placeholders.** The base comes from `openamr-platform-sw` unchanged; its masses and
-  inertias are CAD-export values. The mast mass is a placeholder and the arm masses are upstream nominal values.
-- **Mast and plate transforms are placeholders.** `mast_base_pose`, `left/right_arm_mount_pose` and `mast_mass`
-  are placeholder datums awaiting the general-arrangement and mast drawings. `mast_section` is provisional: the MISUMI
-  HFS6-60120 profile is 60 x 120 mm, but which axis carries the 120 mm is unconfirmed. **T05 asserts that the
-  shoulder height equals `shoulder_height(mast_id)`, which holds for any datum values; it does not validate the datums.**
-- **The head camera sits above the end of the mast at the two highest IDs.** `head_camera_pose` is a guess, +0.10 m above
-  the shoulder plate. At `mast_1400` and `mast_1450` the head-camera marker is the highest point on the robot, and at
-  `mast_1450` it is 0.0756 m above the 1.500 m mast top, so the model shows a camera floating beyond the end of the mast.
-  This is a placeholder artefact, but it raises a real question for the mechanical owner: the mast top is 1500 mm and the
-  shoulder plate is at 1350-1450 mm, so where does the head camera actually mount?
-- **The ZED wrapper is deferred.** The head camera and wrist cameras are plain frames with a marker cube, not sensor
-  models. The upstream ZED wrapper belongs with camera calibration.
+  inertias are CAD-export values. The arm masses are upstream nominal values, and the lift's 11.7 kg is a supplier catalogue
+  figure (provisional), not a weighed one.
+- **The lift column is a mass on a placeholder box, with no geometry.** Its section is `lift_column_section`: x = 0.240 is option
+  B's own statement that the column is mounted with its 240 mm side fore-aft, and y (the lateral side) is in no document we hold,
+  so it is set equal to x (placeholder, the one invented number of the lift). It reaches only the inertia tensor. **The column
+  has no collision geometry, so the arms can plan through it**; `arm_profile_link` (his 340 mm box) is the one collision body of
+  the structure. The whole catalogue mass sits on the fixed side at mid-height of the retracted column: the catalogue does not
+  split it between the fixed part and the moving stage.
+- **The base's pose above the floor is a decision record, not a measurement.** `base_link_height_above_floor` = 0.098 and the
+  column axis at x +0.060 are P-03 rev19.0 values (provisional); T04 asserts the datum equals platform-sw's joint in the expansion.
+- **The arms are 62 mm apart at their bases** (option B's y = +-0.031). They do not touch at the home pose at any lift stop or
+  base plate, but the left gripper reaches the right arm's own links in some random left-arm states (M04 / M03 record how often): a
+  reach and clearance question for A4 and Alex, and this repository does not move his mounts.
+- **The wrist-camera poses are placeholders** (`left/right_wrist_camera_pose`, kit datum unknown). They are marker frames with no
+  collision or inertial, which is why they are not hard-fail: that would stop every `openarm` expansion.
+- **The ZED wrapper is deferred.** The wrist cameras are plain frames with a marker cube, not sensor models; the head camera is
+  option B's frames. The upstream ZED wrapper belongs with camera calibration.
 - **E01 is WARN.** Meshes are not loaded, so height, width and depth come from link origins and box, cylinder and sphere
-  extents only. They are lower bounds: a figure under the limit proves nothing, and a figure over it is real. The
-  envelope is 1700 x 600 x 800 mm (provisional). Width is the one to look at.
-- **W01: KDL ignores the root-link inertia.** `base_link` carries an inertial from platform-sw, and KDL drops the inertia
-  of a root link, so `robot_state_publisher` and MoveIt never see it. Not fixed here: the usual workaround adds a dummy
-  root above `base_link`, which would change the frame contract's root, and the base belongs to platform-sw.
+  extents only, at each lift stop. They are lower bounds: a figure under the limit proves nothing, and a figure over it is real.
+  The envelope is 1700 x 600 x 800 mm (provisional).
 - **W02: `robot_state_publisher` converts the planar joint to fixed**, because KDL has no planar joint. The joint is
   present and `check_urdf` accepts it, which is what A6 asks for, but planar base motion can never come from
-  `robot_state_publisher`; in simulation it comes from the Gazebo `odom -> base_link` transform.
-- **V01: nobody has answered the visual checklist.** Numeric forward kinematics is not a visual check. The checklist is in
-  `docs/v01_visual_check.md` (repository root); the simulator and RViz open beside each other, and "looks fine" does not
-  clear it.
+  `robot_state_publisher`; in simulation it comes from the Gazebo `odom -> base_footprint` transform.
+- **V01: nobody has answered the visual checklist of the lift model.** Numeric forward kinematics is not a visual check. The
+  checklist is in `docs/v01_visual_check.md` (repository root), and every item states what to measure; "looks fine" does not
+  clear it. P14's look at the mast found two defects, both closed by this model (see the file).
 - **`ros2_control` runs on `mock` (L01) and on `gazebo` (G01, G02, in `openamrobot_upperbody_gazebo`); `real` is an
   expansion that nothing has loaded:** `openarm_hardware` cannot be built here (it needs OpenArmCAN). Mock hardware reflects
   its command back as state, so L01 shows the controller wiring, not tracking performance. In Gazebo the arms' position
-  interface is a velocity servo, so G01's tracking says nothing about the real arm. No MoveIt.
-- **No physical evidence.** Static expansion and zero-pose forward kinematics in this package's report; a simulator in the
-  Gazebo report.
+  interface is a velocity servo, so G01's tracking says nothing about the real arm.
+- **The lift's state is not from a physical source in simulation.** It has no `ros2_control` interface and platform-sw's
+  `JointStatePublisher` is scoped to the wheels, so on Gazebo `joint_state_publisher` reports it at zero and on mock a stub
+  reports the operating point (`lift_position`).
+- **No physical evidence.** Static expansion and forward kinematics in this package's report; a simulator in the Gazebo report.

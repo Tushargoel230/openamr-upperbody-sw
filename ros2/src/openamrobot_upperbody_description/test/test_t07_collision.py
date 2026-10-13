@@ -64,8 +64,8 @@ def shared_mesh_links(root):
 
 
 def _expansions():
-    """(roots of the 12 T01 expansions, every link name in any of them)."""
-    roots = [expand(mast_id=mast_id, arm_package=arm_package) for mast_id, arm_package in MATRIX]
+    """(roots of every base plate x arm package expansion, every link name in any of them)."""
+    roots = [expand(base_plate=base_plate, arm_package=arm_package) for base_plate, arm_package in MATRIX]
     return roots, {link.get("name") for root in roots for link in root.findall("link")}
 
 

@@ -90,40 +90,92 @@ def clear_sidecars(directory, only=None):
 
 # --- the expansions every check runs over ---------------------------------------------------------------------------
 
-def expansion_matrix(mast_ids_doc):
-    """T01's matrix as (mast_id, arm_package, hardware_profile): every mast_id x arm_package on `mock`, plus `openarm`
-    on `gazebo` and `real` at the default (release) mast_id."""
-    masts = list(mast_ids_doc["mast_ids"])
-    out = [(m, a, "mock") for m in masts for a in ("openarm", "so101", "none")]
-    out += [(mast_ids_doc["default"], "openarm", h) for h in ("gazebo", "real")]
-    return out
+# The four configuration IDs of option B (upperbody_configuration.yaml `configuration_axes`), in the order the xacro takes them.
+CONFIG_KEYS = ("column", "base_plate", "head_pitch", "base_tilt")
+ROW_KEYS = CONFIG_KEYS + ("arm_package", "hardware_profile")
+ARM_PACKAGES = ("openarm", "so101", "none")
 
 
-def planar_extras(mast_ids_doc):
-    """Not in T01's matrix: the planar flag at the default mast_id, per arm package. T02 runs them too, because the
-    W02 reasoning ("check_urdf accepts the planar joint") would otherwise rest on a claim nobody ran."""
-    return [(mast_ids_doc["default"], a, "mock") for a in ("openarm", "so101", "none")]
+def load_upperbody(share=None):
+    """Option B's configuration (config/upperbody_configuration.yaml, Alex's, merged on main): the axes, the baseline, the
+    column data, the geometry and the lift calibration stops. The one source for every ID this repo accepts."""
+    import yaml
+    with open(os.path.join(share or share_dir(), "config", "upperbody_configuration.yaml")) as f:
+        return yaml.safe_load(f)
 
 
-def profile_extras(mast_ids_doc):
-    """Not in T01's matrix: `openarm` on `gazebo` and `real` at the first non-default mast_id (mast_1300), so T02 has run
-    check_urdf on the other profiles at a second mast height too."""
-    other = next(m for m in mast_ids_doc["mast_ids"] if m != mast_ids_doc["default"])
-    return [(other, "openarm", h) for h in ("gazebo", "real")]
+def column_is_buildable(upperbody, column):
+    """False for a column whose supplier data is null (tl3_400 today): its configuration does not expand."""
+    data = upperbody["column"][column]
+    return data["retracted_length"] is not None and data["stroke"] is not None
 
 
-def expansion_label(mast_id, arm_package, hardware_profile):
-    return f"{mast_id}/{arm_package}/{hardware_profile}"
+def baseline_row(upperbody, arm_package="openarm", hardware_profile="mock"):
+    return {**upperbody["baseline"], "arm_package": arm_package, "hardware_profile": hardware_profile}
 
 
-def expand_urdf(share, mast_id, arm_package, hardware_profile, enable_planar_base="false", datums_file=None):
-    """Expanded URDF text of combined_robot.xacro (the installed package's)."""
-    import xacro
-    mappings = {"mast_id": mast_id, "arm_package": arm_package, "hardware_profile": hardware_profile,
-                "enable_planar_base": enable_planar_base}
+def expansion_matrix(upperbody):
+    """T01's matrix as rows of ROW_KEYS: one factor at a time around option B's baseline, because the full product
+    (2 x 2 x 5 x 3 x 3 x 3) is not what any check needs and its size would hide what the matrix is for.
+      every non-baseline base_plate x arm_package on `mock`, and the baseline base_plate x arm_package  (2 x 3 = 6)
+      every non-baseline head_pitch, and every non-baseline base_tilt, `openarm` on `mock`             (4 + 2 = 6)
+      `openarm` on `gazebo` and `real` at the baseline                                                 (2)
+    = 14 expansions, as before. Only buildable columns appear (a null-data column is refused, not expanded)."""
+    base = upperbody["baseline"]
+    axes = upperbody["configuration_axes"]
+    column = base["column"]
+    assert column_is_buildable(upperbody, column), f"the baseline column {column} has null supplier data"
+    rows = [{**base, "base_plate": plate, "arm_package": arm, "hardware_profile": "mock"}
+            for plate in [base["base_plate"]] + [p for p in axes["base_plate"] if p != base["base_plate"]]
+            for arm in ARM_PACKAGES]
+    for key in ("head_pitch", "base_tilt"):
+        rows += [{**base, key: value, "arm_package": "openarm", "hardware_profile": "mock"}
+                 for value in axes[key] if value != base[key]]
+    rows += [baseline_row(upperbody, "openarm", profile) for profile in ("gazebo", "real")]
+    return rows
+
+
+def planar_extras(upperbody):
+    """Not in T01's matrix: the planar flag at the baseline, per arm package. T02 runs them too, because the W02 reasoning
+    ("check_urdf accepts the planar joint") would otherwise rest on a claim nobody ran."""
+    return [baseline_row(upperbody, arm, "mock") for arm in ARM_PACKAGES]
+
+
+def profile_extras(upperbody):
+    """Not in T01's matrix: `openarm` on `gazebo` and `real` at the first non-baseline base_plate (bp050), so T02 has run
+    check_urdf on the other profiles at a second column position too."""
+    base = upperbody["baseline"]
+    other = next(p for p in upperbody["configuration_axes"]["base_plate"] if p != base["base_plate"])
+    return [{**baseline_row(upperbody, "openarm", profile), "base_plate": other} for profile in ("gazebo", "real")]
+
+
+def row_label(row):
+    """column/base_plate/head_pitch/base_tilt/arm_package/hardware_profile: one string per expansion."""
+    return "/".join(row[k] for k in ROW_KEYS)
+
+
+def row_mappings(row, enable_planar_base="false", datums_file=None):
+    mappings = {k: row[k] for k in ROW_KEYS}
+    mappings["enable_planar_base"] = enable_planar_base
     if datums_file:
         mappings["datums_file"] = datums_file
-    return xacro.process_file(os.path.join(share, "urdf", "combined_robot.xacro"), mappings=mappings).toxml()
+    return mappings
+
+
+def lift_joint_position(upperbody, column, stop):
+    """lift_joint position (m) of a calibration stop: the stop's shoulder height above the floor, minus the shoulder height at
+    lift 0 (base-plate top + retracted length + the mount's z above the column top, all from option B's config). Stops are
+    CALIBRATION IDs: joint positions with a calibration, never an input of the configuration id."""
+    geo = upperbody["geometry"]
+    at_zero = geo["base_plate_top_z"] + upperbody["column"][column]["retracted_length"] + geo["arm_mount"]["z_above_column_top"]
+    return upperbody["lift_calibration_stops"][stop] - at_zero
+
+
+def expand_urdf(share, row, enable_planar_base="false", datums_file=None):
+    """Expanded URDF text of combined_robot.xacro (the installed package's) for one row of ROW_KEYS."""
+    import xacro
+    return xacro.process_file(os.path.join(share, "urdf", "combined_robot.xacro"),
+                              mappings=row_mappings(row, enable_planar_base, datums_file)).toxml()
 
 
 # --- what the checkout is -------------------------------------------------------------------------------------------

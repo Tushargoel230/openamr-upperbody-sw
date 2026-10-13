@@ -1,13 +1,17 @@
-"""T03: one root `base_link`, no duplicate link or joint names (and no `world`, no dangling joint ends)."""
-from conftest import ARM_PACKAGES, MASTS, duplicates, expand, tree_facts
+"""T03: one root `base_footprint`, no duplicate link or joint names (and no `world`, no dangling joint ends).
+
+The root is platform-sw's base_footprint since 935efc7 (REP 105): base_link is its child, 0.098 m up.
+"""
+from conftest import ARM_PACKAGES, BASE_PLATES, duplicates, expand, tree_facts
 
 
 def test_t03_single_root_and_unique_names(combo):
-    mast_id, arm_package = combo
-    links, joints, child_of = tree_facts(expand(mast_id=mast_id, arm_package=arm_package))
+    base_plate, arm_package = combo
+    links, joints, child_of = tree_facts(expand(base_plate=base_plate, arm_package=arm_package))
 
     roots = sorted(set(links) - set(child_of))
-    assert roots == ["base_link"], f"roots: {roots}"
+    assert roots == ["base_footprint"], f"roots: {roots}"
+    assert child_of["base_link"] == "base_footprint"
     assert not duplicates(links), f"duplicate links: {duplicates(links)}"
     assert not duplicates(joints), f"duplicate joints: {duplicates(joints)}"
 
@@ -21,19 +25,26 @@ def test_t03_single_root_and_unique_names(combo):
     assert "world" not in declared
 
 
-def test_t03_openarm_attaches_to_our_plates():
+def test_t03_openarm_attaches_to_option_bs_carriage():
+    """ADR-008 re-rooted (P15): the arm base links hang from lift_carriage_link through option B's mount joints, which
+    the upstream macro declares at option B's pose; there is no intermediate plate link."""
     root = expand(arm_package="openarm")
-    _, _, child_of = tree_facts(root)
-    assert child_of["mast_left_arm_mount_link"] == "mast_mount_link"
-    assert child_of["mast_right_arm_mount_link"] == "mast_mount_link"
-    assert child_of["openarm_left_base_link"] == "mast_left_arm_mount_link"
-    assert child_of["openarm_right_base_link"] == "mast_right_arm_mount_link"
+    _, joints, child_of = tree_facts(root)
+    assert child_of["openarm_left_base_link"] == "lift_carriage_link"
+    assert child_of["openarm_right_base_link"] == "lift_carriage_link"
+    assert "openarm_left_base_link_mount_joint" in joints and "openarm_right_base_link_mount_joint" in joints
+    assert child_of["lift_carriage_link"] == "lift_column_base_link"
+    assert child_of["lift_column_base_link"] == "base_footprint"
     assert not [n for n in tree_facts(root)[0] if "body" in n], "OpenArm body must not be instantiated (ADR-008)"
 
 
-def test_t03_no_arm_subtree_without_openarm():
-    for arm_package in ARM_PACKAGES:
-        links, joints, _ = tree_facts(expand(mast_id=MASTS[0], arm_package=arm_package))
-        has_arm = any(n.startswith("openarm_") or n.startswith("mast_left_") for n in links)
-        assert has_arm == (arm_package == "openarm")
-        assert ("left_arm_mount_joint" in joints) == (arm_package == "openarm")
+def test_t03_no_arm_links_without_openarm_but_the_mount_frames_stay():
+    """Option B declares the mount frames whether or not an arm is mounted: with none or so101 they are its own."""
+    for base_plate in BASE_PLATES:
+        for arm_package in ARM_PACKAGES:
+            links, joints, child_of = tree_facts(expand(base_plate=base_plate, arm_package=arm_package))
+            has_arm = any(n.startswith("openarm_") and n not in ("openarm_left_base_link", "openarm_right_base_link") for n in links)
+            assert has_arm == (arm_package == "openarm")
+            for side in ("left", "right"):
+                assert child_of[f"openarm_{side}_base_link"] == "lift_carriage_link"
+                assert f"openarm_{side}_base_link_mount_joint" in joints

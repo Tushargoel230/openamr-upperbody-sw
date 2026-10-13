@@ -43,6 +43,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(t15_finger_mimic_multiplier test/test_t15_finger_mimic_multiplier.py TIMEOUT 600)
   ament_add_pytest_test(t16_ros2_control_real test/test_t16_ros2_control_real.py TIMEOUT 600)
   ament_add_pytest_test(t04_frame_contract test/test_t04_frame_contract.py TIMEOUT 600)
+  # The combined robot IS option B's upper body plus the composition: every frame at the same pose, the rev19.0 numbers.
+  ament_add_pytest_test(t04_optb_composition test/test_t04_optb_composition.py TIMEOUT 600)
   ament_add_pytest_test(t11_planar test/test_t11_planar.py TIMEOUT 600)
   ament_add_pytest_test(s4_sensors test/test_s4_sensors.py TIMEOUT 600)
   ament_add_pytest_test(t05_shoulder_height test/test_t05_shoulder_height.py TIMEOUT 600)

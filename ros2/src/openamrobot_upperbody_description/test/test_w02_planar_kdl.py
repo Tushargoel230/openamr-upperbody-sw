@@ -5,7 +5,7 @@ Why this is a WARN and not a FAIL, and why it does not touch A6's acceptance:
   - the acceptance is "planar base joint present and disabled". The joint IS present, with type="planar" in the
     description (T11), and check_urdf accepts it (T02, planar expansions);
   - the conversion is a limitation of a downstream consumer (kdl_parser), not a defect of the model;
-  - A7 consequence: planar base motion can never come from robot_state_publisher. It comes from Gazebo's odom -> base_link,
+  - A7 consequence: planar base motion can never come from robot_state_publisher. It comes from Gazebo's odom -> base_footprint,
     which ADR-003 and ADR-005 already assume.
 
 The test observes the message from a real robot_state_publisher (a few seconds, localhost only) rather than asserting it
@@ -58,7 +58,7 @@ def test_w02_kdl_converts_the_planar_joint_to_fixed(tmp_path):
         "classification": "downstream consumer limitation (kdl_parser has no planar joint), not a model defect",
         "consequence": "KDL consumers see world -> base_link as static when enable_planar_base:=true",
         "a7_consequence": "planar base motion can never come from robot_state_publisher; it comes from Gazebo's "
-                          "odom -> base_link, which ADR-003 and ADR-005 already assume",
+                          "odom -> base_footprint, which ADR-003 and ADR-005 already assume",
         "action": "none in A6: the flag is an experiment switch, disabled by default (AD-30)",
         "expected_message": MESSAGE,
     }
@@ -82,4 +82,4 @@ def test_w02_kdl_converts_the_planar_joint_to_fixed(tmp_path):
     assert observed, "the KDL conversion message is gone: the condition disappeared, retire W02"
     warnings.warn("W02 WARN: KDL converts base_planar_joint (enable_planar_base:=true) into a fixed joint; not an A6 "
                   "acceptance issue (joint present, type planar, check_urdf accepts it); planar motion for A7 comes "
-                  "from Gazebo's odom -> base_link", UserWarning, stacklevel=1)
+                  "from Gazebo's odom -> base_footprint", UserWarning, stacklevel=1)

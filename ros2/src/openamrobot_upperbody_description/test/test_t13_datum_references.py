@@ -26,7 +26,7 @@ def referenced_datums(xacro_text):
     """Datum keys referenced by one xacro file, found by parsing its text.
 
     Recognised: `datums['datums']['key']` and the same through any alias, where an alias is
-      - a macro/call argument bound to `${datums}`  (<xacro:openamr_mast datums="${datums}" .../>), or
+      - a macro/call argument bound to `${datums}`  (<xacro:openamr_upper_sensors datums="${datums}" .../>), or
       - a property bound to `${<root>['datums']}`    (<xacro:property name="dt" value="${datums['datums']}"/>).
     A key that is not a string literal raises UnparseableReference instead of being skipped.
     """
@@ -97,15 +97,18 @@ def test_t13_datums_and_xacro_agree():
 def test_t13_extractor_finds_the_known_references():
     # Guards against the parser silently matching nothing.
     keys = referenced_in_package()
-    assert {"base_link_height_above_floor", "mast_base_pose", "left_arm_mount_pose", "right_arm_mount_pose",
-            "mast_section", "mast_mass"} <= keys
+    assert {"column_axis_x_bp000", "lift_mass_dold_v4_350", "lift_mass_tl3_400", "lift_column_section",
+            "left_wrist_camera_pose", "right_wrist_camera_pose"} <= keys
+    assert "base_link_height_above_floor" not in keys, "it is report_only: a decision record asserted against the expansion by T04"
 
 
-def test_t13_camera_poses_are_consumed_since_s4():
-    """S4 references the three camera poses, so it must have deleted their pending_reference entries."""
+def test_t13_wrist_camera_poses_are_consumed_since_s4_and_the_head_camera_pose_is_gone():
+    """S4 references the wrist camera poses, so it must have deleted their pending_reference entries. The head camera is
+    option B's (P15): its placeholder datum is deleted, and nothing may bring it back."""
     doc = load_datums()
     referenced = referenced_in_package()
-    for key in ("head_camera_pose", "left_wrist_camera_pose", "right_wrist_camera_pose"):
+    assert "head_camera_pose" not in doc["datums"]
+    for key in ("left_wrist_camera_pose", "right_wrist_camera_pose"):
         assert key in referenced, f"{key} should be consumed by upper_sensors.xacro"
         assert key not in doc.get("pending_reference", {}), f"{key} is referenced: delete its pending_reference entry"
 

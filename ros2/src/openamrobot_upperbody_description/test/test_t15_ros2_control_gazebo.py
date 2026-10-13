@@ -105,6 +105,8 @@ def test_t15_the_description_does_not_resolve_the_control_package():
     urdf = os.path.join(os.path.dirname(COMBINED), "")
     offenders = []
     for name in sorted(os.listdir(urdf)):
+        if not os.path.isfile(os.path.join(urdf, name)):      # a stale install-space link to a deleted source is I01's finding, not this check's
+            continue
         with open(os.path.join(urdf, name)) as f:
             for number, line in enumerate(f, 1):
                 if "$(find openamrobot_upperbody_control" in line:
@@ -126,11 +128,13 @@ def test_t15_the_other_profiles_carry_no_gazebo_plugin_of_ours(profile):
 
 
 def test_t15_the_base_plugins_of_platform_sw_are_still_there_and_unchanged_by_us():
-    """ADR-003: the base keeps its DiffDrive plugin. The combined model contains it exactly once, with platform-sw's topics."""
+    """ADR-003: the base keeps its DiffDrive plugin. The combined model contains it exactly once, with platform-sw's topics. Its
+    odom child is base_footprint since platform-sw 935efc7 (REP 105: so that base_link keeps one parent): their decision, followed
+    here, and the one place this repository pins it so that a change on their side shows up."""
     root = expand(hardware_profile="gazebo")
     drive, = [p for g in root.findall("gazebo") for p in g.findall("plugin") if p.get("filename") == "gz-sim-diff-drive-system"]
     assert {t: drive.findtext(t) for t in ("topic", "odom_topic", "tf_topic", "frame_id", "child_frame_id")} == {
-        "topic": "/cmd_vel", "odom_topic": "/odom", "tf_topic": "/tf", "frame_id": "odom", "child_frame_id": "base_link"}
+        "topic": "/cmd_vel", "odom_topic": "/odom", "tf_topic": "/tf", "frame_id": "odom", "child_frame_id": "base_footprint"}
 
 
 def test_t15_plugin_names_are_the_ones_the_installed_gz_ros2_control_registers():

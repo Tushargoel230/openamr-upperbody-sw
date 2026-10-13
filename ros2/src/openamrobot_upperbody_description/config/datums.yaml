@@ -1,12 +1,13 @@
 # datums.yaml - every number the combined description uses that is not upstream-owned (ADR-002).
 # Schema v1, see 10_architecture/DATUMS.md. Values may change; names and the frame structure may not.
-# Computed values (e.g. mast_offset) are NOT stored here; upstream-owned values are read from upstream YAML.
+# Computed values (e.g. the lift's inertia tensor) are NOT stored here; upstream-owned values (option B's geometry, the arm) are read from upstream YAML.
 schema_version: 1
-revision: "2026-10-08.e"          # bump on every change to this file; goes into config_id (test_datums_revision.py enforces it)
+revision: "2026-10-13.a"          # bump on every change to this file; goes into config_id (test_datums_revision.py enforces it)
 units: {length: m, angle: rad, mass: kg}
 
 # Datums that are reported but never feed the model (DATUMS.md rule 1).
 report_only:
+  - base_link_height_above_floor
   - drive_wheel_radius
   - envelope_max_height
   - envelope_max_width
@@ -21,65 +22,58 @@ pending_reference: {}
 
 datums:
   base_link_height_above_floor:
-    value: 0.0635
-    source: derived
-    status: placeholder
-    ref: "robo_urdf.urdf.xacro left_wheel_joint z = 0.046533; gazebo_control.xacro wheel_radius 0.110 -> floor at -0.0635 below base_link"
-    owner: "platform-sw (changes when F2A/F3 land)"
-    note: "With the selected 200 mm hub wheel (r = 0.100) this would be 0.0535."
+    value: 0.098
+    source: plan
+    status: provisional
+    ref: "P-03 rev19.0 item 19 (Alex, 12 Oct 2026; register FRAMES-REP105): base_link at the drive-axle midpoint, 98 mm above the floor; base_footprint on the floor. platform-sw 935efc7 has the same 0.098 in base_footprint_joint"
+    owner: "Alex (decision) / platform-sw (base frames)"
+    note: "A placeholder from S3 to P14 (0.0635, read off the SolidWorks export origin and a 0.110 m wheel) because nobody had defined it. It is a decision record, not a measurement, so provisional. T04 (test_t04_optb_composition) asserts it equals the base_footprint -> base_link joint of the expansion, so a platform-sw change cannot leave it behind."
 
   drive_wheel_radius:
     value: 0.100
     source: supplier
     status: provisional
-    ref: "P-00 s3.2: ZLLG80ASM250-L-B 200 mm hub wheel; F2A pending"
+    ref: "P-00 s3.2: ZLLG80ASM250-L-B 200 mm hub wheel; F2A pending. platform-sw 935efc7 models radius 0.100 (Alex decision 2026-10-12)"
     owner: "Alex (F2A)"
-    note: "Not used by the base model (platform-sw owns its wheels). Recorded so the mismatch with the sim radius 0.110 is visible."
+    note: "Not used by the base model (platform-sw owns its wheels). Recorded so a mismatch with the base model is visible."
 
-  mast_base_pose:
-    value: {xyz: [0.0, 0.0, 0.20], rpy: [0.0, 0.0, 0.0]}
-    source: placeholder
-    status: placeholder
-    ref: "Mast foot on the platform centre bracket (MISUMI HFS6-60120, 1250 mm, 8x M8). Real value from the general-arrangement / F2S drawing; openamr-upperbody-hw is still scaffold"
-    owner: "Alex (general arrangement / F2S)"
-
-  left_arm_mount_pose:
-    value: {xyz: [0.0, 0.06, 0.0], rpy: [0.0, 0.0, 0.0]}
-    source: placeholder
-    status: placeholder
-    ref: "J1_A plate on the mast side slot, relative to mast_mount_link (ADR-008). Lateral spacing, height and orientation from the mast drawing - missing input #2 in Alex's inventory"
-    owner: "Alex (mast drawing)"
-    note: "Plate z is 0.0 by construction (corrected 5 Oct): mast_mount_link IS the plate reference frame, so the whole shoulder height lives in mast_offset. Must equal right z."
-
-  right_arm_mount_pose:
-    value: {xyz: [0.0, -0.06, 0.0], rpy: [0.0, 0.0, 0.0]}
-    source: placeholder
-    status: placeholder
-    ref: "Mirror of left_arm_mount_pose (ADR-008)"
-    owner: "Alex (mast drawing)"
-
-  mast_mass:
-    value: 3.0
-    source: placeholder
-    status: placeholder
-    ref: "Mast structure mass for the placeholder inertial. Real value from M-01 M-05 / F2S"
-    owner: "Alex (F2S)"
-
-  mast_section:
-    value: [0.060, 0.120]
+  column_axis_x_bp000:
+    value: 0.060
     source: plan
     status: provisional
-    ref: "MISUMI HFS6-60120, named in the repo README and P-03 Decision Addendum rev 18.2. The HFS suffix is the
-          cross-section in mm. Orientation unconfirmed: x = 60 fore-aft, y = 120 lateral, because a 120 mm lateral
-          width puts the side faces at y = +/-0.060, where left/right_arm_mount_pose already places the J1_A plates"
-    owner: "Alex (mast drawing)"
+    ref: "P-03 rev19.0 item 19 D2 (Alex, 12 Oct 2026): the column axis is 330 mm behind the 780 mm chassis front edge (front edge x +0.390), x +0.060 from base_link at bp000; bp050 is +0.050 further (x +0.110), from upperbody_configuration.yaml base_plate. option B drawing sheet 2 rev A"
+    owner: "Alex (option B drawing)"
+    note: "Not on the drive axle (ADR-010 never said so). Passed to option B's macro as column_axis_x_bp000; its standalone wrapper has the same 0.060 default and T04 (test_t04_optb_composition) asserts the two agree."
 
-  head_camera_pose:
-    value: {xyz: [0.12, 0.0, 0.10], rpy: [0.0, 0.35, 0.0]}
+  lift_mass_dold_v4_350:
+    value: 11.7
+    source: supplier
+    status: provisional
+    ref: "DOLD Hexalift V4 350, catalogue mass 11.7 kg (Alex, 12 Oct 2026; P-03 rev19.0). Replaces mast_mass (3.0 kg, placeholder)"
+    owner: "Alex (F2S)"
+    note: "A catalogue figure for the whole column assembly, not weighed here. The split between the fixed outer part and the moving stage is not in the catalogue, so all of it is carried on lift_column_base_link at mid-height of the retracted column (a model choice, not a measurement)."
+    density_band:
+      min: 100.0
+      max: 1200.0
+      reason: "A lifting column is aluminium extrusions (2700 kg/m3 solid), a motor and a spindle inside a hollow housing: roughly 5 to 40 per cent fill of the bounding box, 135 to 1080 kg/m3, rounded outwards. The estimate is the datum author's, not a supplier figure."
+      bounding_box: "lift_column_section x column retracted_length (upperbody_configuration.yaml)"
+
+  lift_mass_tl3_400:
+    value: null
     source: placeholder
     status: placeholder
-    ref: "Relative to mast_mount_link (OpenArm body not installed, ADR-008). Upstream's commented example zed_front_mount_point is (0.12, 0, 0.82); pitch is a guess to look at the workspace. M-01 MECH-007 'camera interface'"
-    owner: "mechanical contractor via Alex"
+    ref: "TiMOTION TL3 400 mm (the fallback column): no supplier mass. Null on purpose, like its lengths in upperbody_configuration.yaml"
+    owner: "Alex (F2S)"
+    note: "HARD-FAIL: a null datum stops the expansion and names the datum (an expansion that cannot be built is stronger than a placeholder that expands and warns). Reclassified in P15; the datum is new."
+
+  lift_column_section:
+    value: [0.240, 0.240]
+    axis_convention: {x: fore_aft, y: lateral}
+    source: placeholder
+    status: placeholder
+    ref: "x = 0.240 is option B's own statement that the DOLD column is mounted with its 240 mm side fore-aft (upperbody_configuration.yaml, a description string, not a number field). y, the lateral side, is in no document we hold: it is set equal to x only so the placeholder inertia and the density bound can be evaluated"
+    owner: "Alex (supplier drawing)"
+    note: "The one invented number of the lift. It reaches only the inertia tensor of the column (no collision, no visual, no joint), and it is the datum to replace first when the supplier drawing arrives. Not made a hard-fail because that would remove the lift's mass from every expansion; see the P15 report."
 
   left_wrist_camera_pose:
     value: {xyz: [0.0, 0.05, -0.03], rpy: [0.0, 0.0, 0.0]}

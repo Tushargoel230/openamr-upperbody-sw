@@ -1,6 +1,7 @@
 """E01: assembled envelope (height, width, depth) against the P-00 envelope datums. WARN only, never PASS.
 
-The three extents of the robot at zero pose, in the base_link frame (x forward = depth, y left = width, z up = height):
+The three extents of the robot at each calibration stop of the lift (L1000, L1175, L1350: lift_joint at 0, 0.175, 0.350 m, every
+other joint at zero), in the root frame base_footprint, which IS the floor (x forward = depth, y left = width, z up = height):
   - the origin of every link frame, and
   - the extents of every box, cylinder and sphere (visual and collision), corners taken through the full link pose.
 Mesh extents are NOT included: a mesh contributes only its link's frame origin. So every figure here is a LOWER BOUND:
@@ -8,15 +9,17 @@ the real robot is at least this big. A figure under the limit therefore proves n
 why this check can never be PASS, and a figure over the limit is a real exceedance, which is why it is reported
 prominently. It is also never FAIL: E01 is a flag for A4 to look at, not a gate (VERIFICATION.md, decided 5 Oct).
 
-Height is measured from the floor = base_link origin minus datum `base_link_height_above_floor` (the base owns its
-wheels, DATUMS.md). Width and depth are the spans of y and x over the same points; the planar `world` frame, absent in
-the default expansion, is not involved.
+Height is measured from the floor = base_footprint, the root (since platform-sw 935efc7 and option B, which measures
+everything from it; the datum `base_link_height_above_floor` is asserted equal to the base_footprint -> base_link joint by T04, so
+there is one floor). Width and depth are the spans of y and x over the same points; the planar `world` frame, absent in the
+default expansion, is not involved. A mast no longer sets the height: the lift does, and the figures move with the stop.
 Limits: datums `envelope_max_height`, `envelope_max_width`, `envelope_max_depth` (P-00 s20.2, provisional).
 """
 import numpy as np
 import pytest
 
-from conftest import MAST_IDS, expand, load_datums, write_sidecar
+import evidence_common as ev
+from conftest import BASELINE, STOPS, UPPERBODY, expand, load_datums, write_sidecar
 from urdf_utils import joint_origin, zero_pose_poses
 
 CIRCLE_POINTS = 16          # points on each cylinder rim
@@ -40,13 +43,14 @@ def _extent_points(geometry):
     return None
 
 
-def bounding_extents(root, floor_z):
-    """{axis: {min, max, span, min_at, max_at}} over every frame origin and primitive extent of the URDF at zero pose.
+def bounding_extents(root, floor_z, positions=None):
+    """{axis: {min, max, span, min_at, max_at}} over every frame origin and primitive extent of the URDF at zero pose, or with
+    the joints in `positions` ({joint name: value}: the lift stops).
 
     `min`/`max` are coordinates in the root link frame (height: above the floor). `*_at` is "<link> (<what>)", the point
     that sets that bound. Meshes contribute only their link's frame origin.
     """
-    poses = zero_pose_poses(root)
+    poses = zero_pose_poses(root, positions)
     lows, highs = {}, {}
 
     def see(point, link, what):
@@ -75,7 +79,8 @@ def bounding_extents(root, floor_z):
 
 
 def _floor_z():
-    return -float(load_datums()["datums"]["base_link_height_above_floor"]["value"])
+    """The floor is the root frame, base_footprint (z 0): nothing is subtracted."""
+    return 0.0
 
 
 def _limits():
@@ -98,33 +103,52 @@ def envelope_result(figures):
 
 def test_e01_envelope_height_width_depth_are_reported_as_a_warning():
     floor, limits = _floor_z(), _limits()
+    root = expand(arm_package="openarm")
     rows = {}
-    for mast_id, meta in MAST_IDS["mast_ids"].items():
-        extents = bounding_extents(expand(mast_id=mast_id, arm_package="openarm"), floor)
-        rows[mast_id] = {"class": meta["class"],
-                         **{axis: dimension_figure(axis, extents[axis], limits[axis]) for axis in ("height", "width", "depth")}}
-    exceeded = {m: [a for a in ("height", "width", "depth") if r[a]["exceeds_limit"]] for m, r in rows.items()}
+    for stop in STOPS:
+        q = ev.lift_joint_position(UPPERBODY, BASELINE["column"], stop)
+        extents = bounding_extents(root, floor, {"lift_joint": q})
+        rows[stop] = {"shoulder_height_m": STOPS[stop], "lift_joint_position_m": round(q, 6),
+                      **{axis: dimension_figure(axis, extents[axis], limits[axis]) for axis in ("height", "width", "depth")}}
+    exceeded = {s: [a for a in ("height", "width", "depth") if r[a]["exceeds_limit"]] for s, r in rows.items()}
     result = envelope_result(rows)
     write_sidecar("E01", "envelope", "assembled envelope height, width, depth (lower bound)", result, {
         "lower_bound": True,
-        "method": "zero pose, base_link frame; height = highest point above the floor, width = span of y, depth = span of x; "
-                  "over link frame origins and box/cylinder/sphere extents (visual and collision); mesh extents NOT included, "
-                  "so every figure is a lower bound and a figure under the limit proves nothing about the real envelope",
+        "method": "per calibration stop of the lift (lift_joint at the stop, every other joint at zero), root frame base_footprint = "
+                  "the floor; height = highest point above the floor, width = span of y, depth = span of x; over link frame origins "
+                  "and box/cylinder/sphere extents (visual and collision); mesh extents NOT included, so every figure is a lower "
+                  "bound and a figure under the limit proves nothing about the real envelope",
         "limits_m": limits,
         "limit_source": "datums envelope_max_height/width/depth (P-00 s20.2 target envelope 1700 x 600 x 800 mm, provisional)",
-        "exceeds_limit_even_as_lower_bound": {m: dims for m, dims in exceeded.items() if dims},
+        "exceeds_limit_even_as_lower_bound": {s: dims for s, dims in exceeded.items() if dims},
         "why_warn": "WARN, never PASS: nobody has measured the envelope; never FAIL: a flag for A4, not a gate",
-        "per_mast_id": rows,
+        "per_lift_stop": rows,
     })
     assert result == "WARN"
 
 
-def test_e01_the_default_mast_id_is_the_release_configuration():
-    assert [m for m, v in MAST_IDS["mast_ids"].items() if v["class"] == "release"] == [MAST_IDS["default"]]
+def test_e01_the_height_grows_with_the_lift_by_the_stroke_and_the_head_camera_is_the_top():
+    root = expand(arm_package="openarm")
+    tops = {}
+    for stop in STOPS:
+        q = ev.lift_joint_position(UPPERBODY, BASELINE["column"], stop)
+        tops[stop] = bounding_extents(root, _floor_z(), {"lift_joint": q})["height"]
+    assert tops["L1350"]["max"] - tops["L1000"]["max"] == pytest.approx(0.350, abs=1e-9)
+    assert tops["L1175"]["max"] - tops["L1000"]["max"] == pytest.approx(0.175, abs=1e-9)
+    # the frame of the head camera lens is the highest frame of the structure at full lift: 0.304 + 0.880 + 0.166 + 0.223
+    assert tops["L1350"]["max"] == pytest.approx(0.304 + 0.880 + 0.166 + 0.223, abs=1e-6)
+    assert tops["L1350"]["max_at"] == "head_camera_mount_link (frame origin)"
+    assert tops["L1350"]["max"] <= float(UPPERBODY["geometry"]["max_assembled_height"])
 
 
-def test_e01_the_height_limit_matches_the_mast_ids_assembled_height():
-    assert _limits()["height"] == float(MAST_IDS["max_assembled_height"])
+def test_e01_the_floor_is_the_root_frame():
+    root = expand(arm_package="openarm")
+    assert zero_pose_poses(root)["base_footprint"][2, 3] == 0.0
+    assert _floor_z() == 0.0
+
+
+def test_e01_the_height_limit_matches_option_bs_max_assembled_height():
+    assert _limits()["height"] == float(UPPERBODY["geometry"]["max_assembled_height"]) == 1.700
 
 
 # --- the finder and the verdict, on synthetic URDFs: they must be able to fail ---------------------------------------

@@ -25,6 +25,8 @@ def default_datums_path():
 
 
 def _fmt(value):
+    if value is None:
+        return "null: HARD-FAIL (the expansion stops when this is read)"
     return str(value) if not isinstance(value, dict) else f"xyz={value['xyz']} rpy={value['rpy']}"
 
 

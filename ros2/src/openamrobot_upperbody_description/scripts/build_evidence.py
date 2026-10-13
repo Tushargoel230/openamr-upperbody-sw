@@ -57,7 +57,7 @@ A6_CHECKS = [
     ("T02", "check_urdf accepts every T01 expansion"),
     ("T03", "single root, unique link names"),
     ("T04", "frame contract"),
-    ("T05", "shoulder height per mast id"),
+    ("T05", "shoulder height per lift stop"),
     ("T06", "arg validation"),
     ("T07", "every link with an inertial or visual has a collision or is collision_free"),
     ("T08", "collision mesh is the same file as the visual mesh"),
@@ -80,7 +80,7 @@ EXTRA_CHECKS = [
     ("REV", "datums.yaml content change carries a revision change"),
     ("H01", "every test file is registered and every launch test checks that its processes started and exited cleanly"),
     ("H02", "every test CMake registered left a result file (nothing registered but not run)"),
-    ("V01", "RViz launch at mast_1350"),
+    ("V01", "a person has looked at the model and answered the checklist"),
     ("I01", "installed package matches the source the tests and this report describe"),
     ("AUX", "supporting tests and steps (urdf_utils, datums_report, s4_sensors, evidence_dir, build_evidence, scripts)"),
 ]
@@ -100,41 +100,47 @@ PROFILES = {"dev": "static+mock", "gazebo": "simulation"}
 NOT_IMPLEMENTED = {}
 BRINGUP_PKG = "openamrobot_upperbody_bringup"
 
-# V01 after a person looked (P14; the architecture chat's V01_MAST_VISUAL finding, recorded in docs/v01_visual_check.md). It stays WARN, and
-# the report says in words what the looking found. Two things about it are deliberate. It is not PASS: PASS needs every checklist item answered,
-# and only item 1 (the mast) has an answer on record. And it is not recorded as a check that found nothing: its value was that it found two
-# defects no automated check was looking for. build_a7_evidence.py reads these constants, so the three reports cannot tell different stories.
+# V01 after a person looked (P14; the architecture chat's V01_MAST_VISUAL finding, recorded in docs/v01_visual_check.md), updated by P15. It
+# stays WARN, and the report says in words what the looking found and what has become of it. Two things about it are deliberate. It is not
+# PASS: PASS needs every checklist item answered, and only item 1 (the mast, which no longer exists) has an answer on record. And it is not
+# recorded as a check that found nothing: its value was that it found two defects no automated check was looking for.
+# build_a7_evidence.py reads these constants, so the three reports cannot tell different stories.
 V01_FINDINGS = [
     {"id": "V01-F1", "item": 1,
-     "found": "the mast profile is probably rotated 90 degrees: mast_section [0.060, 0.120] puts 60 mm fore-aft and 120 mm lateral; option B "
+     "found": "the mast profile was probably rotated 90 degrees: mast_section [0.060, 0.120] put 60 mm fore-aft and 120 mm lateral; option B "
               "(P-03 rev18.9 item 18) orients the same HFS6-60120 cross-section (its 340 mm arm profile, not a full-height mast) 120 mm "
-              "fore-aft and 60 mm lateral, the stiff direction against the arms' forward cantilever. The value is right. Its axis "
-              "assignment was only a prose note in the datum ('orientation unconfirmed') and no test asserts it",
-     "proposed_rule": "every datum that is a pair or triple of dimensions declares its axis convention, and a test asserts the assignment",
-     "not_fixed_because": "mast.xacro is replaced when option B is adopted; the arm mounts at y = +/-0.060 are coupled to this orientation, so "
-                          "turning the box alone would be wrong"},
+              "fore-aft and 60 mm lateral, the stiff direction against the arms' forward cantilever. The value was right. Its axis "
+              "assignment was only a prose note in the datum ('orientation unconfirmed') and no test asserted it",
+     "outcome": "confirmed correct by the design owner (Alex, 12 Oct 2026: 'thanks for catching the profile orientation, that's exactly "
+                "the kind of check we need'); the 90 degree rotation was real",
+     "resolved_by": "the mast and mast_section are deleted (P15); the rule it proposed is implemented: a dimension list declares "
+                    "axis_convention and T12 asserts the assignment against the expansion"},
     {"id": "V01-F2", "item": 1,
-     "found": "mast_mass is 3.0 kg (placeholder) for 1.2365 m of HFS6-60120: about 337 kg/m3 over the bounding box, low by roughly 2.5 to 4 "
-              "times for an aluminium extrusion (an estimate; the MISUMI datasheet is the source). Labelled placeholder, so nothing lied, but "
-              "the placeholder is implausible and nothing checked plausibility",
-     "proposed_rule": "the density implied by a mass over its bounding-box volume must fall in a sane range or WARN, placeholders included",
-     "not_fixed_because": "the mast and its mass are replaced when option B is adopted; the figure to land needs the datasheet"},
+     "found": "mast_mass was 3.0 kg (placeholder) for 1.2365 m of HFS6-60120: about 337 kg/m3 over the bounding box, low by roughly 2.5 to 4 "
+              "times for an aluminium extrusion (an estimate, not a datasheet figure). Labelled placeholder, so nothing lied, but "
+              "the placeholder was implausible and nothing checked plausibility",
+     "outcome": "closed by the supplier catalogue figure: the lift is a DOLD Hexalift V4 350 of 11.7 kg (rev19.0, 12 Oct 2026). The "
+                "estimate was 7.5 to 12 kg; the catalogue value is at the top of that bracket",
+     "resolved_by": "mast_mass is deleted with the mast; lift_mass_dold_v4_350 carries 11.7 kg (provisional: a catalogue figure, not "
+                    "weighed); the rule it proposed is implemented: a mass datum of ours declares a density_band and T10 checks it"},
 ]
-V01_ANSWERED = {"1": "the mast reads as a thin spike. Its dimensions are those of an HFS6-60120 profile 14 mm shorter than the 1250 mm Alex "
-                     "specified on 28 Sep, so the appearance is an accurate thin extrusion and not a sizing defect; its orientation and its "
-                     "mass are defects (V01-F1, V01-F2)"}
-V01_READING = ("The manual check found what the automated ones could not: no test of ours examines an axis assignment or the plausibility "
-               "of a placeholder. V01 stays WARN with these findings attached, not PASS (no other item has a recorded answer) and not a check "
-               "that found nothing")
-V01_LIMITATION = ("V01 is WARN with two findings from a manual look at the mast (V01-F1 the profile is probably rotated 90 degrees, V01-F2 "
-                  "the mast mass is implausible); the other checklist items have no recorded answer. This report launches nothing for V01 "
-                  "and records no inspection of its own")
+V01_ANSWERED = {"1": "(item 1 as it stood in P14, about the mast) the mast read as a thin spike. Its dimensions were those of an HFS6-60120 "
+                     "profile 14 mm shorter than the 1250 mm Alex specified on 28 Sep, so the appearance was an accurate thin extrusion "
+                     "and not a sizing defect; its orientation and its mass were defects (V01-F1, V01-F2), both now closed. The mast is "
+                     "gone: item 1 of the checklist now asks about the lift column and has no recorded answer"}
+V01_READING = ("The manual check found what the automated ones could not: no test of ours examined an axis assignment or the plausibility "
+               "of a placeholder, and the two rules it proposed are now checks (T12, T10). V01 stays WARN: no item of the current "
+               "checklist (items 2 to 8 and the rewritten item 1) has a recorded answer, and a closed finding is not an answered checklist")
+V01_LIMITATION = ("V01 is WARN: P14's manual look at the mast found two defects (V01-F1 confirmed correct by the design owner, V01-F2 closed "
+                  "by the 11.7 kg catalogue figure) and both are resolved by the lift; the current checklist, which states what to measure, "
+                  "has no recorded answer. This report launches nothing for V01 and records no inspection of its own")
 
 
 def v01_details(items, **extra):
     """The details of V01 in every report: what was answered, what was found, what is still open. `items` is the checklist's length."""
-    return {"performed": "a person looked at the simulation and answered item 1 (the mast); items 2 to %d have no recorded answer" % items,
-            "answered_items": dict(V01_ANSWERED), "unanswered_items": list(range(2, items + 1)),
+    return {"performed": "a person looked at the simulation in P14 and answered item 1 of the mast checklist (since deleted); "
+                         "no item of the current checklist (1 to %d) has a recorded answer" % items,
+            "answered_items": {}, "answered_before_the_lift": dict(V01_ANSWERED), "unanswered_items": list(range(1, items + 1)),
             "findings": [dict(f) for f in V01_FINDINGS], "reading": V01_READING, "checklist": "docs/v01_visual_check.md", **extra}
 # Checks whose sidecar is where their details (and any WARN) live: no sidecar means the test did not complete.
 SIDECAR_REQUIRED = {"T02", "T04", "T07", "T08", "T09", "T10", "T13", "E01", "C01", "C02", "W01", "W02", "G01", "G02"}
@@ -357,19 +363,42 @@ def fresh_sidecars(directory, since):
 
 # --- the report ------------------------------------------------------------------------------------------------------
 
+# The inputs of a config id, as the report states them (print_config_id.py is the definition). P15 changed the set while keeping the
+# format; the old set is recorded so that a reader of an old id can tell it is not comparable.
+CONFIG_ID_INPUTS = {
+    "members": ["canonical_urdf", "column", "base_plate", "head_pitch", "base_tilt", "arm_package", "hardware_profile",
+                "datums_revision", "upstream_pins"],
+    "not_inputs": ["lift stop (L1000/L1175/L1350): a calibration ID", "enable_planar_base (already in canonical_urdf)"],
+    "before_p15": ["canonical_urdf", "mast_id", "arm_package", "hardware_profile", "datums_revision", "openarm_description_commit"],
+    "note": "the format is unchanged (sha256:<64 hex>) and so is validity against the C9 schema; the meaning is not, so an id "
+            "recorded before P15 is not comparable with one in this report",
+}
+
+
+def calibration_ids(upperbody):
+    """The lift's calibration stops, each as the joint position it is: reported beside the config ids, never inside them."""
+    column = upperbody["baseline"]["column"]
+    return {stop: {"shoulder_height_m": height, "lift_joint_position_m": round(ev.lift_joint_position(upperbody, column, stop), 6),
+                   "column": column}
+            for stop, height in upperbody["lift_calibration_stops"].items()}
+
+
 def limitations(datums, sidecars):
     placeholders = sorted(n for n, d in datums["datums"].items() if d["status"] == "placeholder")
     out = [
         f"placeholder datums: {len(placeholders)} of {len(datums['datums'])} ({', '.join(placeholders)})",
-        "base inertials are platform-sw CAD-export placeholders, the mast mass is a placeholder and the arm masses are "
-        "upstream nominal values; none of them is a measured mass",
-        "T05 asserts the identity height(openarm_left_base_link) = shoulder_height(mast_id), which holds for any datum "
-        "values; it does not validate the datums themselves",
+        "base inertials are platform-sw CAD-export placeholders, the lift mass is a catalogue figure (11.7 kg, provisional) on "
+        "a placeholder box, and the arm masses are upstream nominal values; none of them is a measured mass",
+        "T05 asserts the shoulder height at every lift stop (height(openarm_{left,right}_base_link) above the floor = "
+        "lift_calibration_stops[stop]) and the three stops are calibration IDs, not inputs of the configuration id; it does not "
+        "validate the datums themselves",
         "E01 is WARN, never PASS: height, width and depth are lower bounds from zero pose, link frame origins and "
         "box/cylinder/sphere extents; mesh extents are not included, so a figure under the limit proves nothing about the "
         "real envelope. A4 decides",
-        "T10 reports what the description models. The battery, hub motors, electronics and the mast structure are not "
-        "modelled (all F2S), so the total is not the gross mass of the robot",
+        "T10 reports what the description models. The battery, hub motors, electronics and the lift column's structure beyond "
+        "its catalogue mass are not modelled, so the total is not the gross mass of the robot",
+        "the lift column has no collision geometry: its lateral extent is not sourced, so the arms can plan through the "
+        "column body; the arm profile (option B's 340 mm box) is the only collision body of the upper structure",
         "T14, T15 and T16 are expansion checks: nothing here loads the gazebo or the real plugin (the gazebo profile report, "
         "G01 and G02, is where the gazebo one runs), and the real profile cannot even be built here (openarm_hardware needs "
         "OpenArmCAN)",
@@ -379,9 +408,10 @@ def limitations(datums, sidecars):
         "L01 launches mock.launch.py only: controller_manager on mock_components/GenericSystem, which reflects its command "
         "back as state, so it shows the controller wiring and not tracking performance",
         "T02 check_urdf parses the XML and builds the link tree; it does not resolve package:// mesh URIs",
-        "W01: KDL consumers (robot_state_publisher, MoveIt in A7) do not see base_link's inertia",
-        "W02: with enable_planar_base:=true KDL consumers see world -> base_link as static; planar base motion can "
-        "never come from robot_state_publisher (A7: it comes from Gazebo's odom -> base_link, ADR-003 / ADR-005)",
+        "W01: KDL consumers (robot_state_publisher, MoveIt in A7) drop the inertia of the root link; the root is base_footprint "
+        "since platform-sw 935efc7 and carries none, so base_link's 4.18 kg is no longer the one dropped",
+        "W02: with enable_planar_base:=true KDL consumers see world -> base_footprint as static; planar base motion can "
+        "never come from robot_state_publisher (A7: it comes from Gazebo's odom -> base_footprint, ADR-003 / ADR-005 / REP 105)",
         V01_LIMITATION,
         "config ids are hashes of xacro's output text: a different xacro version that formats a number differently "
         "gives a different id for the same sources",
@@ -404,7 +434,7 @@ def gazebo_limitations(datums, sidecars, simulator):
         "in that simulator and about nothing else",
         "the arms' <position> interface in gz_ros2_control is a velocity servo (position_proportional_gain 0.1 per step), so "
         "tracking to 0.02 rad says nothing about the real arm's controller, gains, compliance or latency",
-        "arm, mast and base masses are placeholders, upstream nominals or platform-sw's CAD export (T10); the base reaction "
+        "arm, lift and base masses are placeholders, catalogue figures, upstream nominals or platform-sw's CAD export (T10); the base reaction "
         "to an arm motion, tracking and any torque or payload figure in a simulation are not claims about the robot",
         "the launch defaults to DART, the engine platform-sw tuned the base on; under DART neither gripper moves and "
         "finger_joint2 never follows finger_joint1, so G02 passes Bullet-Featherstone explicitly (it fails on DART, which is "
@@ -516,15 +546,15 @@ def build(args):
 
     with open(os.path.join(share, "config", "datums.yaml")) as f:
         datums = yaml.safe_load(f)
-    with open(os.path.join(share, "config", "mast_ids.yaml")) as f:
-        mast_ids = yaml.safe_load(f)
+    upperbody = ev.load_upperbody(share)
     try:
-        commit, commit_source = ev.upstream_commit_and_source(workspace)
-        matrix = ev.expansion_matrix(mast_ids) if profile == "dev" else \
-            [c for c in ev.expansion_matrix(mast_ids) + ev.profile_extras(mast_ids) if c[2] == "gazebo"]
-        config_ids = {ev.expansion_label(*c): pci.config_id_of(share, commit, *c) for c in matrix}
+        pins, pin_sources = pci.pins_of(workspace)
+        commit = pins.get("openarm_description")
+        matrix = ev.expansion_matrix(upperbody) if profile == "dev" else \
+            [r for r in ev.expansion_matrix(upperbody) + ev.profile_extras(upperbody) if r["hardware_profile"] == "gazebo"]
+        config_ids = {ev.row_label(r): pci.config_id_of(share, pins, r) for r in matrix}
     except ev.EvidenceError as err:        # no pinned commit means no config id: say so in the report, do not guess
-        commit, commit_source, config_ids = None, None, {}
+        commit, pins, pin_sources, config_ids = None, {}, {}, {}
         for c in checks:
             if c["id"] in ("C01", "AUX"):
                 c["result"], c["details"]["config_ids"] = "FAIL", f"not produced: {err}"
@@ -540,6 +570,9 @@ def build(args):
     manipulation = ev.git_head(os.path.join(workspace, "src", "openamrobot-manipulation"))
     if manipulation:
         upstream["openamrobot-manipulation"] = manipulation[:7]
+    platform = ev.git_head(os.path.join(workspace, "src", "openamr-platform-sw"))
+    if platform:        # the base is included unchanged, so its commit is an input of every expansion (it is inside canonical_urdf)
+        upstream["openamr-platform-sw"] = platform[:7]
 
     simulator = simulator_versions() if profile == "gazebo" else None
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -556,10 +589,12 @@ def build(args):
         "datums_revision": datums["revision"],
         "checks": checks,
         "config_ids": config_ids,
+        "config_id_inputs": CONFIG_ID_INPUTS,
+        "calibration_ids": calibration_ids(upperbody),
         "provenance": {k: provenance[k] for k in ("placeholder", "provisional", "verified")},
         "limitations": (limitations(datums, sidecars) if profile == "dev" else gazebo_limitations(datums, sidecars, simulator)) + (
-            [f"openarm_description commit {commit[:7]} was read from {commit_source}, not from a git checkout"]
-            if commit_source == ev.METADATA_SOURCE else []),
+            [f"upstream pin {name} ({value[:7]}) was read from config/upstream_pins.yaml, not from a git checkout"
+             for name, value in sorted(pins.items()) if pin_sources.get(name) == ev.METADATA_SOURCE]),
     }
     if dirty:
         doc["dirty_files"] = dirty_files        # for the console summary only: a dirty report is never written
@@ -589,7 +624,11 @@ def summary(doc, path, sidecars):
         lines += [f"  {c['name']} = {c['value']:g}   in {c['file']}, {c['uses']} use(s)" for c in constants]
     lines += ["", "Config ids (full value is the id; a 12-hex prefix is shown for humans and is only a prefix)"]
     for label, cid in doc["config_ids"].items():
-        lines.append(f"  {label:<26} {cid}   prefix {cid.split(':')[1][:12]}")
+        lines.append(f"  {label:<48} {cid}   prefix {cid.split(':')[1][:12]}")
+    if doc.get("calibration_ids"):
+        lines += ["", "Calibration ids (joint positions with a calibration; NOT inputs of any config id)"]
+        for stop, row in doc["calibration_ids"].items():
+            lines.append(f"  {stop:<8} shoulder {row['shoulder_height_m']:.3f} m = lift_joint {row['lift_joint_position_m']:.3f} m")
     counts = defaultdict(int)
     for c in doc["checks"]:
         counts[c["result"]] += 1

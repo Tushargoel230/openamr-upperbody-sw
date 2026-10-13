@@ -3,10 +3,12 @@
   R   present, with the contract's parent and type            -> FAIL if not
   C   present iff its condition holds                         -> FAIL otherwise
   W   expected from another owner; missing is a WARN          -> collected into a JSON sidecar
-  any link in our namespaces (mast_*, head_camera_*, *_wrist_camera_*, so101_*) that the contract does not list -> FAIL
+  any link in our namespaces (lift_*, arm_profile_*, head_camera_*, *_wrist_camera_*, so101_*) that the contract does not list -> FAIL
   collision_free: true  -> the link has no <collision>
+  consumed_from: frames of another owner that this file does not declare and does not check (the near-field sensors, platform-sw's):
+                 reported in the sidecar as observed or not, never a WARN and never a FAIL (P15: "take them from there")
 
-Entries with `variants` (base_link) give type and parent per arg value; exactly one variant must match each expansion.
+Entries with `variants` (base_footprint) give type and parent per arg value; exactly one variant must match each expansion.
 The checker is a pure function of (URDF root, args, contract) so that it is itself tested on synthetic URDFs below.
 
 Sidecar: T04_frame_contract.json in the evidence directory ($OPENAMR_EVIDENCE_DIR, default <workspace>/evidence;
@@ -20,18 +22,18 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from conftest import ARG_DEFAULTS, ARM_PACKAGES, MAST_IDS, MATRIX, SHARE, expand, load_yaml, write_sidecar
+from conftest import ARG_DEFAULTS, ARM_PACKAGES, BASELINE, MATRIX, SHARE, expand, load_yaml, write_sidecar
 
-OUR_NAMESPACES = ["mast_*", "head_camera_*", "*_wrist_camera_*", "so101_*"]
+OUR_NAMESPACES = ["lift_*", "arm_profile_*", "head_camera_*", "*_wrist_camera_*", "so101_*"]
 _COND = re.compile(r"^\s*(\w+)\s*==\s*(\S+)\s*$")
 
 CONTRACT = load_yaml(os.path.join(SHARE, "config", "frame_contract.yaml"))
-# The T01 matrix, plus the planar flag for each arm_package (the flag changes base_link's parent)
-EXPANSIONS = [(m, a, "false") for m, a in MATRIX] + [(MAST_IDS["default"], a, "true") for a in ARM_PACKAGES]
+# Every base plate x arm package, plus the planar flag for each arm_package (the flag changes base_footprint's parent)
+EXPANSIONS = [(p, a, "false") for p, a in MATRIX] + [(BASELINE["base_plate"], a, "true") for a in ARM_PACKAGES]
 
 
-def label(mast_id, arm_package, planar):
-    return f"{mast_id}-{arm_package}-planar_{planar}"
+def label(base_plate, arm_package, planar):
+    return f"{base_plate}-{arm_package}-planar_{planar}"
 
 
 def holds(condition, args):
@@ -107,35 +109,49 @@ def check_contract(root, args, contract):
     return fails, warns
 
 
-def full_args(mast_id, arm_package, planar):
-    return {**ARG_DEFAULTS, "mast_id": mast_id, "arm_package": arm_package, "enable_planar_base": planar}
+def full_args(base_plate, arm_package, planar):
+    return {**ARG_DEFAULTS, "base_plate": base_plate, "arm_package": arm_package, "enable_planar_base": planar}
 
 
-@pytest.mark.parametrize("mast_id,arm_package,planar", EXPANSIONS, ids=[label(*e) for e in EXPANSIONS])
-def test_t04_expansion_honours_the_contract(mast_id, arm_package, planar):
-    root = expand(mast_id=mast_id, arm_package=arm_package, enable_planar_base=planar)
-    fails, _ = check_contract(root, full_args(mast_id, arm_package, planar), CONTRACT)
+@pytest.mark.parametrize("base_plate,arm_package,planar", EXPANSIONS, ids=[label(*e) for e in EXPANSIONS])
+def test_t04_expansion_honours_the_contract(base_plate, arm_package, planar):
+    root = expand(base_plate=base_plate, arm_package=arm_package, enable_planar_base=planar)
+    fails, _ = check_contract(root, full_args(base_plate, arm_package, planar), CONTRACT)
     assert not fails, "\n" + "\n".join(fails)
 
 
-def test_t04_missing_w_frames_are_a_warning_with_a_sidecar():
-    missing = {}
+def test_t04_there_is_no_w_entry_and_the_near_field_frames_are_consumed_not_declared():
+    """P15: the six near-field frames this contract listed as `W` (declared-but-absent: a WARN in every expansion since S4) are
+    DELETED, not renamed. The layout is platform-sw's (4 x us_*, 2 x tof_*) and arrives with the included base file; the contract
+    says so in `consumed_from` and the sidecar says which of them each expansion contains. T04's result is PASS because there is
+    nothing of another owner's left for it to wait for, and absent frames would be reported, not warned: they are not ours."""
+    assert not [e["name"] for e in CONTRACT["entries"] if e["req"] == "W"], "a W entry is back: another owner's frame was declared again"
+    consumed = CONTRACT["consumed_from"]
+    assert [c["owner"] for c in consumed] == ["platform-sw"]
+    frames = consumed[0]["frames"]
+    assert frames == ["us_front_left", "us_front_right", "us_rear_left", "us_rear_right", "tof_front", "tof_rear"]
+    declared = {e["name"] for e in CONTRACT["entries"]}
+    assert not declared & set(frames), "a consumed frame is also declared by this contract"
+    stale = {"tof_front_left_link", "tof_front_right_link", "tof_rear_left_link", "tof_rear_right_link",
+             "ultrasonic_front_link", "ultrasonic_rear_link"}
+    assert not declared & stale, "one of the six retired near-field names is still in the contract"
+
+    fails_all, observed = [], {}
     for e in EXPANSIONS:
-        root = expand(mast_id=e[0], arm_package=e[1], enable_planar_base=e[2])
-        _, warns = check_contract(root, full_args(*e), CONTRACT)
-        for w in warns:
-            missing.setdefault(w.split()[1].rstrip(":"), []).append(label(*e))
-    path = write_sidecar("T04", "frame_contract", "frame contract", "WARN" if missing else "PASS",
-                         {"expansions": len(EXPANSIONS), "missing_W": sorted(missing),
-                          "missing_W_in_expansions": {k: len(v) for k, v in sorted(missing.items())},
-                          "owner": "platform-sw (WP-F5 static TFs into URDF sensor macros)"})
-    if missing:
-        warnings.warn(f"T04 WARN: W frames missing from every expansion: {', '.join(sorted(missing))} (sidecar: {path})",
-                      UserWarning, stacklevel=1)
-    # a W frame is only a warning while it is an expected-from-another-owner frame
-    owners = {e["name"]: e["owner"] for e in CONTRACT["entries"] if e["req"] == "W"}
-    assert set(missing) <= set(owners)
-    assert all(owners[n] == "platform-sw" for n in missing)
+        root = expand(base_plate=e[0], arm_package=e[1], enable_planar_base=e[2])
+        fails, warns = check_contract(root, full_args(*e), CONTRACT)
+        fails_all += [f"{label(*e)}: {f}" for f in fails]
+        assert not warns, warns
+        present = {n.get("name") for n in root.findall("link")}
+        observed[label(*e)] = [f for f in frames if f in present]
+    assert not fails_all, "\n".join(fails_all)
+    write_sidecar("T04", "frame_contract", "frame contract", "PASS",
+                  {"expansions": len(EXPANSIONS), "missing_W": [], "entries": len(CONTRACT["entries"]),
+                   "consumed_from": {"owner": consumed[0]["owner"], "contract": consumed[0]["contract"], "frames": frames,
+                                     "state": "merged upstream (platform-sw main 935efc7) and present in the included base file",
+                                     "observed_in_every_expansion": all(v == frames for v in observed.values()),
+                                     "observed": observed[label(*EXPANSIONS[0])]},
+                   "owner_of_the_contract": "platform-sw (near-field frames); this repository declares none of them"})
 
 
 # --- the contract file itself ---------------------------------------------------------------------------------------
@@ -170,10 +186,12 @@ def test_t04_every_link_attached_by_contract_has_its_parent_in_the_contract_or_i
             assert p is None or p in names, f"{e['name']}: parent {p!r} is not a contract link"
 
 
-def test_t04_base_link_is_conditionally_a_root():
-    entry = next(e for e in CONTRACT["entries"] if e["name"] == "base_link")
+def test_t04_base_footprint_is_conditionally_a_root_and_base_link_hangs_from_it():
+    entry = next(e for e in CONTRACT["entries"] if e["name"] == "base_footprint")
     assert expected_type_parent(entry, {"enable_planar_base": "false"}) == ("root", None)
     assert expected_type_parent(entry, {"enable_planar_base": "true"}) == ("planar", "world")
+    link = next(e for e in CONTRACT["entries"] if e["name"] == "base_link")
+    assert (link["type"], link["parent"]) == ("fixed", "base_footprint")
 
 
 # --- the checker on synthetic URDFs: it must be able to fail ----------------------------------------------------------
@@ -192,14 +210,14 @@ MINI = {"entries": [
     {"name": "base_link", "kind": "link", "req": "R", "condition": None,
      "variants": [{"when": "p == false", "type": "root", "parent": None},
                   {"when": "p == true", "type": "planar", "parent": "world"}]},
-    {"name": "mast_a_link", "kind": "link", "type": "fixed", "parent": "base_link", "req": "R", "condition": None,
+    {"name": "lift_a_link", "kind": "link", "type": "fixed", "parent": "base_link", "req": "R", "condition": None,
      "collision_free": True, "collision_free_reason": "x"},
-    {"name": "cam_link", "kind": "link", "type": "fixed", "parent": "mast_a_link", "req": "C", "condition": "k == on"},
+    {"name": "cam_link", "kind": "link", "type": "fixed", "parent": "lift_a_link", "req": "C", "condition": "k == on"},
     {"name": "tof_link", "kind": "link", "type": "fixed", "parent": "base_link", "req": "W", "condition": None},
     {"name": "world", "kind": "link", "type": "root", "parent": None, "req": "C", "condition": "p == true"},
-    {"name": "mast_joint", "kind": "joint", "type": "fixed", "parent": "base_link", "req": "R", "condition": None},
+    {"name": "lift_joint_x", "kind": "joint", "type": "fixed", "parent": "base_link", "req": "R", "condition": None},
 ]}
-GOOD = dict(links=["base_link", "mast_a_link"], joints=[("mast_joint", "fixed", "base_link", "mast_a_link")])
+GOOD = dict(links=["base_link", "lift_a_link"], joints=[("lift_joint_x", "fixed", "base_link", "lift_a_link")])
 
 
 def _check(links, joints, args, collision_on=(), contract=MINI):
@@ -213,19 +231,19 @@ def test_checker_passes_a_conforming_urdf_and_warns_on_a_missing_w_frame():
 
 def test_checker_fails_a_missing_r_frame():
     fails, _ = _check(["base_link"], [], {"p": "false", "k": "off"})
-    assert any("mast_a_link: missing (R)" in f for f in fails)
+    assert any("lift_a_link: missing (R)" in f for f in fails)
 
 
 def test_checker_fails_a_wrong_parent_and_a_wrong_type():
-    fails, _ = _check(["base_link", "mast_a_link", "x"], [("mast_joint", "fixed", "x", "mast_a_link")],
+    fails, _ = _check(["base_link", "lift_a_link", "x"], [("lift_joint_x", "fixed", "x", "lift_a_link")],
                       {"p": "false", "k": "off"})
-    assert any("mast_joint" in f and "contract says" in f for f in fails)
-    fails, _ = _check(GOOD["links"], [("mast_joint", "revolute", "base_link", "mast_a_link")], {"p": "false", "k": "off"})
-    assert any("mast_joint" in f and "revolute" in f for f in fails)
+    assert any("lift_joint_x" in f and "contract says" in f for f in fails)
+    fails, _ = _check(GOOD["links"], [("lift_joint_x", "revolute", "base_link", "lift_a_link")], {"p": "false", "k": "off"})
+    assert any("lift_joint_x" in f and "revolute" in f for f in fails)
 
 
 def test_checker_fails_a_conditional_frame_when_present_without_its_condition_and_when_absent_with_it():
-    extra = dict(links=GOOD["links"] + ["cam_link"], joints=GOOD["joints"] + [("cj", "fixed", "mast_a_link", "cam_link")])
+    extra = dict(links=GOOD["links"] + ["cam_link"], joints=GOOD["joints"] + [("cj", "fixed", "lift_a_link", "cam_link")])
     fails, _ = _check(**extra, args={"p": "false", "k": "off"})
     assert any("cam_link: present but its condition is false" in f for f in fails)
     fails, _ = _check(**GOOD, args={"p": "false", "k": "on"})
@@ -233,15 +251,15 @@ def test_checker_fails_a_conditional_frame_when_present_without_its_condition_an
 
 
 def test_checker_fails_an_unlisted_frame_in_our_namespaces_only():
-    for name, bad in (("mast_extra_link", True), ("head_camera_link", True), ("left_wrist_camera_extra", True),
+    for name, bad in (("lift_extra_link", True), ("head_camera_link", True), ("left_wrist_camera_extra", True),
                       ("so101_thing", True), ("some_other_link", False)):
         fails, _ = _check(GOOD["links"] + [name], GOOD["joints"], {"p": "false", "k": "off"})
         assert any(f"{name}: in our namespace" in f for f in fails) == bad, name
 
 
 def test_checker_applies_the_right_base_link_variant_and_fails_the_wrong_one():
-    planar = dict(links=["world", "base_link", "mast_a_link"],
-                  joints=[("bp", "planar", "world", "base_link"), ("mast_joint", "fixed", "base_link", "mast_a_link")])
+    planar = dict(links=["world", "base_link", "lift_a_link"],
+                  joints=[("bp", "planar", "world", "base_link"), ("lift_joint_x", "fixed", "base_link", "lift_a_link")])
     assert not _check(**planar, args={"p": "true", "k": "off"})[0]
     # the same tree is wrong when the arg says planar is off: base_link is not a root, world must be absent
     fails, _ = _check(**planar, args={"p": "false", "k": "off"})
@@ -263,5 +281,5 @@ def test_checker_fails_when_no_or_several_variants_match():
 
 
 def test_checker_fails_a_collision_on_a_collision_free_link():
-    fails, _ = _check(**GOOD, args={"p": "false", "k": "off"}, collision_on=("mast_a_link",))
+    fails, _ = _check(**GOOD, args={"p": "false", "k": "off"}, collision_on=("lift_a_link",))
     assert any("collision_free" in f for f in fails)

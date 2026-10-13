@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""T02: run `check_urdf` on every T01 expansion, `openarm` on `gazebo` and `real` at the release mast_id included.
+"""T02: run `check_urdf` on every T01 expansion, `openarm` on `gazebo` and `real` at the baseline included.
 
     check_urdf_matrix.py
 
-Also runs, labelled `extra`: the planar flag at the release mast_id for each arm package (the W02 reasoning says
+Also runs, labelled `extra`: the planar flag at the baseline for each arm package (the W02 reasoning says
 check_urdf accepts the planar joint, and that should be a thing somebody ran), and `openarm` on `gazebo` and `real` at
-mast_1300 (the first non-default mast_id), so the other profiles are checked at a second mast height. Prints one line per expansion, writes
+bp050 (the other base-plate position), so the other profiles are checked at a second column position. Prints one line per expansion, writes
 `T02_check_urdf.json` to the evidence directory, and exits non-zero if any expansion is rejected or check_urdf is
 missing (a check that cannot run is not a pass).
 """
@@ -16,7 +16,6 @@ import sys
 import tempfile
 
 import xacro
-import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import evidence_common as ev  # noqa: E402
@@ -38,21 +37,19 @@ def run_check_urdf(urdf_xml, executable=None):
 
 def run_matrix(share, executable=None):
     """-> list of {id, args, extra, returncode, summary}, one per expansion."""
-    with open(os.path.join(share, "config", "mast_ids.yaml")) as f:
-        mast_ids = yaml.safe_load(f)
-    cases = [(c, "false", False) for c in ev.expansion_matrix(mast_ids)]
-    cases += [(c, "true", True) for c in ev.planar_extras(mast_ids)]
-    cases += [(c, "false", True) for c in ev.profile_extras(mast_ids)]
+    upperbody = ev.load_upperbody(share)
+    cases = [(c, "false", False) for c in ev.expansion_matrix(upperbody)]
+    cases += [(c, "true", True) for c in ev.planar_extras(upperbody)]
+    cases += [(c, "false", True) for c in ev.profile_extras(upperbody)]
     rows = []
-    for (mast_id, arm_package, hardware_profile), planar, extra in cases:
-        label = ev.expansion_label(mast_id, arm_package, hardware_profile) + (" +planar" if planar == "true" else "")
+    for row, planar, extra in cases:
+        label = ev.row_label(row) + (" +planar" if planar == "true" else "")
         try:
-            urdf = ev.expand_urdf(share, mast_id, arm_package, hardware_profile, planar)
+            urdf = ev.expand_urdf(share, row, planar)
             rc, output = run_check_urdf(urdf, executable)
         except xacro.XacroException as err:
             rc, output = 99, f"xacro failed: {err}"
-        rows.append({"id": label, "args": {"mast_id": mast_id, "arm_package": arm_package,
-                                           "hardware_profile": hardware_profile, "enable_planar_base": planar},
+        rows.append({"id": label, "args": {**ev.row_mappings(row, planar)},
                      "extra": extra, "returncode": rc,
                      "summary": output.splitlines()[0] if output else ""})
     return rows
@@ -63,7 +60,7 @@ def main():
     rows = run_matrix(share)
     for row in rows:
         ok = row["returncode"] == 0
-        print(f"  {'PASS' if ok else 'FAIL'}  check_urdf  {row['id']:<34} rc={row['returncode']}"
+        print(f"  {'PASS' if ok else 'FAIL'}  check_urdf  {row['id']:<52} rc={row['returncode']}"
               f"{'  (extra: not in T01)' if row['extra'] else ''}")
         if not ok:
             print(f"        {row['summary']}")
