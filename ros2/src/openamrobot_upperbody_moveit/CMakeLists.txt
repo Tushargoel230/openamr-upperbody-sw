@@ -22,6 +22,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(acm_generation test/test_acm_generation.py TIMEOUT 600)
   ament_add_pytest_test(acm_derive test/test_acm_derive.py TIMEOUT 600)
   ament_add_pytest_test(joint_state_clamp_logic test/test_joint_state_clamp_logic.py TIMEOUT 600)
+  # How the clamp ends: exit 0 on SIGINT and SIGTERM (a crash of a node this repo owns is fixed, not allow-listed).
+  ament_add_pytest_test(joint_state_clamp_shutdown test/test_joint_state_clamp_shutdown.py TIMEOUT 600)
   ament_add_pytest_test(gripper_sign test/test_gripper_sign.py TIMEOUT 600)
   ament_add_pytest_test(config_files test/test_config_files.py TIMEOUT 600)
   # M03 and M04 build a MoveIt planning scene from the combined model (moveit_py) and need no controller and no simulator.

@@ -5,6 +5,17 @@ All notable changes to this repository. Evidence for the description is static a
 
 ## [Unreleased]
 
+### Fixed (P15, task 0)
+
+- **`joint_state_clamp.py` exits 0 on SIGINT and SIGTERM.** P14 ran A7 twice on an unchanged commit and got 2 FAIL, then 0 FAIL; the cause was
+  this node, ours, exiting 1 at shutdown. Reproduced standalone against a flooded `/joint_states` before fixing: every SIGTERM exited 1 (30 of
+  30, an uncaught `ExternalShutdownException`, which rclpy raises out of `spin` for every shutdown) and 1 of 30 SIGINTs exited 1 with the
+  `take_message` `RuntimeError` the signal provokes when it lands between the wait set and the take. `run()` now treats `KeyboardInterrupt`,
+  `ExternalShutdownException` and that `RuntimeError` **with a closed context** as a clean stop; the same error with a live context, and
+  anything else, still raises. The node is destroyed before `rclpy.try_shutdown()`. Not allow-listed: `launch_guard.py` is unchanged.
+  `test_joint_state_clamp_shutdown.py` sends real signals to a real node under a message flood (against the old script it fails for
+  both signals: SIGTERM on the first attempt, SIGINT on the third) and unit-tests the decision with an injected `spin`.
+
 ### Changed (P14, publish and record)
 
 - **V01 records what the first manual look found, and stays WARN.** A person looked at the mast (item 1) and found two defects no automated

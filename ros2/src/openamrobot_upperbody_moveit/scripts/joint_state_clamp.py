@@ -9,9 +9,11 @@ out is published unchanged and logged as an error (not float noise: not this nod
 and the magnitude; every activation is counted. `~/get_stats` (std_srvs/Trigger) returns the counters as JSON in `message`, which is where the
 A7 evidence reads them. Why this exists and what it is not: openamrobot_upperbody_moveit/joint_state_clamp.py.
 """
+import sys
 import xml.etree.ElementTree as ET
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import JointState
@@ -70,19 +72,34 @@ class JointStateClamp(Node):
         return response
 
 
+def run(node, spin=rclpy.spin, context_ok=rclpy.ok):
+    """Spin until the context is shut down and return the process exit code: 0 when a shutdown ended the spin, and anything else raises.
+
+    A SIGINT or a SIGTERM (rclpy's handler takes both) shuts the context down and the spin ends in one of three ways, all of them a clean stop:
+    KeyboardInterrupt; ExternalShutdownException (rclpy raises it out of `spin` for every shutdown, SIGTERM included: found by sending the
+    signal to this node, 30 of 30 exited 1); or the RuntimeError the executor's `take_message` raises when the signal lands between the
+    wait set reporting a message and the take (rclpy 7.1.12, "Unable to convert call argument '0' to Python object": 1 of 30 SIGINTs). The
+    third is only a shutdown if the context is no longer ok: the same error with a live context is a defect and is re-raised."""
+    try:
+        spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+    except RuntimeError:
+        if context_ok():
+            raise
+    return 0
+
+
 def main(argv=None):
     rclpy.init(args=argv)
     node = JointStateClamp()
     try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
+        return run(node)
     finally:
         print("joint_state_clamp: final counters: " + node.clamp.summary_json(), flush=True)      # not the logger: its context is gone by now
-        node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        node.destroy_node()          # before the shutdown, always
+        rclpy.try_shutdown()         # a no-op when the signal's handler already did it
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
