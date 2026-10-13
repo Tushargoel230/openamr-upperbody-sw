@@ -15,7 +15,9 @@ import pytest
 
 SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 PACKAGES = [f"openamrobot_upperbody_{name}" for name in ("description", "control", "bringup", "gazebo", "moveit")]
-REGISTERED = re.compile(r"(?:ament_add_pytest_test\(\s*\S+\s+|add_launch_test\(\s*)(?P<path>test/\S+\.py)")
+# `ament_add_ros_isolated_pytest_test` is how option B registers test_upperbody_tf.py (it runs in an isolated ROS graph): a registration like
+# any other, and a test file registered that way was reported as never run until P15 taught this expression its name.
+REGISTERED = re.compile(r"(?:ament_add_(?:ros_isolated_)?pytest_test\(\s*\S+\s+|add_launch_test\(\s*)(?P<path>test/\S+\.py)")
 
 
 def read(path):
@@ -59,3 +61,17 @@ def test_h01_every_launch_test_checks_that_its_processes_started_and_exited_clea
     assert re.search(r"assert_no_process_died\(|stack_alive\(", text), \
         f"{package}/test/{name}: no active test that no process died WHILE the tests ran (assert_no_process_died): the post-shutdown allowances would hide it"
     assert re.search(r"expected\s*=\s*\[|EXPECTED_PROCESSES", text), f"{package}/test/{name}: it does not name the processes it needs (expected=[...])"
+
+
+@pytest.mark.parametrize("line,expected", [
+    ("ament_add_pytest_test(t01 test/test_t01_expansion.py TIMEOUT 600)", "test_t01_expansion.py"),
+    ("add_launch_test(test/test_l01_mock_controllers.py TIMEOUT 60)", "test_l01_mock_controllers.py"),
+    ("ament_add_ros_isolated_pytest_test(test_upperbody_tf test/test_upperbody_tf.py\n    ENV X=1 TIMEOUT 900)", "test_upperbody_tf.py"),
+    ("# ament_add_pytest_test(never test/test_never.py)", None),
+])
+def test_h01_the_registration_expression_knows_every_way_a_test_is_registered(line, expected):
+    """P15: option B registers its TF test with ament_add_ros_isolated_pytest_test, which this expression did not know, so a registered test
+    was reported as one that never runs. A commented-out registration is still not one."""
+    code = "\n".join(l for l in line.splitlines() if not l.lstrip().startswith("#"))
+    found = [os.path.basename(m.group("path")) for m in REGISTERED.finditer(code)]
+    assert found == ([expected] if expected else [])
