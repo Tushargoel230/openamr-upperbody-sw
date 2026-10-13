@@ -63,7 +63,7 @@ A6_CHECKS = [
     ("T08", "collision mesh is the same file as the visual mesh"),
     ("T09", "massed links: mass > 0, principal moments > 0, triangle inequality, tensor PD"),
     ("T10", "modelled mass by owner vs gross_mass_limit"),
-    ("T11", "planar base joint absent by default, planar world -> base_link when enabled"),
+    ("T11", "planar base joint absent by default, planar world -> base_footprint when enabled"),
     ("T12", "datum schema and provenance rules"),
     ("T13", "datum references; visualization constants"),
     ("T14", "mock profile has no OpenArmHW plugin"),
@@ -75,7 +75,7 @@ A6_CHECKS = [
 EXTRA_CHECKS = [
     ("C01", "config id is sha256:<64 hex> and accepted by the C9 pattern"),
     ("C02", "upstream pin file agrees with the upstream checkout"),
-    ("W01", "base_link inertia not seen by KDL consumers"),
+    ("W01", "the root link has no inertial, so KDL consumers lose nothing"),
     ("W02", "KDL converts base_planar_joint to a fixed joint"),
     ("REV", "datums.yaml content change carries a revision change"),
     ("H01", "every test file is registered and every launch test checks that its processes started and exited cleanly"),
