@@ -16,6 +16,57 @@ All notable changes to this repository. Evidence for the description is static a
   `test_joint_state_clamp_shutdown.py` sends real signals to a real node under a message flood (against the old script it fails for
   both signals: SIGTERM on the first attempt, SIGINT on the third) and unit-tests the decision with an injected `spin`.
 
+### Changed (P15, rebase onto main and adopt option B)
+
+- **Both branches are rebased onto `upstream/main`**, where Alex's option B (two commits, authorship intact) and the rev19.0 column position are
+  merged. Nobody's commits were re-authored. Main won for everything describing the upper body or the baseline (README wording, package
+  descriptions, his config, xacro, launch file and tests, all byte-identical to main afterwards); ours won for the arm composition, control
+  profiles, Gazebo, MoveIt and the harness; manifests and CMake took both.
+- **The mast is deleted and the arms are rooted on option B's mount frames.** `urdf/mast.xacro`, `config/mast_ids.yaml` and the datums
+  `mast_base_pose`, `left_arm_mount_pose`, `right_arm_mount_pose`, `mast_section`, `mast_mass` and `head_camera_pose` are gone; `mast_id` is not
+  an argument. `combined_robot.xacro` composes option B's macro on platform-sw's `base_footprint` and calls the upstream arm macros at his
+  `openarm_{left,right}_base_link` pose (`geometry.arm_mount`: x +0.180, y +-0.031, z +0.166 from the carriage). ADR-008 is otherwise unchanged:
+  two calls, derived single-arm presets, no OpenArm body. Two things had to give, both recorded in the package README: option B's macro
+  gains two opt-in parameters (`emit_arm_mounts`, `column_inertial`, defaults = its own behaviour) because the upstream arm macro emits a link
+  and a joint of the same names as his mount frames; and the arms are placed by the macro `openarm_v20_robot` itself calls, because that macro
+  declares its `root_frame` as a link and `lift_carriage_link` is already his.
+- **rev19.0 numbers**: two base-plate positions (`bp000`, `bp050`; ADR-010's five were rev18.7); the column axis at x +0.060 / +0.110 from
+  `base_link`, not on the drive axle (`column_axis_x_bp000`); `base_link_height_above_floor` 0.098 (a placeholder since S3, now
+  provisional with a source), asserted against platform-sw's `base_footprint_joint`; the lift is a DOLD Hexalift V4 350 of **11.7 kg**
+  catalogue (`lift_mass_dold_v4_350`, provisional) on `lift_column_base_link`, replacing `mast_mass` (3.0 kg, placeholder).
+- **Three things option B does better, adopted**: `effort="0" velocity="0"` on a joint we have no authority to command (kept, and
+  asserted); a null datum is a hard-fail that names itself (`lift_mass_tl3_400`, as its `tl3_400` lengths; the schema allows `null`
+  only with `source` and `status` `placeholder`); and **calibration IDs are not configuration IDs** (the lift stops `L1000`, `L1175`,
+  `L1350` are joint positions; T05 and E01 are per stop; they are reported beside the config ids, not inside them).
+- **`config_id` changed meaning and kept its format.** Before: canonical URDF, `mast_id`, `arm_package`, `hardware_profile`, datums
+  revision, `openarm_description` commit. Now: canonical URDF, `column`, `base_plate`, `head_pitch`, `base_tilt`, `arm_package`,
+  `hardware_profile`, datums revision, every upstream pin. It still validates against C9, so nothing fails to say that an id recorded
+  before this is not comparable with one computed now. The frozen A6 set (`evidence/frozen_a6_993b000/`) keeps the old inputs.
+- **The near-field frames leave our contract.** The six declared-but-absent frames (`tof_front_left_link` ... `ultrasonic_rear_link`, `req: W`,
+  T04's WARN since S4) are removed, not renamed. platform-sw declares `us_front_left`, `us_front_right`, `us_rear_left`, `us_rear_right`
+  (4 x MB7060) and `tof_front`, `tof_rear` (2 x TF-Luna) in 935efc7, merged on its main; the contract says they are `consumed_from` there and
+  T04 reports which of them each expansion contains, without a WARN or a FAIL. T04 is PASS by deletion.
+- **platform-sw 935efc7 (REP 105) is followed**: the root is `base_footprint`, `base_link` is 0.098 m above it; the planar joint's child, the
+  SRDF virtual joint and G01's odom frame (`odom -> base_footprint`, read from the DiffDrive plugin) follow. W01 is PASS: the root carries no
+  inertial, so KDL sees `base_link`'s 4.18 kg (was a WARN since S3).
+- **The two rules V01 found are implemented**: a dimension list declares `axis_convention` and T12 asserts the assignment against an
+  expansion (`lift_column_section`: x fore-aft, y lateral); a mass of ours declares a `density_band` and T10 reports its implied density,
+  scoped to our own masses (upstream arm `link2` implies 297 kg/m3 over its bounding box, below the old mast's 337, so a global band cannot
+  work). The one placeholder of the lift, the column's lateral side, is the one invented number, set equal to the sourced 240 mm side.
+- **The collision matrix is re-derived: 83 pairs (20 upstream + 18 `Adjacent` + 45 `ConstantTransform`), was 113 (20 + 16 + 77).** The
+  by-construction set shrinks because a prismatic joint now lies between the base and the arms; 478 pairs are enabled (448). M03 holds
+  `lift_joint` at each stop and samples the rest: PASS at all three. M04's fixture is found again against `arm_profile_link`; the base body is
+  still out of the arms' reach (0 of 6000). M01 runs at three lift stops (was four mast IDs), M02 at the baseline with the lift at `L1000`.
+- **Moved numbers, each with its reason**: A6 22 PASS / 6 WARN becomes 24 / 4 (T04 by deletion, W01 by the root); modelled mass 21.96 kg
+  becomes 30.66 kg (the lift's 11.7 kg replaces the mast's 3.0 kg); E01 heights 1.5 m becomes 1.223 / 1.398 / 1.573 m per stop, depth
+  0.686 m becomes 0.780 m (platform-sw's `us_*`/`tof_*` frames sit on the chassis edge) and width 0.505 m becomes 0.482 m (the wrist cameras
+  are 62 mm apart at their bases now, so the wheels set the width); datums 15 (8 placeholder) become 13 (4 placeholder, 8 provisional).
+  `docs/verification.md` and the package READMEs carry the rest.
+- **V01 stays WARN**, with every checklist item stating what to measure. P14's look at the mast is kept as history: V01-F1 was confirmed
+  correct by the design owner and V01-F2 is closed by the 11.7 kg catalogue figure; none of the eight items of the lift model has an answer.
+- `base_joint_states_stub.py` reports `lift_joint` at `lift_position` on mock (robot_state_publisher publishes nothing above a joint nobody
+  reports); on Gazebo `joint_state_publisher` reports it at zero. H01 learns `ament_add_ros_isolated_pytest_test`, which option B uses.
+
 ### Changed (P14, publish and record)
 
 - **V01 records what the first manual look found, and stays WARN.** A person looked at the mast (item 1) and found two defects no automated

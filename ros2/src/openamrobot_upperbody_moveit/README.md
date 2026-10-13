@@ -1,7 +1,9 @@
 # openamrobot_upperbody_moveit
 
-MoveIt 2 configuration for the combined OpenAMRobot 2.0 model (A7): the two OpenArm v2.0 arms on the fixed mast, no lift group
-(OpenAMRobot 2.0 has a fixed mast). Everything this package shows is class **`simulation`**: how the model plans and executes under
+MoveIt 2 configuration for the combined OpenAMRobot 2.0 model (A7): the two OpenArm v2.0 arms on option B's lift carriage. The lift
+(`lift_joint`, prismatic, effort 0 and velocity 0: we have no authority to command it) is in no planning group; MoveIt sees it as part
+of the robot state, at the operating point the stack reports (one of the calibration stops `L1000`, `L1175`, `L1350`: 0, 0.175 and
+0.350 m), and plans the arms from there. Everything this package shows is class **`simulation`**: how the model plans and executes under
 MoveIt 2.12.4 and **declared OpenAMRobot limits**, on `mock_components` and in Gazebo. It permits no statement about a physical
 robot, a payload, a torque, or a validated limit (ADR-009).
 
@@ -14,9 +16,9 @@ ros2 launch openamrobot_upperbody_moveit move_group.launch.py hardware_profile:=
 ```
 
 In RViz's MotionPlanning panel pick a planning group (`left_arm`, `right_arm`, `left_gripper`, `right_gripper`), a named goal state
-(`home`, `hands_up`, `park`; `open`, `closed`), Plan, then Execute. The fixed frame is `base_link`, which is the model frame MoveIt
-reports for this SRDF. The configuration is built with `moveit_configs_utils`' `MoveItConfigsBuilder` over the combined xacro and
-its args (`mast_id`, `hardware_profile`), in `openamrobot_upperbody_moveit/moveit_config.py`; nothing is read from upstream's MoveIt
+(`home`, `hands_up`, `park`; `open`, `closed`), Plan, then Execute. The fixed frame is `base_link`; the model's root, and the frame the virtual joint
+attaches to `world`, is `base_footprint`. The configuration is built with `moveit_configs_utils`' `MoveItConfigsBuilder` over the combined xacro and
+its args (option B's `column`, `base_plate`, `head_pitch`, `base_tilt` and `hardware_profile`), in `openamrobot_upperbody_moveit/moveit_config.py`; nothing is read from upstream's MoveIt
 package (ADR-007).
 
 ## The SRDF
@@ -60,11 +62,15 @@ pairs on every run (473 and 468 at 3000 trials, 455, 456 and 458 at 10000, and a
 matrix was a contract that could not be reproduced, and why it is no longer sampled. The tool is no longer used.
 
 ```bash
-ros2 run openamrobot_upperbody_moveit regenerate_acm.sh [--mast-id mast_1350]          # a PROPOSAL: prints the diff against the contract, changes nothing
+ros2 run openamrobot_upperbody_moveit regenerate_acm.sh [--base-plate bp000]          # a PROPOSAL: prints the diff against the contract, changes nothing
 ros2 run openamrobot_upperbody_moveit regenerate_acm.sh --write                        # replaces the contract (and the fingerprint): a decision, read the diff
 ```
 
-The contract (`contract:` in `acm_generation.yaml`): 113 pairs (36 `Adjacent`, 77 `ConstantTransform`), fingerprint `sha256:c04ca8eaee5edadd9f9518e308b7103f22d90899e5de5bd83b37325eabdc5eb7`.
+The contract (`contract:` in `acm_generation.yaml`): **83 pairs (38 `Adjacent`, 45 `ConstantTransform`), 20 of them declared by upstream**, fingerprint
+`sha256:2246faab583a0fc5984ca7a4d3a82eca3c9fb5c8a1b18217231a3b0c4f344681`. It was 113 pairs (36 + 77) with the fixed mast; P15 re-derived it (the model
+changed and the contract is the file, so this is a contract change, in the diff). **The by-construction set shrank from 77 to 45 on purpose:** a
+prismatic joint between two links removes them from what a fixed transform certifies, and `lift_joint` now lies between the base and the arms
+(`test_acm_derive.py` asserts that the shrink is exactly that: no constant pair spans the lift). 478 pairs are enabled (448).
 
 ## Named poses
 
@@ -104,40 +110,43 @@ pose set by our plates. `openarm_left_ee_link1` <-> `openarm_left_link2` was our
 pairs touch by design and are not claims about collision.
 
 **What sampling does.** The sampled part is **information about the enabled pairs**, not a result and not a reason: N random joint states inside the
-limits (numpy `default_rng(seed)`, the same states at every mast ID), and the enabled pairs found colliding with how often. Sampling falsifies and never
+limits (numpy `default_rng(seed)`, `lift_joint` held at each calibration stop in turn and the same states at every stop), and the enabled pairs found colliding with how often. Sampling falsifies and never
 certifies; a pair absent from the table may still collide. A pair that collides often although the matrix is right tells A4 something about reach and
 clearance, which is why it is reported. Collision is checked through `moveit_py` with an allowed-collision matrix of its own that allows everything except the
 pairs under test, so the SRDF's list is never consulted; the contact map is not readable from Python (`CollisionResult.contacts` raises "Unregistered type"),
 so the colliding pairs are found by bisection.
 
-**Result at the recorded commit** (`evidence/20261007T164239Z_a7.json`): **M03 PASS** at all four mast IDs. 113 pairs are disabled (36 `Adjacent`, 77 `ConstantTransform`, 20 declared by upstream) and 448 are enabled; every disabled pair has a reason that can be shown; the 77 constant pairs are clear in the one evaluation that decides them and agree with the first 200 sampled states. Information, not a result: 37 of the 448 enabled pairs collided in some of 2000 random states at seed 20261006 (411 in none), the same at every mast ID; the commonest are arm links against `mast_base_link` (`openarm_left_ee_base_link` 48, `openarm_right_ee_base_link` 43, `openarm_right_ee_link1` 41 of 2000 states, with `mast_base_link`). `openarm_left_ee_link1` <-> `openarm_left_link2`, the pair P10 found colliding and P11 reported as an inherited WARN, is now an enabled pair like any other: the planner avoids it.
+**Result at the P15 commit** (`dada509`, `evidence/reports/20261013T102944Z_a7.json`): **M03 PASS** at all three lift stops. 83 pairs are disabled (38 `Adjacent`, 45 `ConstantTransform`, 20 declared by upstream) and 478 are enabled; every disabled pair has a reason that can be shown; the 45 constant pairs are clear in the one evaluation that decides them and agree with the first 200 sampled states. Information, not a result: 58 of the 478 enabled pairs collided in some of 2000 random states at seed 20261006 (420 in none), the same at every lift stop, counts included (none of the 58 involves a base-side link, so the lift position cannot change which pairs collide in these states); the commonest are arm links against `arm_profile_link`, option B's 340 mm box (`openarm_right_ee_base_link` 49, `openarm_left_ee_base_link` 37, `openarm_right_ee_link1` 31 of 2000 states). Before P15 it was 37 of 448, mostly against `mast_base_link`.
 
 **The mutation tests** (`test_m03_acm_sampling.py`) plant each defect in a copy of the SRDF and require M03 to name the pair: a disabled pair with no reason
 (`openarm_left_link1` <-> `openarm_left_link3` as `Never`), a false `ConstantTransform` label on a pair with arm joints between its links
-(`mast_base_link` <-> `openarm_left_ee_base_link`, which collides in about 2 of 100 random states), a `ConstantTransform` pair that collides
-(`base_link` <-> `mast_base_link`, no joint between them, overlapping by design), and a permanent collision left enabled (the same pair removed from the
+(`arm_profile_link` <-> `openarm_left_ee_base_link`, which collides in about 2 of 100 random states), a `ConstantTransform` pair that collides
+(`base_link` <-> `bl_caster_link`, no joint between them, overlapping by design), and a permanent collision left enabled (the same pair removed from the
 matrix). Each pair was measured to behave so with nothing ignored; the P10 mutation never worked because it assumed instead (README, P11).
 
 ## M04: a goal inside the nearest reachable volume is refused
 
 `test/test_m04_collision_goal_rejected.py` (VERIFICATION.md's M04 row used to say "base collision volume"; it is corrected to *reachable*,
 because the arms cannot reach the base body) plans (plan only) to a left-arm joint state in which a left gripper link collides with
-`mast_base_link`, the nearest structure volume they can reach, through `move_group`'s `/plan_kinematic_path`:
+`arm_profile_link`, the nearest structure volume they can reach (the lift column itself has no collision geometry: its lateral side is not sourced, so the arms can plan through it), through `move_group`'s `/plan_kinematic_path`:
 
 | Request | What happened |
 |---|---|
 | a free named pose (`hands_up`), the control | planned |
-| the **joint goal** inside the mast volume | **rejected**: answered 0.019 s after the control; `move_group`'s log says OMPL found the contact, "Unable to sample any valid states for goal tree", "Invalid goal state", `Planner 'OMPL' failed with error code GOAL_STATE_INVALID` |
-| the **pose goal** at the same place | **timed out**: it searched 4.99 s more than the control (the whole budget) looking for a valid goal sample, then failed with the same log verdict |
+| the **joint goal** inside the profile's volume | **rejected**: answered 0.071 s after the control; `move_group`'s log says OMPL found the contact, "Unable to sample any valid states for goal tree", "Invalid goal state", `Planner 'OMPL' failed with error code GOAL_STATE_INVALID` |
+| the **pose goal** at the same place | **timed out**: it searched 4.98 s more than the control (the whole budget) looking for a valid goal sample, then failed with the same log verdict |
 
 "Rejected" and "timed out" are different claims and MoveIt 2.12.4 reports both as `FAILURE (99999)` with a planning time of 0 at the
 action and at the service, so the check classifies on time spent beyond the control and asserts the planner's own log line for the joint
 goal. Only the first is the robot refusing to hurt itself; the second would be a robot that tried until it gave up. Neither produced a plan.
 
-**The arms cannot reach the platform's base body.** In 6000 random left-arm states at `mast_1350` the left gripper touched `base_link`, the
-wheels, the casters, the lidar and the camera body in none of them, and M03's 8000 all-joint states found no collision of any arm link with
-`base_link`; the left gripper touched `mast_base_link` in 144 of the 6000. So the refused goal is inside `mast_base_link`'s volume, the nearest
-base-side volume a gripper can be put in. That the base body is out of reach is a reach fact for A4, not a defect here (and the lift decided on 7 Oct will change it).
+**The arms cannot reach the platform's base body.** In 6000 random left-arm states at the baseline (`lift_joint` at `L1000`, seed 4242) the left
+gripper touched `base_link`, the wheels, the casters, the lidar and the camera body in none of them, and M03's all-joint states at the three lift stops
+found no collision of any arm link with `base_link`; the left gripper touched `arm_profile_link` in 249 of the 6000. So the refused goal is inside
+`arm_profile_link`'s volume, the nearest structure volume a gripper can be put in. That the base body is out of reach is a reach fact for A4, not a
+defect here. **The same search found the left gripper in contact with the right arm's own links in about 3 per cent of the random left-arm
+states** (`openarm_right_base_link` 73, `openarm_right_link1` 33, `openarm_right_link3` 19 of 6000): the arms are 62 mm apart at their bases (option
+B's y = +-0.031), and at the home pose, at all three lift stops and both base plates, no two arm links touch.
 
 ## The gripper fork (ADR-009 point 4, manipulation#11): what the installed plugins support
 
@@ -247,7 +256,7 @@ refused without the clamp (`clamp:=false`) and planning with it. The start gate 
 second) stays, widened by the epsilon: it waits out spawn transients, which the clamp does not touch.
 
 **The retry loop is gone.** M01 and M02 used to retry a refused start state up to three times and count the retries. It never fired in the P10
-record (0 retries at every mast ID and in Gazebo), it was keyed on a code MoveIt does not return here, and with the clamp a retry that never fires
+record (0 retries at every lift stop and in Gazebo), it was keyed on a code MoveIt does not return here, and with the clamp a retry that never fires
 is dead code and one that fires says something else is wrong. A refused request is now a failed pose.
 
 ## Known limitations
@@ -282,17 +291,17 @@ whole A7 report.
 
 | Test | Check | Proves |
 |---|---|---|
-| `test_srdf.py` | AUX | names exist at every mast ID; groups, virtual joint (fixed, not planar), poses inside the limits; `park` is a copy of `home` and says it is a placeholder; each pair disabled once |
+| `test_srdf.py` | AUX | names exist at every base plate; groups, virtual joint (fixed, not planar, `world` to `base_footprint`), poses inside the limits; `park` is a copy of `home` and says it is a placeholder; each pair disabled once |
 | `test_srdf_import.py` | AUX | the imported elements equal upstream's at the pinned commit (SKIP, with the reason, only if there is no checkout) |
 | `test_acm_generation.py` | AUX | the matrix's fingerprint is the one on record; the record says derived, no sampling, three reasons; **regenerating twice gives the contract back**; a proposal leaves the contract alone and only `--write` replaces it (on copies) |
-| `test_acm_derive.py` | AUX | every disabled pair has a reason that can be shown at every mast ID and a true label; only `Adjacent`/`ConstantTransform`; the counts the report states; the 77 constant pairs are the ones P11 certified, at every mast ID; the constant pairs have a constant relative pose in an independent forward kinematics |
+| `test_acm_derive.py` | AUX | every disabled pair has a reason that can be shown at every base plate and a true label; only `Adjacent`/`ConstantTransform`; the counts the report states; the by-construction set is 45, not P11's 77, and no constant pair spans the lift joint; the constant pairs have a constant relative pose in an independent forward kinematics |
 | `test_config_files.py` | AUX | limit tags and rule, controller names against `arm_controllers.yaml`, option 1 unchanged, OMPL defaults are MoveIt's |
 | `test_gripper_sign.py` | M05 | per-hand gripper values; the single-number version fails, in both directions |
-| `test_m03_acm_sampling.py` | M03 | every disabled pair has a reason that can be shown at each mast ID; four mutation tests (no reason, false label, constant pair that collides, permanent collision enabled); the sampled enabled pairs are information that never changes the result; the bisection |
-| `test_m04_collision_goal_rejected.py` | M04 | a goal in the nearest reachable volume (`mast_base_link`) is rejected; the pose goal times out |
+| `test_m03_acm_sampling.py` | M03 | every disabled pair has a reason that can be shown at each lift stop; four mutation tests (no reason, false label, constant pair that collides, permanent collision enabled); the sampled enabled pairs are information that never changes the result; the bisection |
+| `test_m04_collision_goal_rejected.py` | M04 | a goal in the nearest reachable volume (`arm_profile_link`) is rejected; the pose goal times out |
 | `test_m06_limits_sensitivity.py` | M06 | the plans need some acceleration limit and do not depend on its value |
 
-M01 (mock, every mast ID) and M02 (Gazebo, `mast_1350`) are tests of `openamrobot_upperbody_bringup`: they start the stacks, and that package
+M01 (mock, every lift stop) and M02 (Gazebo, baseline, lift at `L1000`) are tests of `openamrobot_upperbody_bringup`: they start the stacks, and that package
 depends on this one (a test dependency back would be a colcon cycle).
 
 M05 and M06 were proposed by P10 and are adopted in `design/VERIFICATION.md` (7 Oct); the tests follow those rows.

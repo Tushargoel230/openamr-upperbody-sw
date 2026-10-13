@@ -13,7 +13,7 @@ ros2 launch openamrobot_upperbody_gazebo sim.launch.py rviz:=true         # RViz
 
 | Argument | Default | |
 |---|---|---|
-| `mast_id` | `mast_1350` | `mast_1300` \| `mast_1350` \| `mast_1400` \| `mast_1450` |
+| `column`, `base_plate`, `head_pitch`, `base_tilt` | `dold_v4_350`, `bp000`, `hp25`, `bt10` | option B's configuration IDs (its baseline) |
 | `world` | `worlds/empty.sdf` | path to any world; platform-sw's is `$(ros2 pkg prefix --share openamrobot_gazebo)/worlds/walled_world.sdf` |
 | `headless` | `false` | `true` runs `gz sim -s` |
 | `physics_engine` | `gz-physics-dartsim-plugin` (DART) | applied to whatever world is loaded. DART is the engine platform-sw tuned the base on, and it **cannot close the grippers**: pass `gz-physics-bullet-featherstone-plugin` for that (G02 does). See [the engine](#the-physics-engine-and-the-gripper-mimic) |
@@ -83,15 +83,17 @@ arm joints, and the 2 `finger_joint2` joints, which `joint_state_publisher` comp
 none reported by both sources. Cost: one more node, which uses about half a core here because of the wheel stream's rate, and
 a 50 Hz sampling of the arms' 100 Hz. Nothing of platform-sw's is edited.
 
-## `odom -> base_link`: one publisher
+## `odom -> base_footprint`: one publisher
 
 `robot_state_publisher` converts `base_planar_joint` to a fixed joint because KDL has no planar joint (check W02), so in the
 simulator the base's motion must come from the DiffDrive plugin and never from `robot_state_publisher`. This is what happens,
-and G01 asserts it: `odom -> base_link` arrives at **50.0 Hz of simulated time** (the plugin's `odom_publish_frequency`), the
+and G01 asserts it: `odom -> base_footprint` (the DiffDrive plugin's `<child_frame_id>` since platform-sw 935efc7, REP 105: the
+odom child is the URDF root so that `base_link` keeps one parent; G01 reads the frame from the description, so it follows platform-sw's
+decision) arrives at **50.0 Hz of simulated time** (the plugin's `odom_publish_frequency`), the
 stamps are strictly increasing with no repeats (two publishers would give about 100 Hz, or repeated stamps, and would look like
 jitter rather than an error), `/tf` has exactly two publishers (`platform_bridge`, `robot_state_publisher`), no other
 transform involves the `odom` frame, and `odom` is not a link of the description. The launch uses the default
-`enable_planar_base:=false`; with `true` the planar joint would sit above `base_link` and that guarantee would need rechecking.
+`enable_planar_base:=false`; with `true` the planar joint would sit above `base_footprint` and that guarantee would need rechecking.
 
 ## The physics engine and the gripper mimic
 
@@ -158,10 +160,10 @@ which also writes the `gazebo` evidence report. Each test starts a headless serv
 
 | | Budget | Asserts |
 |---|---|---|
-| G01 | 90 s (about 35 s), default engine (DART) | five controllers `active`; an arm goal completes and tracks while the other arm and the base stay still; platform-sw's bridge topics exist by name and type; `/cmd_vel` moves the base and `/odom` reports it; one publisher of `odom -> base_link`; `/joint_states` has one publisher carrying wheels and arms once each |
+| G01 | 90 s (about 35 s), default engine (DART) | five controllers `active`; an arm goal completes and tracks while the other arm and the base stay still; platform-sw's bridge topics exist by name and type; `/cmd_vel` moves the base and `/odom` reports it; one publisher of `odom -> base_footprint`; `/joint_states` has one publisher carrying wheels, arms and `lift_joint` once each |
 | G02 | 90 s (about 20 s), Bullet-Featherstone passed explicitly | both grippers close, and `finger_joint2` follows `finger_joint1` in the physics (link poses, not `/joint_states`) |
 
-Mutations checked: a second `odom -> base_link` publisher and a second writer on `/joint_states` fail G01; the DART engine
+Mutations checked: a second `odom -> base_footprint` publisher and a second writer on `/joint_states` fail G01; the DART engine
 fails G02.
 
 ## Notes for whoever runs this
@@ -178,5 +180,5 @@ fails G02.
 
 The MoveIt configuration, its limits and the gripper evidence are in [`openamrobot_upperbody_moveit`](../openamrobot_upperbody_moveit/README.md);
 `ros2 launch openamrobot_upperbody_bringup moveit.launch.py sim:=gazebo` starts this simulator and `move_group` together, and M02 (named poses
-in Gazebo at `mast_1350`) runs on the **Bullet-Featherstone** engine for the reason given above. Platform-sw's launch, bridge, world and plugins
+in Gazebo at the baseline, lift at `L1000`) runs on the **Bullet-Featherstone** engine for the reason given above. Platform-sw's launch, bridge, world and plugins
 are read and used, never edited.

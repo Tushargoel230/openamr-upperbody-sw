@@ -6,17 +6,18 @@ own (`sim:=gazebo` below starts it through the simulator).
 ## View the model
 
 ```bash
-ros2 launch openamrobot_upperbody_bringup view.launch.py mast_id:=mast_1350
+ros2 launch openamrobot_upperbody_bringup view.launch.py base_plate:=bp000
 ```
 
 `robot_state_publisher`, `joint_state_publisher_gui` and RViz2 on the combined description (it moved here from
 `openamrobot_upperbody_description`). Source the workspace overlay first; the meshes are `package://` URIs. Args:
-`mast_id`, `arm_package`, `enable_planar_base`.
+`column`, `base_plate`, `head_pitch`, `base_tilt` (option B's configuration IDs), `arm_package`, `enable_planar_base`. The viewer's
+`joint_state_publisher_gui` has a slider for `lift_joint`.
 
 ## Mock bringup
 
 ```bash
-ros2 launch openamrobot_upperbody_bringup mock.launch.py [mast_id:=mast_1350] [rviz:=true]
+ros2 launch openamrobot_upperbody_bringup mock.launch.py [base_plate:=bp000] [rviz:=true]
 ```
 
 `robot_state_publisher` on the combined description with `hardware_profile:=mock`, `ros2_control_node` with
@@ -42,26 +43,31 @@ performance, which mock hardware cannot show. The Gazebo launch and its tests (G
 ## MoveIt
 
 ```bash
-ros2 launch openamrobot_upperbody_bringup moveit.launch.py [mast_id:=mast_1350] [sim:=mock|gazebo] [rviz:=false] \
+ros2 launch openamrobot_upperbody_bringup moveit.launch.py [base_plate:=bp000] [sim:=mock|gazebo] [rviz:=false] [lift_position:=0.0] \
                                                            [headless:=false] [physics_engine:=<gz-physics plugin>]
 ```
 
 | Argument | Default | |
 |---|---|---|
-| `mast_id` | `mast_1350` | `mast_1300` \| `mast_1350` \| `mast_1400` \| `mast_1450` |
-| `sim` | `mock` | `mock`: `mock.launch.py`, a stub for the wheel joints, then `move_group`. `gazebo`: the gazebo package's `sim.launch.py`, then `move_group` on the simulator's clock |
+| `column`, `base_plate`, `head_pitch`, `base_tilt` | `dold_v4_350`, `bp000`, `hp25`, `bt10` | option B's configuration IDs (its baseline); `column:=tl3_400` does not expand (no supplier data) |
+| `lift_position` | `0.0` | `sim:=mock` only: the position (m) of `lift_joint` the stub reports; `0.0` / `0.175` / `0.350` are the calibration stops `L1000` / `L1175` / `L1350` |
+| `sim` | `mock` | `mock`: `mock.launch.py`, a stub for the wheel and lift joints, then `move_group`. `gazebo`: the gazebo package's `sim.launch.py`, then `move_group` on the simulator's clock |
 | `rviz` | `false` | RViz2 with the MotionPlanning display (`openamrobot_upperbody_moveit/config/moveit.rviz`). With `sim:=gazebo` it replaces the simulator's own RViz |
 | `headless` | `false` | `sim:=gazebo` only: `true` runs `gz sim -s`, as the checks do |
 | `physics_engine` | empty | `sim:=gazebo` only, passed to `sim.launch.py`. Empty means that launch's own default, **DART**, on which a `closed` gripper pose may not close. Pass `gz-physics-bullet-featherstone-plugin` for the grippers to close (M02 does) |
 
-`base_joint_states_stub.py` publishes the base's two wheel joints at zero on `/joint_states`, for `mock` only: the base is not under
-`ros2_control` (ADR-003), so nothing there reports them, and MoveIt would warn every second that the robot's state is incomplete. The base
-does not move during manipulation (AD-30), so zero is the true state of the thing modelled. In Gazebo the real wheel states come from the
-simulator.
+`base_joint_states_stub.py` publishes the base's two wheel joints at zero and `lift_joint` at `lift_position` on `/joint_states`, for
+`mock` only: neither the base nor the lift is under `ros2_control` (ADR-003; the lift is a joint we have no authority to command), so
+nothing there reports them, MoveIt would warn every second that the robot's state is incomplete, and `robot_state_publisher` publishes
+nothing above the lift. The base does not move during manipulation (AD-30), so zero is the true state of the wheels. The lift is not at
+zero by nature: its position is the operating point of the run (a calibration stop, a calibration ID and not a configuration ID). In
+Gazebo the wheel states come from the simulator and `lift_joint` from `joint_state_publisher`'s default, zero, which is the simulator's
+own resting state (the unactuated carriage sits on its lower limit) but is not read from the physics.
 
 ## A7 tests
 
-`test/test_m01_mock_named_poses.py` (**M01**, once per mast ID, 4 runs) and `test/test_m02_gazebo_named_poses.py` (**M02**, `mast_1350`)
+`test/test_m01_mock_named_poses.py` (**M01**, once per lift stop `L1000`, `L1175`, `L1350`: 3 runs, the stub's `lift_position` set from
+the stop) and `test/test_m02_gazebo_named_poses.py` (**M02**, the baseline, lift at `L1000`)
 send every SRDF named pose to `move_group` (both arms: `hands_up`, `home`, `hands_up`, `park`; both grippers: `closed`, `open`, each with its
 own value), which plans and executes through the trajectory execution manager into the real controllers, and require a **final joint error
 under 0.01 rad** after a one second settle. The record (a sidecar per run) holds every pose's outcome, planning and wall time and error, and
@@ -81,11 +87,11 @@ ros2 run openamrobot_upperbody_bringup run_a7_regression.sh      # about 15 minu
 `run_a7_regression.sh` runs the gazebo, moveit and bringup tests, then `build_a7_evidence.py` writes `<workspace>/evidence/<UTC timestamp>_a7.json`
 (`profile: "a7"`, `evidence_class: "simulation"`). A tree with uncommitted changes prints its results and writes **no** file (P08's rule: a
 report records a commit). Exit status: **1** if any check is `FAIL` or `NOT_RUN`; **3** if nothing failed but the tree is dirty (nothing recorded); 2 if the
-evidence cannot be assembled; 0 otherwise. `A7_M01_MASTS=mast_1350,mast_1400` reduces M01 to those mast IDs and the report says so.
+evidence cannot be assembled; 0 otherwise. `A7_M01_STOPS=L1000,L1350` reduces M01 to those lift stops and the report says so.
 
 ## Not here
 
 - The Gazebo launch alone is `ros2 launch openamrobot_upperbody_gazebo sim.launch.py` (the simulator and the base are started there).
-- No lift: OpenAMRobot 2.0 has a fixed mast.
+- No lift controller: the lift is option B's prismatic joint, with effort 0 and velocity 0, and nothing here commands it.
 
 See [`openamrobot_upperbody_description`](../openamrobot_upperbody_description/README.md).

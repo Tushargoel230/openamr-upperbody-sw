@@ -1,7 +1,7 @@
 # Verifying the robot description (A6) and its simulation (A7)
 
 `verify_a6.sh` runs the description, control and bringup tests, then writes one JSON evidence report. This page says how
-to run it, what the report contains, what it lets you claim, and why six checks are `WARN`. The Gazebo report and the A7 report
+to run it, what the report contains, what it lets you claim, and why four checks are `WARN` (T08, E01, W02, V01). The Gazebo report and the A7 report
 (MoveIt, `run_a7_regression.sh`) follow the A6 one.
 
 ## Run it
@@ -27,22 +27,23 @@ dirty, 2 if the evidence cannot be assembled. `OPENAMR_EVIDENCE_DIR` moves the o
 | `git_hash`, `dirty` | The commit the report describes. `dirty` is always `false` in a written file: the harness refuses to write evidence from a dirty tree (it prints the results, says `Evidence: NOT WRITTEN` and names the files, and exits 3 if nothing failed), because a report from uncommitted changes describes no commit and a file that exists gets read |
 | `timestamp` | UTC, when the report was built |
 | `evidence_class` | Always `static+mock`; see below |
-| `upstream` | Commits of `openarm_description`, `openarm_ros2` and `openamrobot-manipulation`. Without a git checkout of `openarm_description` its commit is the pin in `config/upstream_pins.yaml`, and `limitations` says so |
+| `upstream` | Commits of `openarm_description`, `openarm_ros2`, `openamrobot-manipulation` and `openamr-platform-sw` (the base is included unchanged, so its commit is an input of every expansion). Without a git checkout of an upstream pin its commit is the pin in `config/upstream_pins.yaml`, and `limitations` says so |
 | `datums_revision` | `revision` of `datums.yaml`; one input of every config id |
 | `checks[]` | `id`, `name`, `result`, and `details` (pytest counts plus whatever the check recorded) |
-| `config_ids` | `sha256:` plus 64 hex characters, one per expansion (mast ID x arm package x profile). Two reports with the same id describe the same URDF, datums revision and upstream commit |
+| `config_ids` | `sha256:` plus 64 hex characters, one per expansion (`column/base_plate/head_pitch/base_tilt/arm_package/hardware_profile`). Two reports with the same id describe the same URDF, datums revision and upstream pins |
+| `config_id_inputs`, `calibration_ids` | What the id is made of now and before P15 (the format is unchanged and its meaning is not: an old id is not comparable), and the lift's calibration stops as joint positions, beside the ids and never inside them |
 | `provenance` | Datum counts by status: `placeholder`, `provisional`, `verified` |
 | `limitations` | What the report does not establish, in words. Read it before quoting the report |
 
 ## What `static+mock` permits
 
-It permits: the xacro expands for every mast ID, arm package and hardware profile; `check_urdf` accepts the result; frames,
+It permits: the xacro expands for every configuration of the matrix (option B's IDs, arm package, hardware profile); `check_urdf` accepts the result; frames,
 inertials and the planar joint have the properties the checks name; and the five controllers reach `active` on
 `mock_components/GenericSystem` and follow one trajectory (L01).
 
 It does not permit any claim that a controller has driven a motor, anything about Gazebo, MoveIt or hardware, tracking
-performance (mock hardware reflects commands back as state), or the real mass, envelope or mast geometry (placeholder
-datums). Words such as "validated" or "works on hardware" do not belong in anything quoting it. The shared rules say it
+performance (mock hardware reflects commands back as state), or the real mass, envelope or lift column geometry (placeholder
+datums and a catalogue mass). Words such as "validated" or "works on hardware" do not belong in anything quoting it. The shared rules say it
 directly: *"SKIP/BLOCKED is not PASS; fixtures/fake hardware are not integrated simulation, physical acceptance or
 release readiness."*
 
@@ -58,7 +59,7 @@ versions). It refuses to write from a dirty tree, like the other report. Its che
 
 | ID | Proves |
 |---|---|
-| G01 | in a headless Gazebo on the launch's default engine (DART): the five arm controllers are `active`; a `left_arm_controller` goal completes and tracks while the other arm and the base stay still; every topic of platform-sw's bridge file exists by name and type; `/cmd_vel` moves the base and `/odom` reports it; exactly one publisher of `odom -> base_link` (strictly increasing stamps at the plugin's 50 Hz); `/joint_states` has one publisher carrying the wheels and the arms once each |
+| G01 | in a headless Gazebo on the launch's default engine (DART): the five arm controllers are `active`; a `left_arm_controller` goal completes and tracks while the other arm and the base stay still; every topic of platform-sw's bridge file exists by name and type; `/cmd_vel` moves the base and `/odom` reports it; exactly one publisher of `odom -> base_footprint` (platform-sw's DiffDrive child frame since 935efc7, read from the description; strictly increasing stamps at the plugin's 50 Hz); `/joint_states` has one publisher carrying the wheels, the arms and `lift_joint` once each |
 | G02 | both grippers close and `finger_joint2` follows `finger_joint1` in the physics (link poses, not `/joint_states`); it passes `physics_engine:=gz-physics-bullet-featherstone-plugin` explicitly, because the launch defaults to DART (platform-sw's engine) and the grippers do not close there: on DART it fails, which is the documented limitation, not a defect |
 | I01 | the installed gazebo and description packages match the source |
 | V01 | `WARN` until a person has answered `v01_visual_check.md`; "looks fine" does not clear it |
@@ -84,21 +85,23 @@ exit status is 1 if a check is `FAIL` or `NOT_RUN`, 3 if everything passed but t
 | ID | Proves |
 |---|---|
 | G01, G02 | as in the Gazebo report above (G01 on the default DART engine, G02 on Bullet-Featherstone passed explicitly) |
-| M01 | on `mock`, at **each of the four mast IDs**, every SRDF named pose plans and executes through `move_group` into the real controllers and ends under 0.01 rad of its goal: both arms (`hands_up`, `home`, `hands_up`, `park`) and both grippers (`closed` then `open`, each hand with its own value) |
-| M02 | the same in Gazebo at `mast_1350` (the release configuration), on Bullet-Featherstone passed explicitly because the gripper poses do not close on DART |
-| M03 | the collision matrix disables only what can be justified. A pair is disabled for exactly three reasons: declared by upstream (the 20 pairs of section 1, all `Adjacent`), `Adjacent` (a structural neighbour) or `ConstantTransform` (no movable joint between the links, so one evaluation settles every configuration, and it found them clear: 77 pairs). Everything else, 448 pairs, is enabled. A disabled pair with no reason, a false label, a `ConstantTransform` pair that collides, or a constant pair left enabled that collides is a `FAIL`; **there is no `WARN` class**. The sampled part is information about the enabled pairs (below) |
-| M04 | a goal inside the nearest **reachable** structure volume (`mast_base_link`; the arms cannot reach the base body at all) is **rejected** by planning (the joint goal: answered at once; the reply is the generic `FAILURE`, and the planner's verdict `GOAL_STATE_INVALID` exists only in `move_group`'s log, which the check reads), not merely unsuccessful; the pose goal at the same place **times out**, and the record says which is which |
+| M01 | on `mock`, at **each of the three lift calibration stops** (`L1000`, `L1175`, `L1350`: `lift_joint` 0, 0.175, 0.350 m, joint positions and not configuration IDs), every SRDF named pose plans and executes through `move_group` into the real controllers and ends under 0.01 rad of its goal: both arms (`hands_up`, `home`, `hands_up`, `park`) and both grippers (`closed` then `open`, each hand with its own value) |
+| M02 | the same in Gazebo at the baseline configuration with the lift at `L1000` (where `joint_state_publisher` reports it; nothing commands it), on Bullet-Featherstone passed explicitly because the gripper poses do not close on DART |
+| M03 | the collision matrix disables only what can be justified. A pair is disabled for exactly three reasons: declared by upstream (the 20 pairs of section 1, all `Adjacent`), `Adjacent` (a structural neighbour) or `ConstantTransform` (no movable joint between the links, so one evaluation settles every configuration, and it found them clear: 45 pairs since P15, 77 before the lift put a movable joint between the base and the arms). Everything else, 478 pairs, is enabled. A disabled pair with no reason, a false label, a `ConstantTransform` pair that collides, or a constant pair left enabled that collides is a `FAIL`; **there is no `WARN` class**. The sampled part is information about the enabled pairs (below) |
+| M04 | a goal inside the nearest **reachable** structure volume (`arm_profile_link`, option B's 340 mm box; the arms cannot reach the base body at all) is **rejected** by planning (the joint goal: answered at once; the reply is the generic `FAILURE`, and the planner's verdict `GOAL_STATE_INVALID` exists only in `move_group`'s log, which the check reads), not merely unsuccessful; the pose goal at the same place **times out**, and the record says which is which |
 | M05 | the per-hand gripper values: `closed` is each hand's own far limit, the signs are opposite, and the single-number version fails in both directions (ADR-009 point 5) |
 | M06 | the named-pose plans need some acceleration limit and are insensitive to our values across three orders of magnitude, which retires the stop condition "planning succeeds only because the limits we invented are generous"; **it does not make the limits any less of a placeholder** (ADR-009) |
 | H01 | every `test_*.py` is registered in its package's CMakeLists, and every launch test checks that its processes started and exited cleanly (`launch_guard.py`); static, over all five packages |
 | H02 | every test CMake registered left a fresh, complete result file; a timeout, a signal, a collection error or an empty package is listed by name and makes the checks it backs `NOT_RUN` |
-| L01, I01, V01, AUX | as in the A6 report, for the packages this one touches; V01 now has **eight** checklist items (item 8: an arm executes a named pose in RViz and the preview matches what the robot then does) and stays `WARN` until a person has answered them |
+| L01, I01, V01, AUX | as in the A6 report, for the packages this one touches; V01 has **eight** checklist items, each stating what to measure (item 8: an arm executes a named pose in RViz and the preview matches what the robot then does) and stays `WARN` until a person has answered them |
 
-Recorded run: commit `bcd8059` (code; later commits are documentation only), from a clean build of the five upper-body packages, evidence `20261007T164239Z_a7.json`: **13 `PASS`, 1 `WARN` (V01), 0 `FAIL`, 0 `NOT_RUN`**, with no `warnings` list: M03 has no WARN class. M01 passed 12 of 12 poses at each of the four mast IDs (worst final error 0.001 rad), M02 12 of 12 at `mast_1350` (0.00111 rad), M04 rejected the joint goal and timed out on the pose goal. M03: 113 pairs disabled (36 `Adjacent`, 77 `ConstantTransform`, 20 of them declared by upstream), 448 enabled; every disabled pair has a reason that can be shown, the 77 constant pairs are clear in their one evaluation at every mast ID. The clamp (epsilon 1e-5 rad): 0 activations in M01; in M02 242 activations in 22 episodes, the largest 8.3e-07 rad, 0 readings beyond the epsilon. The A6 report: `verify_a6.sh` at the same commit gives 22 `PASS`, 6 `WARN`, 0 `FAIL`, 0 `NOT_RUN` and the same 14 config ids (`20261007T164436Z_dev.json`).
+**Recorded run, P15 (the lift, option B adopted)**: commit `dada509`, the code of the step (later commits are documentation and evidence copies only), from a clean rebuild of every package on platform-sw `174731c`: **13 `PASS`, 1 `WARN` (V01), 0 `FAIL`, 0 `NOT_RUN`**, as in the P14 run before it, with these numbers moved and each for a reason: M01 12 of 12 poses at each of three lift stops (was four mast IDs), worst final error 0.001 rad; M02 12 of 12; M03 83 pairs disabled (38 `Adjacent`, 45 `ConstantTransform`, 20 declared by upstream), **478 enabled (was 113 / 77 / 448)**, because a prismatic joint now lies between the base and the arms; M04 rejected the joint goal 0.071 s after the control and timed out on the pose goal, now against `arm_profile_link` (the mast is gone). The clamp (epsilon 1e-5): 0 activations in M01; in M02 more than before (see `evidence/reports/README.md`), all under the epsilon, 0 readings beyond it. The A6 report: `verify_a6.sh` gives **24 `PASS`, 4 `WARN` (T08, E01, W02, V01), 0 `FAIL`, 0 `NOT_RUN`** (was 22 / 6 / 0 / 0: T04 resolved by deleting the six near-field frames from the contract, W01 because the root is `base_footprint` and carries no inertial). The reproducibility of that run and of the P14 flake is below. P12A's record follows as history.
+
+Recorded run (P12A, the fixed mast): commit `bcd8059` (code; later commits are documentation only), from a clean build of the five upper-body packages, evidence `20261007T164239Z_a7.json`: **13 `PASS`, 1 `WARN` (V01), 0 `FAIL`, 0 `NOT_RUN`**, with no `warnings` list: M03 has no WARN class. M01 passed 12 of 12 poses at each of the four mast IDs (worst final error 0.001 rad), M02 12 of 12 at `mast_1350` (0.00111 rad), M04 rejected the joint goal and timed out on the pose goal. M03: 113 pairs disabled (36 `Adjacent`, 77 `ConstantTransform`, 20 of them declared by upstream), 448 enabled; every disabled pair has a reason that can be shown, the 77 constant pairs are clear in their one evaluation at every mast ID. The clamp (epsilon 1e-5 rad): 0 activations in M01; in M02 242 activations in 22 episodes, the largest 8.3e-07 rad, 0 readings beyond the epsilon. The A6 report: `verify_a6.sh` at the same commit gives 22 `PASS`, 6 `WARN`, 0 `FAIL`, 0 `NOT_RUN` and the same 14 config ids (`20261007T164436Z_dev.json`).
 
 **The harness fix did not change a number that mattered.** The suites re-run on the tree before the matrix changed, with the fixed harness: A6 `20261007T155047Z_dev.json` 22 `PASS` / 6 `WARN` / 0 `FAIL` (the 20 / 6 / 0 of P11 plus the new H01 and H02, every old check with the same result and the same 14 config ids), and A7 `20261007T160453Z_a7.json` 13 `PASS` / 1 `WARN` / 0 `FAIL` (the 11 / 1 / 0 of P11 plus H01 and H02). The runs between those and the recorded one are in the evidence directory and are failures worth reading: `e682825` failed G02 through the new process guard (`joint_state_publisher` exited 1 at shutdown, and the `gz` server of that run was left running after the launch ended), and `832b990` failed AUX on a bug in the guard itself, which the report named.
 
-**What the sampled part of M03 is now.** Information, not a result and not a reason: 2000 random joint states per mast ID at seed 20261006, and the ENABLED pairs found colliding with how often (37 of 448 enabled pairs collided in some of them, the same at every mast ID). Sampling falsifies and never certifies, so nothing in the matrix rests on it; a pair that collides often although the matrix is right tells A4 something about reach and clearance, and the commonest are arm links against `mast_base_link` (`mast_base_link` <-> `openarm_left_ee_base_link`: 48 of 2000). The by-construction part does not depend on N or on the seed: no movable joint between two links means a constant transform, one evaluation settles every configuration, tested against an independent forward kinematics. The matrix is a checked-in file (`config/openamrobot.srdf`, fingerprint in `config/acm/acm_generation.yaml`) and it is **derived, not sampled**: regenerating it gives the same matrix every time (`test_acm_generation.py` does it twice), where the Setup Assistant's sampler, which has no seed, gave a different one on every run.
+**What the sampled part of M03 is now.** Information, not a result and not a reason: 2000 random joint states per lift stop at seed 20261006, and the ENABLED pairs found colliding with how often (P15: 58 of 478 enabled pairs collided in some of them, the same at every lift stop, the commonest an arm link against `arm_profile_link`: `openarm_right_ee_base_link` 49 of 2000; P12A: 37 of 448, the same at every mast ID, the commonest against `mast_base_link`: 48 of 2000). Sampling falsifies and never certifies, so nothing in the matrix rests on it; a pair that collides often although the matrix is right tells A4 something about reach and clearance. The by-construction part does not depend on N or on the seed: no movable joint between two links means a constant transform, one evaluation settles every configuration, tested against an independent forward kinematics. The matrix is a checked-in file (`config/openamrobot.srdf`, fingerprint in `config/acm/acm_generation.yaml`) and it is **derived, not sampled**: regenerating it gives the same matrix every time (`test_acm_generation.py` does it twice), where the Setup Assistant's sampler, which has no seed, gave a different one on every run.
 
 **Planning time before and after** the matrix went from 458 sampled `Never` pairs (plus 36 `Adjacent`) to 113 justified pairs, offline, 20 repeats x 2 rounds of the twelve named-pose plans (OMPL RRTConnect): the whole sequence took a median of 0.42 to 0.43 s before and 0.455 s after, every plan succeeded both times; per pose in the MoveIt package README. In the real stack (M01 and M02, through `move_group` and the controllers) every named pose still plans and executes. MoveIt does not expose a collision-check count to `moveit_py`.
 
@@ -112,13 +115,39 @@ The A7 WARNs and findings, beyond the A6 ones (W01, W02, E01, T04, T08, V01 abov
 
 | Item | What | What would clear it |
 |---|---|---|
-| W01 in A7 | MoveIt never sees `base_link`'s 4.18 kg inertial: KDL drops the inertia of a root link | not clearable here; matters for nothing planned (the base does not move) |
+| W01 in A7 | resolved by P15: the root is `base_footprint` (platform-sw 935efc7) and carries no inertial, so MoveIt sees `base_link`'s 4.18 kg | nothing: it stays a guard (a root with an inertial fails W01 again) |
+| the lift column | no collision geometry (its lateral side is not sourced) and a placeholder box inertia: the arms can plan through the column body | the supplier drawing |
 | `park` | a placeholder copy of `home` | Adnan's safe-pose definition under the manipulation action contract |
 | acceleration limits | engineering defaults, tagged placeholder | vendor data (manipulation#10) |
 | gripper interface | option 1 is in use; the choice is open on manipulation#11 | Om and Adnan; the evidence is in the MoveIt package README |
 | start-state tolerance | MoveIt 2.12.4 refuses a start state any amount past a joint limit, and in Gazebo `home` (joint 4 on its lower limit 0) reads back up to 9.9e-7 rad past it. `move_group` plans from a joint state clamped to the limit by at most 1e-5 rad (`joint_state_clamp.py`); the clamp's count and largest magnitude are in the report (`clamp`); a reading beyond the epsilon is never clamped. Upstream's `home` on its own limit is itself reportable upstream | nothing here: the clamp is a simulation workaround, and the choice of where a tolerance may live on a real robot is not made |
 | `move_group` shutdown | exits with SIGSEGV when stopped; allowed for that one process | upstream MoveIt |
-| enabled pairs | the matrix disables 113 of 561 pairs of geometry-bearing links and enables the rest; planning pays for it (above); 37 enabled pairs collide in some random states, mostly an arm link against `mast_base_link` | nothing to clear: information for A4 (reach and clearance) |
+| enabled pairs | the matrix disables 83 of 561 pairs of geometry-bearing links and enables the rest (478); 58 enabled pairs collide in some random states, all of them an arm link against `arm_profile_link` or the other arm | nothing to clear: information for A4 (reach and clearance) |
+
+## Reproducibility is part of a result (P15)
+
+P14 ran A7 twice on an unchanged commit and got 2 `FAIL`, then 0. The cause was our own `joint_state_clamp.py` exiting 1 at shutdown, in a
+launch of M01; it was neither allow-listed nor ignored, and P15 fixed it. Reproduced standalone against a flooded `/joint_states` before the fix,
+every SIGTERM exited 1 (30 of 30, an uncaught `ExternalShutdownException`) and 1 of 30 SIGINTs exited 1 with rclpy's `take_message` `RuntimeError`;
+after it, 60 of 60 and 60 of 60 exit 0, and `test_joint_state_clamp_shutdown.py` sends real signals to a real node. `launch_guard.py` is unchanged:
+its two allowances (`parameter_bridge` -6, `joint_state_publisher` 1) stand because those are stock processes we cannot change.
+
+**Five consecutive A7 runs on the unchanged commit `7daa2ab`** (the fix, before the rebase), every launch of every run exiting as the guard
+expects:
+
+| Check | run 1 | run 2 | run 3 | run 4 | run 5 | tests per run |
+|---|---|---|---|---|---|---|
+| G01, G02 | PASS | PASS | PASS | PASS | PASS | 7, 2 |
+| M01 (four launches) | PASS | PASS | PASS | PASS | PASS | 8 (12 of 12 poses in each of the 20 launches, worst error 0.00100 rad) |
+| M02 | PASS | PASS | PASS | PASS | PASS | 2 (12 of 12) |
+| M03, M04, M05, M06 | PASS | PASS | PASS | PASS | PASS | 6, 2, 6, 1 |
+| L01, H01, H02, I01, AUX | PASS | PASS | PASS | PASS | PASS | 3, 13, -, -, 89 |
+| V01 | WARN | WARN | WARN | WARN | WARN | - |
+| **Totals** | 13 / 1 / 0 / 0 | 13 / 1 / 0 / 0 | 13 / 1 / 0 / 0 | 13 / 1 / 0 / 0 | 13 / 1 / 0 / 0 | PASS / WARN / FAIL / NOT_RUN |
+
+The same A7 regression on the final commit `dada509` (option B adopted, platform-sw `174731c`) was run three times: see
+`evidence/reports/README.md` for the files. Three runs say it is not a coin flip on this commit; they do not say it cannot flake, and the rule
+stands: **where a check has ever been observed flaky, the evidence records how many runs were made and how many passed**.
 
 ## The harness cannot lie (P12A)
 
