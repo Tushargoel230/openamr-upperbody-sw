@@ -13,7 +13,12 @@ SHARE = get_package_share_directory(PACKAGE)
 DESCRIPTION_SHARE = get_package_share_directory("openamrobot_upperbody_description")
 COMBINED = os.path.join(DESCRIPTION_SHARE, "urdf", "combined_robot.xacro")
 SRDF_FILE = os.path.join(SHARE, "config", "openamrobot.srdf")
-MAST_IDS = ("mast_1300", "mast_1350", "mast_1400", "mast_1450")
+# Option B's configuration (Alex's, on main): base_plate is the one ID that moves geometry here (the column axis, x +0.060 / +0.110).
+with open(os.path.join(DESCRIPTION_SHARE, "config", "upperbody_configuration.yaml")) as _f:
+    UPPERBODY = yaml.safe_load(_f)
+BASE_PLATES = tuple(UPPERBODY["configuration_axes"]["base_plate"])
+STOPS = dict(UPPERBODY["lift_calibration_stops"])          # calibration IDs: {L1000: shoulder height m, ...}
+LIFT_STROKE = UPPERBODY["column"][UPPERBODY["baseline"]["column"]]["stroke"]
 
 
 def description_scripts():
@@ -43,12 +48,12 @@ def srdf_root():
 
 
 @functools.lru_cache(maxsize=None)
-def urdf_text(mast_id="mast_1350", hardware_profile="mock"):
-    return xacro.process_file(COMBINED, mappings={"mast_id": mast_id, "hardware_profile": hardware_profile}).toxml()
+def urdf_text(base_plate="bp000", hardware_profile="mock"):
+    return xacro.process_file(COMBINED, mappings={"base_plate": base_plate, "hardware_profile": hardware_profile}).toxml()
 
 
-def urdf_root(mast_id="mast_1350", hardware_profile="mock"):
-    return ET.fromstring(urdf_text(mast_id, hardware_profile))
+def urdf_root(base_plate="bp000", hardware_profile="mock"):
+    return ET.fromstring(urdf_text(base_plate, hardware_profile))
 
 
 def write_sidecar(check_id, slug, name, result, details):

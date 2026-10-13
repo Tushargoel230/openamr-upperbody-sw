@@ -4,15 +4,17 @@ claims: "rejected" is the pipeline looking at the goal and refusing it at once; 
 used its whole budget. Only the first is the robot refusing to hurt itself; the other two would be a robot that tried.
 
 WHICH VOLUME (VERIFICATION.md M04, corrected 7 Oct: the row said "base collision volume", which was the wrong phrase): the arms cannot reach the
-platform's base body at all, so the volume under test is the nearest one they CAN reach. In 6000 random left-arm states at mast_1350 the left gripper touched
-`base_link`, the wheels, the casters, the lidar and the camera body in none of them (and M03's 8000 all-joint states found no collision of
-any arm link with `base_link` at any mast ID), while it touched `mast_base_link`, the mast structure on the base that the arms are mounted
-on, in 144. So the goal is inside `mast_base_link`'s collision volume, the nearest base-side volume that a left gripper can be put in, and the
-record says so. That the base body is out of reach is itself a finding about the arm geometry (A4's question, not ours).
+platform's base body at all, so the volume under test is the nearest one they CAN reach. In 6000 random left-arm states at option B's baseline (lift at
+L1000, numpy default_rng(4242)) the left gripper touched `base_link`, the wheels, the casters, the lidar and the camera body in none of them (and M03's
+states found no collision of any arm link with `base_link` at any lift stop), while it touched `arm_profile_link`, option B's 340 mm HFS6-60120
+profile on the carriage that the arms bolt to, in 249. P15 replaced the mast with the lift and `mast_base_link` is gone, so the nearest base-side
+volume a left gripper can be put in is `arm_profile_link`'s, and the record says so. That the base body is out of reach is itself a finding about the arm
+geometry (A4's question, not ours). The same search found the left gripper in contact with the RIGHT arm's own links in about 3 per cent of the
+random left-arm states (openarm_right_base_link in 73 of 6000): the arms are 62 mm apart at their bases (option B's y = +-0.031), a reach fact for A4.
 
-The fixture is a left-arm joint state found by scripts/validate_acm.py's sampler (numpy default_rng(4242), sample index 25 of the left-arm-only
-search at mast_1350); the test checks, through move_group's /check_state_validity, that it really collides with the mast before using it, so a
-change of the model fails here with that message and not by quietly testing a goal that no longer collides.
+The fixture is a left-arm joint state found by that search (numpy default_rng(4242), sample index 22 of the left-arm-only search, whose only contact
+is a left gripper link with `arm_profile_link`); the test checks, through move_group's /check_state_validity, that it really collides with the profile
+before using it, so a change of the model fails here with that message and not by quietly testing a goal that no longer collides.
 
 Two goals are sent, both plan-only (nothing executes) and through move_group's /plan_kinematic_path service: a JOINT goal (the fixture's joint
 values) and a POSE goal (the position and orientation of the left gripper at the fixture, from /compute_fk). A third request, a named pose that
@@ -21,7 +23,7 @@ into the generic FAILURE (99999) with no planning time, which cannot tell a refu
 and planning time.
 
 What the installed MoveIt does (read from move_group's log, MoveIt 2.12.4): for the JOINT goal OMPL finds the contact at once ("Found a contact
-between mast_base_link and openarm_left_ee_link2"), logs "Unable to sample any valid states for goal tree" after about 20 ms and fails with
+between arm_profile_link and openarm_left_ee_base_link"), logs "Unable to sample any valid states for goal tree" after about 20 ms and fails with
 GOAL_STATE_INVALID: a refusal. For the POSE goal it spends the WHOLE planning budget looking for a collision-free goal (5.0 s between the same
 two log lines) and then fails with the same code GOAL_STATE_INVALID: a search that timed out, with a refusal's name. Same code, different claims."""
 import os
@@ -58,12 +60,12 @@ EXPECTED_PROCESSES = ["joint_state_publisher", "move_group"]
 
 
 # Found by the sampler (see the docstring). Left arm only; everything else at zero.
-FIXTURE = {"openarm_left_joint1": 1.2373230513354518, "openarm_left_joint2": -0.25747859273328544,
-           "openarm_left_joint3": 0.3579712663427288, "openarm_left_joint4": 2.3452166226449926,
-           "openarm_left_joint5": 0.54199834153363, "openarm_left_joint6": 0.4709207838658641,
-           "openarm_left_joint7": -1.344275041518761}
+FIXTURE = {"openarm_left_joint1": -0.8927768711545525, "openarm_left_joint2": -2.6599343349117697,
+           "openarm_left_joint3": -0.995094804778054, "openarm_left_joint4": 2.391156576052684,
+           "openarm_left_joint5": 0.6164772003836043, "openarm_left_joint6": -0.4074526110205802,
+           "openarm_left_joint7": -1.091442811392671}
 GRIPPER_LINKS = {"openarm_left_ee_base_link", "openarm_left_ee_link1", "openarm_left_ee_link2"}
-VOLUME = "mast_base_link"
+VOLUME = "arm_profile_link"
 PLANNING_BUDGET_S = 5.0
 REJECTED_WITHIN_S = 0.5          # beyond the baseline: a refusal is immediate (about 20 ms measured); a search that ran out of time is not
 EE_LINK = "openarm_left_ee_base_link"
@@ -94,7 +96,7 @@ def classify(outcome, baseline_wall, budget=PLANNING_BUDGET_S):
 
 @pytest.mark.launch_test
 def generate_test_description():
-    config = moveit_config("mast_1350", "mock")
+    config = moveit_config("bp000", "mock")
     parameters = [config.to_dict(), {"publish_robot_description_semantic": True}]
     return launch.LaunchDescription([
         # one publisher of the complete joint state (wheels included), all at zero: the robot at rest
@@ -123,17 +125,19 @@ class TestCollisionGoalRejected(unittest.TestCase):
         status = "PASS" if (joint.get("classification") == "rejected" and joint.get("planner_verdict_seen_in_move_group_log")
                             and record.get("control", {}).get("classification") == "succeeded"
                             and record.get("pose_goal", {}).get("classification") != "succeeded") else "FAIL"
-        write_sidecar("M04", "collision_goal", "a goal inside the nearest reachable structure volume (mast_base_link) is rejected by planning; the base body itself is out of the arms' reach",
-                      status, {"volume": VOLUME, "mast_id": "mast_1350", "planning_budget_s": PLANNING_BUDGET_S,
+        write_sidecar("M04", "collision_goal", "a goal inside the nearest reachable structure volume (arm_profile_link) is rejected by planning; the base body itself is out of the arms' reach",
+                      status, {"volume": VOLUME, "base_plate": "bp000", "lift_joint_position_m": 0.0, "planning_budget_s": PLANNING_BUDGET_S,
                                "rejected_means": f"answered within {REJECTED_WITHIN_S} s of the free control, far under the {PLANNING_BUDGET_S} s the planner was given, "
                                                  "and move_group's log carries the planner's own verdict (Planner 'OMPL' failed with error code GOAL_STATE_INVALID). "
                                                  "The reply itself is the generic FAILURE for every outcome, so 'rejected', 'failed' (a search that gave up "
                                                  "in between) and 'timed_out' (used the budget) are told apart by time and by that log line, not by a code",
-                               "base_link_volume_reachable_by_the_arms": False,         # a reach fact for A4, not a defect: the lift will change it
+                               "base_link_volume_reachable_by_the_arms": False,         # a reach fact for A4, not a defect
                                "volume_tested_is": "the nearest structure volume the arms can reach (VERIFICATION.md M04)",
-                               "base_link_evidence": "0 of 6000 left-arm samples at mast_1350 put a left gripper link in collision with "
-                                                     "base_link, the wheels, the casters, the lidar or the camera body (find_goal search, "
-                                                     "seed 4242); M03's 8000 all-joint samples found none either",
+                               "base_link_evidence": "0 of 6000 left-arm samples at the baseline (lift at L1000) put a left gripper link in collision "
+                                                     "with base_link, the wheels, the casters, the lidar or the camera body (find_goal search, "
+                                                     "seed 4242); arm_profile_link in 249, the right arm's own links in 73 (openarm_right_base_link) "
+                                                     "and fewer; M03's samples at the three lift stops found no arm link in collision with "
+                                                     "base_link either",
                                **record})
         cls.node.destroy_node()
         rclpy.shutdown()
@@ -154,7 +158,7 @@ class TestCollisionGoalRejected(unittest.TestCase):
         self.assertTrue(self.client.wait_for_server(90.0), "move_group's /move_action did not appear")
         states = read_group_states(open(srdf_path()).read())
 
-        # 1. the fixture really is in collision with the mast, and only with the left gripper
+        # 1. the fixture really is in collision with the arm profile, and only with the left gripper
         request = GetStateValidity.Request(group_name="left_arm", robot_state=self._state(FIXTURE))
         validity = self._call(self.validity, request)
         contacts = [(c.contact_body_1, c.contact_body_2) for c in validity.contacts]
@@ -202,10 +206,10 @@ class TestCollisionGoalRejected(unittest.TestCase):
 
         # What M04 asserts: the colliding JOINT goal was refused, and neither colliding goal produced a plan.
         self.assertEqual(classify(joint, baseline), "rejected",
-                         f"the joint goal in the mast volume was {classify(joint, baseline)} ({joint.as_dict()}), not rejected")
+                         f"the joint goal in the arm profile's volume was {classify(joint, baseline)} ({joint.as_dict()}), not rejected")
         self.assertTrue(self.record["joint_goal"]["planner_verdict_seen_in_move_group_log"],
                         f"move_group's log has no '{planner_verdict}' for the joint goal")
-        self.assertFalse(pose_outcome.success, "a pose goal inside the mast volume produced a plan")
+        self.assertFalse(pose_outcome.success, "a pose goal inside the arm profile's volume produced a plan")
         self.assertIn(classify(pose_outcome, baseline), ("rejected", "timed_out", "failed"))
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A7 regression, headless: G01, G02 (Gazebo), M01 (mock, every mast ID), M02 (Gazebo, mast_1350), M03 (ACM sampling), M04 (refused collision goal),
+# A7 regression, headless: G01, G02 (Gazebo), M01 (mock, every lift stop), M02 (Gazebo, baseline, lift at L1000), M03 (ACM sampling), M04 (refused collision goal),
 # the M05 gripper-sign and M06 limit-sensitivity checks this step proposes, and the static tests of the SRDF and the MoveIt configuration.
 # Writes <workspace>/evidence/<UTC timestamp>_a7.json (openamr.evidence.v1, profile a7, evidence_class simulation).
 #
@@ -13,8 +13,8 @@
 # Run `colcon build` first: the tests and this report describe the INSTALLED packages (I01 fails if they are stale). It takes about fifteen minutes:
 # the Gazebo tests start a headless server each, M01 starts the mock stack four times, M03 samples 4 x 2000 states. Every test picks its own
 # ROS_DOMAIN_ID (and Gazebo partition), so a simulator or a stack you have open is neither seen nor stopped by it.
-# OPENAMR_EVIDENCE_DIR overrides where evidence goes; OPENAMR_WS the workspace root; A7_M01_MASTS (comma separated) reduces M01 to some mast IDs, which
-# the report then states (the cut order of the prompt: mast_1350 plus one other, with the reason recorded).
+# OPENAMR_EVIDENCE_DIR overrides where evidence goes; OPENAMR_WS the workspace root; A7_M01_STOPS (comma separated) reduces M01 to some lift stops, which
+# the report then states (with the reason recorded).
 set -u
 
 BRINGUP=openamrobot_upperbody_bringup
@@ -72,7 +72,7 @@ run_tests() {  # <package> <step name> : runs one package's tests, never aborts 
 }
 run_tests $GAZEBO gazebo       # G01, G02
 run_tests $MOVEIT moveit       # static tests, M03, M04, M05, M06
-run_tests $BRINGUP bringup     # L01, M01 x mast IDs, M02
+run_tests $BRINGUP bringup     # L01, M01 x lift stops, M02
 
 echo; echo "== evidence report"
 python3 "$BUILD_EVIDENCE" --since "$START" \

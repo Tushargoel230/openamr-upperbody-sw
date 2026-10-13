@@ -52,7 +52,7 @@ def write_g_sidecar(check_id, slug, name, record, expected=None, physics_engine=
     part-way leaves holes), which build_evidence combines with the pytest result. `physics_engine` is the engine a test passed
     explicitly (G02); without it the check ran on the launch's default, which `launch_defaults` records."""
     ev = _evidence_common()
-    expected = expected or ("controllers", "arm_goal", "platform_sw_topics", "drive", "odom_to_base_link", "joint_states")
+    expected = expected or ("controllers", "arm_goal", "platform_sw_topics", "drive", "odom_to_base_frame", "joint_states")
     missing = [key for key in expected if key not in record]
     result = "FAIL" if missing else "PASS"
     details = {"launch_defaults": launch_defaults(), **record}

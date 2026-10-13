@@ -1,5 +1,6 @@
-"""M02: every named pose of both arms (and both grippers) plans and executes in Gazebo at mast_1350, through move_group, with a final
-joint error below 0.01 rad. mast_1350 is the release configuration under rev 18.2 (VERIFICATION.md, corrected 6 Oct).
+"""M02: every named pose of both arms (and both grippers) plans and executes in Gazebo at option B's baseline configuration, through
+move_group, with a final joint error below 0.01 rad. The lift is at L1000 (lift_joint at its zero, which is where joint_state_publisher
+reports it and where the unactuated carriage rests on its limit): the simulator is not asked to move it (we have no authority to).
 
 The stack is `moveit.launch.py sim:=gazebo headless:=true`: Gazebo Harmonic (server only), the base on platform-sw's DiffDrive plugin, the
 arms on gz_ros2_control, the five controllers, move_group on the simulator's clock. The poses are the same sequence as M01.
@@ -36,7 +37,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, clamp_record, named_pose_plan, run_sequence, stack_alive, stack_healthy,  # noqa: E402
                         write_run_sidecar)
 
-MAST_ID = "mast_1350"
+LIFT_STOP = "L1000"            # joint_state_publisher reports lift_joint at its default zero; no ros2_control interface moves it
 # The engine this check REQUIRES, passed explicitly on purpose (see the docstring); the launch's own default is DART.
 ENGINE_THE_GRIPPER_POSES_NEED = "gz-physics-bullet-featherstone-plugin"
 READY_WITHIN_S = 150.0
@@ -53,7 +54,7 @@ def generate_test_description():
     return launch.LaunchDescription([
         launch.actions.IncludeLaunchDescription(
             PythonLaunchDescriptionSource(moveit),
-            launch_arguments={"sim": "gazebo", "mast_id": MAST_ID, "rviz": "false", "headless": "true",
+            launch_arguments={"sim": "gazebo", "rviz": "false", "headless": "true",
                               "physics_engine": ENGINE_THE_GRIPPER_POSES_NEED}.items()),
         launch_testing.actions.ReadyToTest(),
     ]), {}
@@ -73,7 +74,10 @@ class TestNamedPosesInGazebo(unittest.TestCase):
     def tearDownClass(cls):
         rows = cls.record.get("poses", [])
         ok = bool(rows) and all(r["ok"] for r in rows)
-        details = {"mast_id": MAST_ID, "hardware": "gz_ros2_control/GazeboSimSystem (Gazebo Harmonic, headless)",
+        details = {"lift_stop": LIFT_STOP, "lift_joint_position_m": 0.0, "base_plate": "bp000",
+                   "lift_state_source": "joint_state_publisher's default (zero), not the physics: platform-sw's JointStatePublisher is "
+                                        "scoped to the wheels and the lift has no ros2_control interface",
+                   "hardware": "gz_ros2_control/GazeboSimSystem (Gazebo Harmonic, headless)",
                    "physics_engine_used": ENGINE_THE_GRIPPER_POSES_NEED, "physics_engine_passed_explicitly": True,
                    "why_this_engine": "the launch defaults to DART, on which the gripper poses do not close (fingers do not follow the "
                                       "position command at the default gain; no mimic constraint); the arm poses do not depend on it",
@@ -84,7 +88,7 @@ class TestNamedPosesInGazebo(unittest.TestCase):
                    "worst_final_error_rad": max((r["final_max_joint_error_rad"] for r in rows), default=None),
                    "clamp": clamp_record(cls.client),
                    "poses": rows, **{k: v for k, v in cls.record.items() if k != "poses"}}
-        write_run_sidecar("M02", f"gazebo_{MAST_ID}", f"named poses plan and execute in Gazebo at {MAST_ID}",
+        write_run_sidecar("M02", f"gazebo_{LIFT_STOP}", f"named poses plan and execute in Gazebo at the baseline, lift at {LIFT_STOP}",
                           "PASS" if ok else "FAIL", details)
         cls.node.destroy_node()
         rclpy.shutdown()

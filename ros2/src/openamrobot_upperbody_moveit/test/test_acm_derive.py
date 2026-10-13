@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import pytest
 
-from conftest import MAST_IDS, SRDF_FILE, read_text, srdf_root, urdf_root
+from conftest import BASE_PLATES, SRDF_FILE, read_text, srdf_root, urdf_root
 from openamrobot_upperbody_moveit import acm_derive as derive_mod
 from openamrobot_upperbody_moveit import acm_split as split
 
@@ -119,11 +119,11 @@ def random_configuration(root, rng):
     return values
 
 
-@pytest.mark.parametrize("mast_id", MAST_IDS)
-def test_the_constant_pairs_have_the_same_relative_transform_in_every_configuration(mast_id):
+@pytest.mark.parametrize("base_plate", BASE_PLATES)
+def test_the_constant_pairs_have_the_same_relative_transform_in_every_configuration(base_plate):
     """The reasoning, tested against a forward kinematics that shares no code with it: for every pair the tree calls constant, the relative pose
     is identical at several random configurations; and the pairs it calls non-constant do move (the rule is not vacuous)."""
-    root = urdf_root(mast_id)
+    root = urdf_root(base_plate)
     certified = sorted(derive_mod.constant_pairs(root))
     sampled = sorted(p for p in itertools.combinations(sorted(derive_mod.geometry_links(root)), 2) if p not in set(certified))
     rng = np.random.default_rng(7)
@@ -138,11 +138,11 @@ def test_the_constant_pairs_have_the_same_relative_transform_in_every_configurat
 
 
 
-@pytest.mark.parametrize("mast_id", MAST_IDS)
-def test_every_disabled_pair_has_a_reason_that_can_be_shown_and_a_true_label(mast_id):
-    """The static half of M03 at every mast ID, with no collision checker: no pair is disabled on a statistic, and no label lies."""
+@pytest.mark.parametrize("base_plate", BASE_PLATES)
+def test_every_disabled_pair_has_a_reason_that_can_be_shown_and_a_true_label(base_plate):
+    """The static half of M03 at every base plate, with no collision checker: no pair is disabled on a statistic, and no label lies."""
     import validate_acm
-    result = validate_acm.check_matrix(urdf_root(mast_id), srdf_pairs(), upstream_pairs())
+    result = validate_acm.check_matrix(urdf_root(base_plate), srdf_pairs(), upstream_pairs())
     assert result["unjustified"] == [] and result["bad_labels"] == []
 
 
@@ -160,19 +160,34 @@ def test_the_counts_the_report_states():
     adjacent, constant = derive_mod.structural_adjacent(root), derive_mod.constant_pairs(root)
     up = upstream_pairs()
     labelled = {reason: sum(1 for r in pairs.values() if r == reason) for reason in set(pairs.values())}
-    assert len(pairs) == 113 and labelled == {"Adjacent": 36, "ConstantTransform": 77}
-    assert len(adjacent) == 34 and len(up) == 20
+    # P12A: 113 = 20 + 16 + 77. P15: the arms are above a prismatic joint now, so the pairs between the base and the arms are no longer
+    # constant, and the mast's go with the mast: 83 = 20 + 18 + 45. Expected, and explained pair by pair in the next test.
+    assert len(pairs) == 83 and labelled == {"Adjacent": 38, "ConstantTransform": 45}
+    assert len(adjacent) == 36 and len(up) == 20
     assert set(up) - adjacent == {("openarm_left_ee_link1", "openarm_left_ee_link2"), ("openarm_right_ee_link1", "openarm_right_ee_link2")}, \
         "the two finger pairs are siblings through two movable joints: upstream's declaration is their only reason"
-    assert {p for p, r in pairs.items() if r == "ConstantTransform"} == constant - adjacent - set(up) and len(constant - adjacent - set(up)) == 77
+    assert {p for p, r in pairs.items() if r == "ConstantTransform"} == constant - adjacent - set(up) and len(constant - adjacent - set(up)) == 45
 
 
-@pytest.mark.parametrize("mast_id", MAST_IDS)
-def test_the_constant_pairs_are_the_77_p11_certified_by_construction_at_every_mast_id(mast_id):
-    """P12A stop condition: the by-construction set must not change when recomputed (P11 got 77 by a different route: the `Never` pairs of the
-    generated matrix with no movable joint between them)."""
-    root = urdf_root(mast_id)
-    assert len(derive_mod.constant_pairs(root) - derive_mod.structural_adjacent(root) - set(upstream_pairs())) == 77
+@pytest.mark.parametrize("base_plate", BASE_PLATES)
+def test_the_by_construction_set_is_45_not_77_because_a_prismatic_joint_now_lies_between_the_base_and_the_arms(base_plate):
+    """P12A certified 77 pairs by construction (P11 got 77 by a different route). P15 EXPECTS fewer: a prismatic joint between two links
+    removes them from what a fixed transform certifies, and the lift is such a joint. This asserts the shrink is exactly that and
+    nothing else: a constant pair has both its links on one side of lift_joint, and every pair that was constant only because the
+    mast was fixed has left the set. 45 is what remains: the base's own links among themselves and, above the lift, the arm
+    profile and the arm base links among themselves."""
+    root = urdf_root(base_plate)
+    constant = derive_mod.constant_pairs(root) - derive_mod.structural_adjacent(root) - set(upstream_pairs())
+    assert len(constant) == 45
+    t = split.urdf_tree(root)
+    def above_the_lift(link):
+        return "lift_joint" in [j for j in split.movable_joints_between(t, "base_footprint", link)]
+    spanning = [p for p in derive_mod.constant_pairs(root) if above_the_lift(p[0]) != above_the_lift(p[1])]
+    assert spanning == [], f"a constant pair spans the lift: {spanning[:3]}"
+    # the 32 that left: every pair of a base-side link with something above the lift, and everything the mast had
+    old_constant_shapes = {(a, b) for a in derive_mod.geometry_links(root) for b in derive_mod.geometry_links(root)
+                           if a < b and above_the_lift(a) != above_the_lift(b)}
+    assert old_constant_shapes and not (old_constant_shapes & constant)
 
 
 URDF = """<robot name="r">
@@ -236,12 +251,12 @@ def test_a_pair_disabled_on_a_statistic_is_not_justified_and_a_label_that_lies_i
     root = urdf_root()
     pairs = dict(srdf_pairs())
     pairs[("openarm_left_link1", "openarm_left_link3")] = "Never"                       # the old sampled claim
-    pairs[("mast_base_link", "openarm_left_ee_base_link")] = "ConstantTransform"        # an arm joint lies between them
+    pairs[("base_link", "openarm_left_ee_base_link")] = "ConstantTransform"             # the lift and arm joints lie between them
     result = validate_acm.check_matrix(root, pairs, upstream_pairs())
-    assert [tuple(u["pair"]) for u in result["unjustified"]] == [("mast_base_link", "openarm_left_ee_base_link"), ("openarm_left_link1", "openarm_left_link3")]
+    assert [tuple(u["pair"]) for u in result["unjustified"]] == [("base_link", "openarm_left_ee_base_link"), ("openarm_left_link1", "openarm_left_link3")]
     problems = {tuple(b["pair"]): b["problem"] for b in result["bad_labels"]}
     assert "not one of" in problems[("openarm_left_link1", "openarm_left_link3")]
-    assert "movable joint" in problems[("mast_base_link", "openarm_left_ee_base_link")]
+    assert "movable joint" in problems[("base_link", "openarm_left_ee_base_link")]
     wrong_adjacent = dict(srdf_pairs())
     wrong_adjacent[("openarm_left_link1", "openarm_left_link4")] = "Adjacent"
     assert validate_acm.check_matrix(root, wrong_adjacent, upstream_pairs())["bad_labels"][0]["problem"].startswith("labelled Adjacent")

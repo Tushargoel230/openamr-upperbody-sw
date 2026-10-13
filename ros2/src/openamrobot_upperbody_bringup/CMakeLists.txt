@@ -16,14 +16,15 @@ if(BUILD_TESTING)
   # L01 starts a real controller_manager: it picks its own ROS_DOMAIN_ID (see the test), so it cannot see or be seen by
   # another stack on the machine.
   add_launch_test(test/test_l01_mock_controllers.py TIMEOUT 60)
-  # M01 (A7): every named pose plans and executes on mock through move_group, once per release-candidate mast ID. Each run starts the
-  # whole mock stack in its own ROS_DOMAIN_ID (see the test) and records its own sidecar.
-  foreach(mast mast_1300 mast_1350 mast_1400 mast_1450)
-    add_launch_test(test/test_m01_mock_named_poses.py TARGET m01_mock_${mast} ARGS "mast_id:=${mast}" TIMEOUT 240)
+  # M01 (A7): every named pose plans and executes on mock through move_group, once per lift calibration stop (option B's L1000, L1175,
+  # L1350: positions of lift_joint, not configuration IDs). Each run starts the whole mock stack in its own ROS_DOMAIN_ID (see the test)
+  # and records its own sidecar.
+  foreach(stop L1000 L1175 L1350)
+    add_launch_test(test/test_m01_mock_named_poses.py TARGET m01_mock_${stop} ARGS "lift_stop:=${stop}" TIMEOUT 240)
   endforeach()
-  # M02: the same in Gazebo at mast_1350 only (the release configuration). It starts a headless Gazebo server and picks its own
-  # ROS_DOMAIN_ID and GZ_PARTITION, like G01 and G02; startup alone is about a minute, so the budget is large.
-  add_launch_test(test/test_m02_gazebo_named_poses.py TARGET m02_gazebo_mast_1350 TIMEOUT 600)
+  # M02: the same in Gazebo at the baseline configuration (lift_joint at its default zero, L1000). It starts a headless Gazebo server and
+  # picks its own ROS_DOMAIN_ID and GZ_PARTITION, like G01 and G02; startup alone is about a minute, so the budget is large.
+  add_launch_test(test/test_m02_gazebo_named_poses.py TARGET m02_gazebo_L1000 TIMEOUT 600)
 endif()
 
 ament_package()

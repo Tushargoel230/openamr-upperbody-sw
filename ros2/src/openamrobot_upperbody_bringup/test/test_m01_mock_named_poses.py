@@ -1,5 +1,6 @@
 """M01: every named pose of both arms (and both grippers) plans and executes on `mock`, through move_group, with a final joint error
-below 0.01 rad. One mast ID per run (the launch argument `mast_id:=...`, default mast_1350); CMake registers it once per release-candidate mast ID.
+below 0.01 rad. One lift calibration stop per run (the argument `lift_stop:=L1000|L1175|L1350`, default L1000, which the test turns into the stub's
+`lift_position`; the stops are CALIBRATION IDs of option B's lift, joint positions and not configuration IDs); CMake registers it once per stop.
 
 The stack is `moveit.launch.py sim:=mock`: robot_state_publisher, ros2_control_node on mock_components, five controllers, move_group.
 Each pose is a MoveGroup action goal made of exactly the SRDF's values for that group state: plan, then execute through MoveIt's
@@ -8,7 +9,7 @@ left/right_gripper_controller (GripperCommand, option 1 of ADR-009 point 4). The
 hand's OWN value (left +0.7854, right -0.7854), so the per-hand sign is exercised end to end and not only checked statically (M05).
 
 `simulation` class: mock hardware reflects its command back as state, so this shows that MoveIt, the controller handles and the controller
-configuration agree with each other and with the SRDF at this mast ID. It says nothing about tracking, loads or limits of a real arm, and
+configuration agree with each other and with the SRDF at this lift stop. It says nothing about tracking, loads or limits of a real arm, and
 the acceleration limits it plans under are engineering defaults (ADR-009): "plans and executes in simulation under declared OpenAMRobot
 limits".
 """
@@ -20,10 +21,10 @@ import unittest
 os.environ["ROS_DOMAIN_ID"] = str(random.randint(1, 100))
 os.environ["ROS_AUTOMATIC_DISCOVERY_RANGE"] = "LOCALHOST"
 
-def _mast_id_from_arguments(default="mast_1350"):
-    """`mast_id:=...` as `launch_test` was given it (CMake's ARGS): the test module sees the same argv the launch service does."""
+def _lift_stop_from_arguments(default="L1000"):
+    """`lift_stop:=...` as `launch_test` was given it (CMake's ARGS): the test module sees the same argv the launch service does."""
     for argument in sys.argv[1:]:
-        if argument.startswith("mast_id:="):
+        if argument.startswith("lift_stop:="):
             return argument.split(":=", 1)[1]
     return default
 
@@ -45,7 +46,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, clamp_record, named_pose_plan, stack_alive, stack_healthy, run_sequence,  # noqa: E402
                         write_run_sidecar)
 
-MAST_ID = _mast_id_from_arguments()
+LIFT_STOP = _lift_stop_from_arguments()
 READY_WITHIN_S = 90.0
 
 
@@ -57,10 +58,11 @@ def generate_test_description():
         # the skipped test keeps the launch up until launch_testing stops it.
         return launch.LaunchDescription([launch.actions.ExecuteProcess(cmd=["sleep", "30"]), launch_testing.actions.ReadyToTest()]), {}
     moveit = os.path.join(get_package_share_directory("openamrobot_upperbody_bringup"), "launch", "moveit.launch.py")
+    from openamrobot_upperbody_moveit.moveit_config import lift_stops
     return launch.LaunchDescription([
-        launch.actions.DeclareLaunchArgument("mast_id", default_value=MAST_ID),
-        launch.actions.IncludeLaunchDescription(PythonLaunchDescriptionSource(moveit),
-                                                launch_arguments={"sim": "mock", "mast_id": MAST_ID, "rviz": "false"}.items()),
+        launch.actions.IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(moveit),
+            launch_arguments={"sim": "mock", "lift_position": str(lift_stops()[LIFT_STOP]), "rviz": "false"}.items()),
         launch_testing.actions.ReadyToTest(),
     ]), {}
 
@@ -79,7 +81,9 @@ class TestNamedPosesOnMock(unittest.TestCase):
     def tearDownClass(cls):
         rows = cls.record.get("poses", [])
         ok = bool(rows) and all(r["ok"] for r in rows)
-        details = {"mast_id": MAST_ID, "hardware": "mock_components/GenericSystem", "tolerance_rad": TOLERANCE,
+        from openamrobot_upperbody_moveit.moveit_config import lift_stops
+        details = {"lift_stop": LIFT_STOP, "lift_joint_position_m": lift_stops()[LIFT_STOP],
+                   "hardware": "mock_components/GenericSystem", "tolerance_rad": TOLERANCE,
                    "velocity_scaling": VELOCITY_SCALING, "acceleration_scaling": ACCELERATION_SCALING,
                    "gripper_interface": "GripperCommand via moveit_simple_controller_manager (ADR-009 option 1)",
                    "poses_run": len(rows), "poses_ok": sum(1 for r in rows if r["ok"]),
@@ -87,7 +91,7 @@ class TestNamedPosesOnMock(unittest.TestCase):
                    "worst_final_error_rad": max((r["final_max_joint_error_rad"] for r in rows), default=None),
                    "clamp": clamp_record(cls.client),
                    "poses": rows, **{k: v for k, v in cls.record.items() if k != "poses"}}
-        write_run_sidecar("M01", f"mock_{MAST_ID}", f"named poses plan and execute on mock at {MAST_ID}", "PASS" if ok else "FAIL", details)
+        write_run_sidecar("M01", f"mock_{LIFT_STOP}", f"named poses plan and execute on mock at {LIFT_STOP}", "PASS" if ok else "FAIL", details)
         cls.node.destroy_node()
         rclpy.shutdown()
 

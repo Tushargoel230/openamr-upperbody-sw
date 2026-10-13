@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """M03: validate the SRDF's collision matrix. Every disabled pair needs a reason that can be shown; sampling is not one.
 
-    ros2 run openamrobot_upperbody_moveit validate_acm.py [--samples 2000] [--seed N] [--mast-id ID ...] [--srdf PATH] [--json OUT]
+    ros2 run openamrobot_upperbody_moveit validate_acm.py [--samples 2000] [--seed N] [--lift-stop L1000 ...] [--srdf PATH] [--json OUT]
 
 A pair may be disabled for exactly three reasons (acm_derive.py has the definitions): declared by upstream (section 1 of the SRDF), `Adjacent` (a
 structural neighbour) or `ConstantTransform` (no movable joint between the links, so their relative transform is a constant and ONE evaluation
@@ -16,10 +16,10 @@ settles every configuration). Everything else is enabled. This check recomputes 
 
 There is no WARN class: a disabled pair that is wrong is a FAIL. `Adjacent` and upstream-declared pairs touch by design and are not claims about
 collision. The sampled part is INFORMATION about the ENABLED pairs: N random joint states inside the limits (numpy default_rng(seed), the same
-states at every mast ID), and the pairs found colliding, with how often. A pair that collides often even though the matrix is right tells A4
+states at every lift stop), and the pairs found colliding, with how often. A pair that collides often even though the matrix is right tells A4
 something about reach and clearance. Sampling falsifies and never certifies, and nothing in the matrix rests on it.
 
-Each mast ID runs in its own process (a moveit_py instance does not shut down cleanly, and the process leaves with os._exit after writing its
+Each lift stop (a calibration ID: lift_joint held at that stop's position, every other joint sampled) runs in its own process (a moveit_py instance does not shut down cleanly, and the process leaves with os._exit after writing its
 result). Exit status: 1 if the matrix is wrong, 2 if the check could not run, else 0.
 """
 import argparse
@@ -34,7 +34,8 @@ import tempfile
 import time
 import xml.etree.ElementTree as ET
 
-MAST_IDS = ("mast_1300", "mast_1350", "mast_1400", "mast_1450")
+LIFT_JOINT = "lift_joint"
+STOPS = ("L1000", "L1175", "L1350")        # option B's calibration stops (upperbody_configuration.yaml lift_calibration_stops)
 DEFAULT_SAMPLES = 2000
 DEFAULT_SEED = 20261006
 CROSS_CHECK_SAMPLES = 200       # states on which the constant pairs are re-evaluated, to test the reasoning (not to certify)
@@ -81,7 +82,7 @@ def joint_table(urdf_text):
 
 def sample_states(free, mimic, count, seed):
     """`count` joint states, each {joint: value}, uniform inside the limits (continuous joints in [-pi, pi]); a mimic joint follows its
-    leader exactly as the URDF says. numpy's default_rng(seed): the same states at every run and every mast ID."""
+    leader exactly as the URDF says. numpy's default_rng(seed): the same states at every run and every lift stop."""
     import numpy as np
     rng = np.random.default_rng(seed)
     names = sorted(free)
@@ -117,19 +118,23 @@ def check_matrix(urdf_root, pairs, upstream):
     return {"unjustified": unjustified, "bad_labels": bad, "adjacent": adjacent, "constant": constant}
 
 
-def sample_one_mast(mast_id, samples, seed, srdf_file, hardware_profile="mock"):
-    """Run the check for one mast ID inside this process (moveit_py). Returns the result dict."""
+def sample_one_stop(stop, samples, seed, srdf_file, hardware_profile="mock"):
+    """Run the check at one lift stop inside this process (moveit_py): lift_joint is held at the stop's position and everything else is
+    sampled. Returns the result dict."""
     from openamrobot_upperbody_moveit.acm_derive import CONSTANT, geometry_links
     from openamrobot_upperbody_moveit.acm_scene import colliding_pairs, open_scene
+    from openamrobot_upperbody_moveit.moveit_config import lift_stops
+    lift_position = lift_stops()[stop]
 
     srdf_file = srdf_file or default_srdf()
     pairs = srdf_pairs(srdf_file)
     upstream = srdf_imported_pairs(srdf_file)
     started = time.monotonic()
-    with open_scene(mast_id, srdf_file=srdf_file, node_name="validate_acm", hardware_profile=hardware_profile) as scene:
+    with open_scene(srdf_file=srdf_file, node_name="validate_acm", hardware_profile=hardware_profile) as scene:
         static = check_matrix(scene.urdf_root, pairs, upstream)
         constant, adjacent = static["constant"], static["adjacent"]
         free, mimic = joint_table(scene.urdf_text)
+        free.pop(LIFT_JOINT)                    # held at the stop, not sampled: a stop is a calibration ID
         geometry = sorted(geometry_links(scene.urdf_root))
         disabled_constant = sorted(p for p, r in pairs.items() if r == CONSTANT)
         enabled_constant = sorted(constant - set(pairs))
@@ -137,6 +142,7 @@ def sample_one_mast(mast_id, samples, seed, srdf_file, hardware_profile="mock"):
 
         # (1) by construction: ONE evaluation, in the default state. A fixed relative transform gives the same answer in every state.
         scene.set_default_state()
+        scene.set_joint_positions({LIFT_JOINT: lift_position})
         constant_colliding = sorted(scene.colliding(disabled_constant))
         permanent = sorted(scene.colliding(enabled_constant))
         cross_check = {"states": min(CROSS_CHECK_SAMPLES, samples), "disagreements": []}
@@ -145,7 +151,7 @@ def sample_one_mast(mast_id, samples, seed, srdf_file, hardware_profile="mock"):
         # (2) information: sampling over the ENABLED pairs
         hits = {}
         for index, sample in enumerate(sample_states(free, mimic, samples, seed)):
-            scene.set_joint_positions(sample)
+            scene.set_joint_positions({**sample, LIFT_JOINT: lift_position})
             for pair in colliding_pairs(scene.any_collision, enabled):
                 row = hits.setdefault(pair, {"count": 0, "first_sample_index": index})
                 row["count"] += 1
@@ -160,12 +166,12 @@ def sample_one_mast(mast_id, samples, seed, srdf_file, hardware_profile="mock"):
     ranked = sorted(hits.items(), key=lambda kv: (-kv[1]["count"], kv[0]))
     failing = bool(static["unjustified"] or static["bad_labels"] or constant_colliding or permanent or cross_check["disagreements"])
     return {
-        "mast_id": mast_id, "samples": samples, "seed": seed, "seconds": round(elapsed, 1), "srdf": srdf_file,
+        "lift_stop": stop, "lift_joint_position_m": lift_position, "samples": samples, "seed": seed, "seconds": round(elapsed, 1), "srdf": srdf_file,
         "disabled_pairs": {"total": len(pairs), "by_label": reasons, "declared_by_upstream": len(upstream),
                            "structural_adjacent_derived": len(adjacent), "constant_transform_disabled": len(disabled_constant)},
         "enabled_pairs": {"total": len(enabled), "of_geometry_bearing_links": len(geometry)},
         "unjustified": static["unjustified"], "bad_labels": static["bad_labels"],
-        "constant_transform": {"evaluated": "once, in the default state", "pairs": [list(p) for p in disabled_constant],
+        "constant_transform": {"evaluated": "once, in the default state at the stop", "pairs": [list(p) for p in disabled_constant],
                                "colliding": [list(p) for p in constant_colliding],
                                "cross_check_with_sampled_states": cross_check},
         "enabled_constant_pairs_colliding": [list(p) for p in permanent],
@@ -182,7 +188,7 @@ def default_srdf():
 
 
 def run_one(args):
-    result = sample_one_mast(args.mast_id[0], args.samples, args.seed, args.srdf)
+    result = sample_one_stop(args.lift_stop[0], args.samples, args.seed, args.srdf)
     with open(args.json, "w") as f:
         json.dump(result, f)
     sys.stdout.flush()
@@ -190,9 +196,9 @@ def run_one(args):
     os._exit(0)           # moveit_py segfaults when the interpreter tears it down; the result is already on disk
 
 
-def print_mast(result):
+def print_stop(result):
     d, e = result["disabled_pairs"], result["enabled_pairs"]
-    print(f"\n{result['mast_id']}: {d['total']} pairs disabled ({', '.join(f'{n} {k}' for k, n in sorted(d['by_label'].items()))}; "
+    print(f"\n{result['lift_stop']} (lift_joint {result['lift_joint_position_m']:.3f} m): {d['total']} pairs disabled ({', '.join(f'{n} {k}' for k, n in sorted(d['by_label'].items()))}; "
           f"{d['declared_by_upstream']} declared by upstream), {e['total']} enabled; {result['seconds']} s")
     for item in result["unjustified"]:
         print(f"  FAIL: {item['pair'][0]} <-> {item['pair'][1]} is disabled with no reason that can be shown ({item['reason_label']})")
@@ -215,44 +221,44 @@ def print_mast(result):
 
 
 def run_all(args):
-    masts = args.mast_id or list(MAST_IDS)
+    stops = args.lift_stop or list(STOPS)
     results = []
     with tempfile.TemporaryDirectory() as tmp:
-        for mast in masts:
-            out = os.path.join(tmp, f"{mast}.json")
-            command = [sys.executable, os.path.abspath(__file__), "--worker", "--mast-id", mast, "--samples", str(args.samples),
+        for stop in stops:
+            out = os.path.join(tmp, f"{stop}.json")
+            command = [sys.executable, os.path.abspath(__file__), "--worker", "--lift-stop", stop, "--samples", str(args.samples),
                        "--seed", str(args.seed), "--json", out]
             if args.srdf:
                 command += ["--srdf", args.srdf]
             done = subprocess.run(command, capture_output=True, text=True, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
             if done.returncode != 0 or not os.path.isfile(out):
                 sys.stderr.write(done.stdout[-2000:] + done.stderr[-2000:])
-                print(f"validate_acm: the check at {mast} could not run (exit {done.returncode})", file=sys.stderr)
+                print(f"validate_acm: the check at {stop} could not run (exit {done.returncode})", file=sys.stderr)
                 return 2, results
             with open(out) as f:
                 results.append(json.load(f))
-            print_mast(results[-1])
+            print_stop(results[-1])
     return (1 if any(r["result"] == "FAIL" for r in results) else 0), results
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--samples", type=int, default=DEFAULT_SAMPLES, help="random joint states per mast ID for the information sampling")
+    parser.add_argument("--samples", type=int, default=DEFAULT_SAMPLES, help="random joint states per lift stop for the information sampling")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    parser.add_argument("--mast-id", action="append", choices=MAST_IDS, help="repeatable; default all four")
+    parser.add_argument("--lift-stop", action="append", choices=STOPS, help="repeatable; default all three")
     parser.add_argument("--srdf", default=None, help="an SRDF to check instead of the installed one (the mutation tests use this)")
-    parser.add_argument("--json", default=None, help="write the result here (one mast ID: its result; several: the summary)")
-    parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)     # how this script runs one mast ID in a process of its own
+    parser.add_argument("--json", default=None, help="write the result here (one lift stop: its result; several: the summary)")
+    parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)     # how this script runs one lift stop in a process of its own
     args = parser.parse_args(argv)
     if args.worker:
         return run_one(args)
     status, results = run_all(args)
-    summary = {"samples_per_mast": args.samples, "seed": args.seed, "results": results,
+    summary = {"samples_per_lift_stop": args.samples, "seed": args.seed, "results": results,
                "result": "ERROR" if status == 2 else ("FAIL" if status == 1 else "PASS")}
     if args.json:
         with open(args.json, "w") as f:
             json.dump(summary, f, indent=1)
-    print(f"\nM03: {summary['result']}  ({len(results)} mast ID(s); information sampling {args.samples} states at seed {args.seed})")
+    print(f"\nM03: {summary['result']}  ({len(results)} lift stop(s); information sampling {args.samples} states at seed {args.seed})")
     return status
 
 

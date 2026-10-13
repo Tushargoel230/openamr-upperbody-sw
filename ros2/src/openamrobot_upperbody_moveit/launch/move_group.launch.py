@@ -2,11 +2,11 @@
 is already running (robot_state_publisher, the controller manager, joint states) and starts nothing of that. The user-facing launch is
 openamrobot_upperbody_bringup's moveit.launch.py, which starts the stack too.
 
-    ros2 launch openamrobot_upperbody_moveit move_group.launch.py [mast_id:=mast_1350] [hardware_profile:=mock|gazebo] [rviz:=false]
+    ros2 launch openamrobot_upperbody_moveit move_group.launch.py [base_plate:=bp000] [hardware_profile:=mock|gazebo] [rviz:=false]
                                                                   [clamp_joint_states:=true]
 
 Args
-  mast_id           mast_1300 | mast_1350 | mast_1400 | mast_1450   (default mast_1350, the release configuration)
+  column, base_plate, head_pitch, base_tilt   option B's configuration IDs (defaults: its baseline dold_v4_350 / bp000 / hp25 / bt10)
   hardware_profile  mock | gazebo    which stack is running; `gazebo` also sets use_sim_time (the simulator's /clock)
   rviz              true | false     RViz2 with the MotionPlanning display (config/moveit.rviz)
   clamp_joint_states  true | false   start joint_state_clamp.py and plan from /joint_states_clamped instead of /joint_states: the simulated
@@ -38,10 +38,10 @@ CLAMPED_TOPIC = "/joint_states_clamped"       # what joint_state_clamp.py publis
 def launch_setup(context, *args, **kwargs):
     from openamrobot_upperbody_moveit.moveit_config import moveit_config
 
-    mast_id = LaunchConfiguration("mast_id").perform(context)
+    ids = {key: LaunchConfiguration(key).perform(context) for key in ("column", "base_plate", "head_pitch", "base_tilt")}
     profile = LaunchConfiguration("hardware_profile").perform(context)
     use_sim_time = profile == "gazebo"
-    config = moveit_config(mast_id, profile)
+    config = moveit_config(hardware_profile=profile, **ids)
     parameters = [config.to_dict(), TRAJECTORY_EXECUTION, {"use_sim_time": use_sim_time, "publish_robot_description_semantic": True}]
 
     clamp = LaunchConfiguration("clamp_joint_states").perform(context) == "true"
@@ -63,7 +63,10 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("mast_id", default_value="mast_1350", description="mast_1300 | mast_1350 | mast_1400 | mast_1450"),
+        DeclareLaunchArgument("column", default_value="dold_v4_350", description="dold_v4_350 (tl3_400 has no supplier data: refused)"),
+        DeclareLaunchArgument("base_plate", default_value="bp000", description="bp000 | bp050"),
+        DeclareLaunchArgument("head_pitch", default_value="hp25", description="hp15 | hp20 | hp25 | hp30 | hp35"),
+        DeclareLaunchArgument("base_tilt", default_value="bt10", description="bt05 | bt10 | bt15"),
         DeclareLaunchArgument("hardware_profile", default_value="mock", description="mock | gazebo: which stack is running"),
         DeclareLaunchArgument("rviz", default_value="false", description="true | false. RViz2 with the MotionPlanning display"),
         DeclareLaunchArgument("clamp_joint_states", default_value="true",

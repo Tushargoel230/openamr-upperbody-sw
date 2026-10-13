@@ -2,7 +2,7 @@
 # PROPOSE the collision matrix for config/openamrobot.srdf: derive it from the model (scripts/derive_acm.py) and print what differs from the contract.
 #
 #   source /opt/ros/jazzy/setup.bash && source <workspace>/install/setup.bash
-#   ros2 run openamrobot_upperbody_moveit regenerate_acm.sh [--mast-id mast_1350] [--write]
+#   ros2 run openamrobot_upperbody_moveit regenerate_acm.sh [--base-plate bp000] [--write]
 #
 # THE CHECKED-IN SRDF IS THE CONTRACT. Since P12A the matrix is DERIVED, not sampled: a pair is disabled for exactly three reasons (declared by
 # upstream, `Adjacent`, `ConstantTransform`) and every other pair is enabled, so nothing depends on a random generator and regenerating gives the

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Derive the collision matrix of config/openamrobot.srdf from the model, and propose it (or, with --write, replace the contract).
 
-    ros2 run openamrobot_upperbody_moveit derive_acm.py [--mast-id mast_1350] [--srdf PATH] [--write | --proposal PATH] [--json OUT]
+    ros2 run openamrobot_upperbody_moveit derive_acm.py [--base-plate bp000] [--srdf PATH] [--write | --proposal PATH] [--json OUT]
 
 A pair is disabled for exactly three reasons (acm_derive.py has the definitions): declared by upstream (section 1 of the SRDF, copied verbatim and
 checked against upstream's own file by test_srdf_import.py), `Adjacent` (a structural neighbour), `ConstantTransform` (no movable joint between the
@@ -26,7 +26,7 @@ import xml.etree.ElementTree as ET
 import yaml
 
 BEGIN, END = "<!-- BEGIN GENERATED ACM -->", "<!-- END GENERATED ACM -->"
-DEFAULT_MAST = "mast_1350"
+DEFAULT_BASE_PLATE = "bp000"        # option B's baseline; the matrix does not depend on it (the plate moves the column fore-aft)
 
 
 def split_srdf(text):
@@ -36,9 +36,9 @@ def split_srdf(text):
     return text[:match.start()], text[match.end():]
 
 
-def block_text(derived, counts, mast_id):
+def block_text(derived, counts, base_plate):
     lines = [BEGIN,
-             f"    <!-- Derived by scripts/derive_acm.py (P12A) from the model's kinematic tree at {mast_id}: no sampling, no seed. A pair is",
+             f"    <!-- Derived by scripts/derive_acm.py (P12A) from the model's kinematic tree at {base_plate}, lift_joint at 0: no sampling, no seed. A pair is",
              "         disabled for exactly three reasons, upstream-declared (section 1), `Adjacent` (a structural neighbour) and",
              f"         `ConstantTransform` (no movable joint between the links, clear in the one evaluation that settles every configuration):",
              f"         {counts['adjacent']} Adjacent and {counts['constant_transform']} ConstantTransform pairs here, none of them from a sampler.",
@@ -49,7 +49,7 @@ def block_text(derived, counts, mast_id):
     return "\n".join(lines)
 
 
-def contract_record(matrix, report, mast_id, moveit_version):
+def contract_record(matrix, report, base_plate, moveit_version):
     from openamrobot_upperbody_moveit.acm_split import acm_fingerprint
     reasons = {}
     for reason in matrix.values():
@@ -57,7 +57,8 @@ def contract_record(matrix, report, mast_id, moveit_version):
     return {
         "schema_version": 2,
         "method": "derived: scripts/derive_acm.py over the model's kinematic tree and upstream's own SRDF; no sampling, no seed (P12A)",
-        "date": datetime.date.today().isoformat(), "mast_id": mast_id, "moveit_version": moveit_version,
+        "date": datetime.date.today().isoformat(), "base_plate": base_plate, "lift_joint_position_m": 0.0,
+        "moveit_version": moveit_version,
         "rules": {
             "upstream_declared": "pairs upstream's SRDF states (enactic/openarm_ros2 @ 4e837e1), section 1 of the SRDF, verbatim",
             "Adjacent": "both links carry collision geometry, no other geometry-bearing link between them on the tree path, at most one movable joint",
@@ -76,7 +77,7 @@ def contract_record(matrix, report, mast_id, moveit_version):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--mast-id", default=DEFAULT_MAST)
+    parser.add_argument("--base-plate", default=DEFAULT_BASE_PLATE, choices=("bp000", "bp050"))
     parser.add_argument("--srdf", help="the SRDF to take section 1 from and to compare with (default: the source tree's config/openamrobot.srdf)")
     parser.add_argument("--meta", help="config/acm/acm_generation.yaml (written only with --write)")
     parser.add_argument("--write", action="store_true", help="replace the contract: rewrite the SRDF's generated block and the record")
@@ -99,13 +100,13 @@ def main(argv=None):
     upstream = acm_pairs(ET.fromstring(before + after))
     current = acm_pairs(ET.fromstring(text))
 
-    with open_scene(args.mast_id, srdf_file=srdf_path, node_name="derive_acm") as scene:
+    with open_scene(args.base_plate, srdf_file=srdf_path, node_name="derive_acm") as scene:
         scene.set_default_state()
         matrix, report = derive(scene.urdf_root, upstream, scene.colliding)
         version = ET.parse(os.path.join(get_package_share_directory("moveit_core"), "package.xml")).getroot().findtext("version")
 
     status = 0
-    print(f"derived at {args.mast_id}: {len(matrix)} disabled pairs = {len(report['upstream'])} declared by upstream + {len(report['adjacent'])} Adjacent "
+    print(f"derived at {args.base_plate} (lift_joint at 0): {len(matrix)} disabled pairs = {len(report['upstream'])} declared by upstream + {len(report['adjacent'])} Adjacent "
           f"+ {len(report['constant_transform'])} ConstantTransform; every other pair is enabled")
     print(f"fingerprint {acm_fingerprint(matrix)}")
     if report["constant_and_colliding"]:
@@ -125,12 +126,12 @@ def main(argv=None):
     if status == 0:
         derived_only = {p: r for p, r in matrix.items() if p not in upstream}
         merged = before + block_text(derived_only, {"adjacent": len(report["adjacent"]), "constant_transform": len(report["constant_transform"])},
-                                     args.mast_id) + after
+                                     args.base_plate) + after
         if args.write:
             with open(srdf_path, "w") as f:
                 f.write(merged)
             with open(meta_path, "w") as f:
-                yaml.safe_dump(contract_record(matrix, report, args.mast_id, version), f, sort_keys=False, width=140)
+                yaml.safe_dump(contract_record(matrix, report, args.base_plate, version), f, sort_keys=False, width=140)
             print(f"THE CONTRACT CHANGED (--write): {srdf_path} and {meta_path} rewritten")
         else:
             proposal = args.proposal or os.path.join(tempfile.mkdtemp(), "proposed_openamrobot.srdf")
@@ -140,7 +141,7 @@ def main(argv=None):
     if args.json:
         import json
         with open(args.json, "w") as f:
-            json.dump({"mast_id": args.mast_id, "fingerprint": acm_fingerprint(matrix), "counts": {k: len(v) for k, v in report.items()},
+            json.dump({"base_plate": args.base_plate, "fingerprint": acm_fingerprint(matrix), "counts": {k: len(v) for k, v in report.items()},
                        "matrix": {f"{a} {b}": r for (a, b), r in sorted(matrix.items())}, "report": {k: [list(p) for p in v] for k, v in report.items()},
                        "diff": {"added": len(added), "removed": len(removed), "relabelled": len(relabelled)}}, f, indent=1)
     sys.stdout.flush()

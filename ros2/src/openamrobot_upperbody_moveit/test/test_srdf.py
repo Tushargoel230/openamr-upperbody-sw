@@ -1,11 +1,11 @@
-"""The SRDF is consistent with the combined model at every mast ID: names exist, poses are inside limits, the virtual joint is the
+"""The SRDF is consistent with the combined model at every base plate: names exist, poses are inside limits, the virtual joint is the
 fixed one (W02), and `park` is only a placeholder copy of `home`."""
 import re
 import xml.etree.ElementTree as ET
 
 import pytest
 
-from conftest import MAST_IDS, SRDF_FILE, load_yaml, read_text, srdf_root, srdf_text, urdf_root, urdf_text
+from conftest import BASE_PLATES, SRDF_FILE, load_yaml, read_text, srdf_root, srdf_text, urdf_root, urdf_text
 from openamrobot_upperbody_moveit.named_poses import ARM_GROUP, ARM_POSES, GRIPPER_JOINT, read_group_states, urdf_joint_limits
 
 ARM_JOINTS = {side: [f"openarm_{side}_joint{i}" for i in range(1, 8)] for side in ("left", "right")}
@@ -29,9 +29,9 @@ def test_the_robot_name_is_the_urdfs():
     assert srdf_root().get("name") == urdf_root().get("name") == "openamrobot"
 
 
-@pytest.mark.parametrize("mast_id", MAST_IDS)
-def test_every_name_the_srdf_uses_exists_in_the_model_at_every_mast_id(mast_id):
-    links, joints = link_and_joint_names(urdf_root(mast_id))
+@pytest.mark.parametrize("base_plate", BASE_PLATES)
+def test_every_name_the_srdf_uses_exists_in_the_model_at_every_base_plate(base_plate):
+    links, joints = link_and_joint_names(urdf_root(base_plate))
     srdf = srdf_root()
     assert referenced_links(srdf) <= links, sorted(referenced_links(srdf) - links)
     used = {j.get("name") for g in srdf.findall("group") for j in g.findall("joint")}
@@ -51,19 +51,19 @@ def test_the_four_groups_are_exactly_the_arms_and_the_grippers():
         assert groups[f"{side}_gripper"] == [GRIPPER_JOINT[side]]
 
 
-def test_the_virtual_joint_is_the_fixed_world_to_base_link_one_not_the_planar_one():
+def test_the_virtual_joint_is_the_fixed_world_to_base_footprint_one_not_the_planar_one():
     """AD-30: the base does not move during manipulation. W02: KDL has no planar joint, and robot_state_publisher has turned the planar
     joint into a fixed one, so a planar root would be planning against a joint the rest of the stack does not see."""
     joints = srdf_root().findall("virtual_joint")
     assert len(joints) == 1
     joint = joints[0]
-    assert (joint.get("type"), joint.get("parent_frame"), joint.get("child_link")) == ("fixed", "world", "base_link")
+    assert (joint.get("type"), joint.get("parent_frame"), joint.get("child_link")) == ("fixed", "world", "base_footprint")
     assert not any("planar" in value for el in srdf_root().iter() for value in el.attrib.values()), "no planar joint in the SRDF"
 
 
-@pytest.mark.parametrize("mast_id", MAST_IDS)
-def test_named_pose_values_are_inside_the_urdf_limits(mast_id):
-    limits = urdf_joint_limits(urdf_text(mast_id))
+@pytest.mark.parametrize("base_plate", BASE_PLATES)
+def test_named_pose_values_are_inside_the_urdf_limits(base_plate):
+    limits = urdf_joint_limits(urdf_text(base_plate))
     states = read_group_states(srdf_text())
     for (group, name), values in states.items():
         for joint, value in values.items():
@@ -101,7 +101,7 @@ def test_passive_joints_are_the_urdf_mimic_finger_joints():
 
 def test_each_disabled_pair_is_listed_once_with_a_known_reason_and_two_different_links():
     pairs = [(frozenset((d.get("link1"), d.get("link2"))), d.get("reason")) for d in srdf_root().findall("disable_collisions")]
-    assert len(pairs) == load_yaml("acm/acm_generation.yaml")["counts"]["disabled_total"] > 100, "the derived matrix is missing (scripts/regenerate_acm.sh)"
+    assert len(pairs) == load_yaml("acm/acm_generation.yaml")["counts"]["disabled_total"] > 20, "the derived matrix is missing (scripts/regenerate_acm.sh)"
     keys = [p for p, _ in pairs]
     duplicates = {tuple(sorted(k)) for k in keys if keys.count(k) > 1}
     assert not duplicates, f"pairs disabled more than once: {sorted(duplicates)[:5]}"

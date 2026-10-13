@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Do the named-pose plans depend on the VALUES of the acceleration limits we invented, or only need SOME values to exist? (ADR-009)
 
-    ros2 run openamrobot_upperbody_moveit limits_sensitivity.py [--mast-id mast_1350] [--json OUT]
+    ros2 run openamrobot_upperbody_moveit limits_sensitivity.py [--base-plate bp000] [--json OUT]
 
 Plans every named pose of both arms and both grippers, one after the other, offline (moveit_py, no controllers, no simulator), under:
 
@@ -33,10 +33,10 @@ ARM_SEQUENCE = ("hands_up", "home", "hands_up", "park")
 GRIPPER_SEQUENCE = ("closed", "open")
 
 
-def make_moveit_py(mast_id, strip_acceleration_limits=False, srdf_file=None):
+def make_moveit_py(base_plate, strip_acceleration_limits=False, srdf_file=None):
     from moveit.planning import MoveItPy
     from openamrobot_upperbody_moveit.moveit_config import moveit_config
-    cfg = moveit_config(mast_id, "mock", srdf_file=srdf_file).to_dict()
+    cfg = moveit_config(base_plate, "mock", srdf_file=srdf_file).to_dict()
     if strip_acceleration_limits:
         for entry in cfg["robot_description_planning"]["joint_limits"].values():
             entry["has_acceleration_limits"] = False
@@ -91,8 +91,8 @@ def plan_all(moveit_py, scaling):
 
 
 def run(args):
-    out = {"mast_id": args.mast_id, "velocity_scaling": VELOCITY_SCALING, "variants": []}
-    moveit_py = make_moveit_py(args.mast_id)
+    out = {"base_plate": args.base_plate, "velocity_scaling": VELOCITY_SCALING, "variants": []}
+    moveit_py = make_moveit_py(args.base_plate)
     for scaling in SCALINGS:
         rows = plan_all(moveit_py, scaling)
         out["variants"].append({"variant": f"configured limits x {scaling:g}", "acceleration_scaling": scaling,
@@ -102,14 +102,14 @@ def run(args):
 
 
 def run_without_limits(args):
-    moveit_py = make_moveit_py(args.mast_id, strip_acceleration_limits=True)
+    moveit_py = make_moveit_py(args.base_plate, strip_acceleration_limits=True)
     rows = plan_all(moveit_py, 1.0)
     return {"variant": "no acceleration limits (what upstream's joint_limits.yaml says)", "acceleration_scaling": 1.0, "plans": len(rows),
             "plans_ok": sum(r["ok"] for r in rows), "rows": rows}
 
 
 def print_summary(out):
-    print(f"\nAcceleration-limit sensitivity of the named-pose plans at {out['mast_id']} (velocity scaling {out['velocity_scaling']})")
+    print(f"\nAcceleration-limit sensitivity of the named-pose plans at {out['base_plate']} (lift at 0) (velocity scaling {out['velocity_scaling']})")
     for v in out["variants"]:
         print(f"  {v['variant']:<58} {v['plans_ok']:>2}/{v['plans']} plans   total planned duration "
               f"{v.get('total_duration_s', '-')} s")
@@ -141,7 +141,7 @@ def conclusion(out):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--mast-id", default="mast_1350")
+    parser.add_argument("--base-plate", default="bp000", choices=("bp000", "bp050"))
     parser.add_argument("--json", default=None)
     parser.add_argument("--worker", choices=("scaled", "none"), help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -157,7 +157,7 @@ def main(argv=None):
     with tempfile.TemporaryDirectory() as tmp:
         for worker in ("scaled", "none"):
             path = os.path.join(tmp, f"{worker}.json")
-            done = subprocess.run([sys.executable, os.path.abspath(__file__), "--worker", worker, "--mast-id", args.mast_id, "--json", path],
+            done = subprocess.run([sys.executable, os.path.abspath(__file__), "--worker", worker, "--base-plate", args.base_plate, "--json", path],
                                   capture_output=True, text=True, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
             if done.returncode != 0 or not os.path.isfile(path):
                 sys.stderr.write(done.stdout[-1500:] + done.stderr[-1500:])

@@ -2,7 +2,7 @@
 <package format="3">
   <name>openamrobot_upperbody_control</name>
   <version>0.0.0</version>
-  <description>ros2_control configuration for the two OpenArm v2.0 arms of OpenAMRobot 2.0 (fixed mast): joint state broadcaster, trajectory and gripper controllers, one file for the mock, gazebo and real profiles.</description>
+  <description>ros2_control configuration for the two OpenArm v2.0 arms of OpenAMRobot 2.0 (the lift is not here: it is a joint we have no authority to command): joint state broadcaster, trajectory and gripper controllers, one file for the mock, gazebo and real profiles.</description>
   <maintainer email="info@botshare.ai">OpenAMRobot</maintainer>
   <license>MIT</license>
   <buildtool_depend>ament_cmake</buildtool_depend>

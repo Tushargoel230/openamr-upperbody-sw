@@ -1,15 +1,21 @@
 """MoveIt on the combined OpenAMRobot model: the stack (mock or Gazebo), then move_group, optionally RViz's MotionPlanning display.
 
-    ros2 launch openamrobot_upperbody_bringup moveit.launch.py [mast_id:=mast_1350] [sim:=mock|gazebo] [rviz:=false]
-                                                              [headless:=false] [physics_engine:=<gz-physics plugin>]
+    ros2 launch openamrobot_upperbody_bringup moveit.launch.py [base_plate:=bp000] [sim:=mock|gazebo] [rviz:=false]
+                                                              [lift_position:=0.0] [headless:=false] [physics_engine:=<gz-physics plugin>]
 
   sim=mock     mock.launch.py (arms on mock_components/GenericSystem, five controllers active), a stub that reports the wheel joints at
-               rest (the base is not under ros2_control), then move_group. Nothing else of the base runs.
+               rest (the base is not under ros2_control) and the lift at `lift_position` (no ros2_control interface: we have no
+               authority to command it), then move_group. Nothing else of the base runs.
   sim=gazebo   openamrobot_upperbody_gazebo's sim.launch.py (Gazebo, the base on its DiffDrive plugin, the arms on gz_ros2_control, the
                five controllers), then move_group on the simulator's clock.
 
 Args
-  mast_id         mast_1300 | mast_1350 | mast_1400 | mast_1450   (default mast_1350, the release configuration)
+  column       dold_v4_350 | tl3_400   (default dold_v4_350; tl3_400 has no supplier data and does not expand)
+  base_plate   bp000 | bp050             (default bp000: option B's baseline; column axis x +0.060 / +0.110 from base_link)
+  head_pitch   hp15 | hp20 | hp25 | hp30 | hp35   (default hp25)
+  base_tilt    bt05 | bt10 | bt15        (default bt10)
+  lift_position   sim:=mock only. m, the position of lift_joint the stub reports: 0.0 / 0.175 / 0.350 are the calibration stops
+                  L1000 / L1175 / L1350 (default 0.0: every joint at zero). With sim:=gazebo the merger's default is the same 0.0
   sim             mock | gazebo
   rviz            true | false  RViz2 with the MotionPlanning display (config/moveit.rviz of the moveit package). With sim:=gazebo the
                   simulator's own RViz is not started: this one replaces it.
@@ -36,7 +42,7 @@ def include(package, launch_file, **launch_arguments):
 
 
 def launch_setup(context, *args, **kwargs):
-    mast_id = LaunchConfiguration("mast_id").perform(context)
+    config = {key: LaunchConfiguration(key).perform(context) for key in ("column", "base_plate", "head_pitch", "base_tilt")}
     sim = LaunchConfiguration("sim").perform(context)
     rviz = LaunchConfiguration("rviz").perform(context)
     if sim not in ("mock", "gazebo"):
@@ -44,21 +50,27 @@ def launch_setup(context, *args, **kwargs):
     if sim == "mock":
         # The base is not under ros2_control, so on mock nothing reports its wheel joints and MoveIt warns every second that the
         # robot's complete state is unknown. The stub reports them at rest (the base does not move during manipulation, AD-30).
-        stack = [include("openamrobot_upperbody_bringup", "mock.launch.py", mast_id=mast_id, rviz="false"),
-                 Node(package="openamrobot_upperbody_bringup", executable="base_joint_states_stub.py", output="log")]
+        stack = [include("openamrobot_upperbody_bringup", "mock.launch.py", rviz="false", **config),
+                 Node(package="openamrobot_upperbody_bringup", executable="base_joint_states_stub.py", output="log",
+                      parameters=[{"lift_position": float(LaunchConfiguration("lift_position").perform(context))}])]
     else:
-        sim_args = {"mast_id": mast_id, "headless": LaunchConfiguration("headless").perform(context), "rviz": "false"}
+        sim_args = {**config, "headless": LaunchConfiguration("headless").perform(context), "rviz": "false"}
         engine = LaunchConfiguration("physics_engine").perform(context)
         if engine:
             sim_args["physics_engine"] = engine
         stack = [include("openamrobot_upperbody_gazebo", "sim.launch.py", **sim_args)]
-    move_group = include("openamrobot_upperbody_moveit", "move_group.launch.py", mast_id=mast_id, hardware_profile=sim, rviz=rviz)
+    move_group = include("openamrobot_upperbody_moveit", "move_group.launch.py", hardware_profile=sim, rviz=rviz, **config)
     return [*stack, move_group]
 
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("mast_id", default_value="mast_1350", description="mast_1300 | mast_1350 | mast_1400 | mast_1450"),
+        DeclareLaunchArgument("column", default_value="dold_v4_350", description="dold_v4_350 | tl3_400 (no supplier data: refused)"),
+        DeclareLaunchArgument("base_plate", default_value="bp000", description="bp000 | bp050"),
+        DeclareLaunchArgument("head_pitch", default_value="hp25", description="hp15 | hp20 | hp25 | hp30 | hp35"),
+        DeclareLaunchArgument("base_tilt", default_value="bt10", description="bt05 | bt10 | bt15"),
+        DeclareLaunchArgument("lift_position", default_value="0.0",
+                              description="sim:=mock only: lift_joint position (m) the stub reports; 0.0 / 0.175 / 0.350 = L1000 / L1175 / L1350"),
         DeclareLaunchArgument("sim", default_value="mock", description="mock | gazebo"),
         DeclareLaunchArgument("rviz", default_value="false", description="true | false. RViz2 with the MotionPlanning display"),
         DeclareLaunchArgument("headless", default_value="false", description="sim:=gazebo only: true runs gz sim -s (no window)"),

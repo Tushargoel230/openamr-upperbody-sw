@@ -11,11 +11,15 @@ What it asserts, in order, against one running simulation (budget 90 s for every
      its name with its type. This is the ADR-003 / ADR-005 regression guard (our job was to add arms and move nothing of
      platform-sw's), and it reads platform-sw's own file, so it follows that file instead of a copy of it;
   4  /cmd_vel still moves the base and /odom still reports it;
-  5  exactly one publisher of odom -> base_link: its stamps are strictly increasing at the DiffDrive plugin's 50 Hz (a second
+  5  exactly one publisher of odom -> <the DiffDrive plugin's child frame>: base_footprint since platform-sw 935efc7 (REP 105: the
+     odom child is the URDF root so that base_link keeps one parent; the test reads the frame from the plugin in the description,
+     as it reads the bridge topics from platform-sw's file, so it follows platform-sw's decision and not a copy of it). Its
+     stamps are strictly increasing at the DiffDrive plugin's 50 Hz (a second
      publisher would double the rate or repeat stamps, which looks like jitter and not like an error), `odom` is not a link
      of the description, and robot_state_publisher publishes nothing with `odom` in it (check W02 made visible);
-  6  /joint_states has one publisher, and carries the two wheel joints and the sixteen arm joints, each once: a joint is
-     reported by one source only.
+  6  /joint_states has one publisher, and carries the two wheel joints, the sixteen arm joints and lift_joint, each once: a joint is
+     reported by one source only. lift_joint has no source of its own (platform-sw's JointStatePublisher is scoped to the wheels
+     and the lift has no ros2_control interface): the merger reports it at its default, zero, and nobody else may.
 
 Simulation evidence only. Nothing here says anything about a physical robot, and the numbers (rates, distances) are
 properties of this simulator on this machine. The base's physical numbers (wheel radius, separation, accelerations) are
@@ -70,6 +74,7 @@ LEFT = [f"openarm_left_joint{n}" for n in range(1, 8)]
 RIGHT = [f"openarm_right_joint{n}" for n in range(1, 8)]
 FINGERS = ["openarm_left_finger_joint1", "openarm_right_finger_joint1"]
 WHEELS = ["left_wheel_joint", "right_wheel_joint"]
+LIFT = "lift_joint"
 ACTIVE_WITHIN_S = 75.0
 ARM_TARGET = {"openarm_left_joint1": 0.2, "openarm_left_joint2": -0.3, "openarm_left_joint4": 0.8}   # inside every limit
 ARM_SECONDS = 3                 # simulated seconds
@@ -231,14 +236,21 @@ class TestGazeboSmoke(unittest.TestCase):
                                 "odom_messages": len(self.odom) - count}
 
     # --- 5 ---------------------------------------------------------------------------------------------------------------
-    def test_g01_5_exactly_one_publisher_of_odom_to_base_link(self):
+    def test_g01_5_exactly_one_publisher_of_odom_to_the_diffdrive_child_frame(self):
         stamps, others = [], {}
+        description = self._robot_description()
+        import re
+        children = re.findall(r"<child_frame_id>\s*([A-Za-z0-9_]+)\s*</child_frame_id>", description)
+        self.assertEqual(len(children), 1, f"expected one DiffDrive <child_frame_id> in the description, found {children}")
+        child = children[0]
+        self.assertIn(child, ("base_footprint", "base_link"), f"the DiffDrive plugin's odom child {child!r} is not a base frame")
+        self.assertIn(f'<link name="{child}"', description.replace("'", '"'), f"the odom child {child} is not a link of the description")
 
         def on_tf(msg):
             for t in msg.transforms:
                 key = (t.header.frame_id, t.child_frame_id)
                 stamp = t.header.stamp.sec + t.header.stamp.nanosec * 1e-9
-                if key == ("odom", "base_link"):
+                if key == ("odom", child):
                     stamps.append(stamp)
                 elif "odom" in key:
                     others[key] = others.get(key, 0) + 1
@@ -246,22 +258,21 @@ class TestGazeboSmoke(unittest.TestCase):
         sub = self.node.create_subscription(TFMessage, "/tf", on_tf, 200)
         self._spin_sim_seconds(5.0)
         self.node.destroy_subscription(sub)
-        self.assertGreater(len(stamps), 100, "odom -> base_link was not published")
+        self.assertGreater(len(stamps), 100, f"odom -> {child} was not published")
         increasing = all(b > a for a, b in zip(stamps, stamps[1:]))
         rate = (len(stamps) - 1) / (stamps[-1] - stamps[0])
-        self.assertTrue(increasing, "odom -> base_link has repeated or out-of-order stamps: two publishers")
+        self.assertTrue(increasing, f"odom -> {child} has repeated or out-of-order stamps: two publishers")
         self.assertTrue(SINGLE_PUBLISHER_BAND[0] <= rate <= SINGLE_PUBLISHER_BAND[1],
-                        f"odom -> base_link arrives at {rate:.1f} Hz; one DiffDrive publisher gives {DIFFDRIVE_ODOM_HZ:.0f}")
-        self.assertEqual(others, {}, "a transform other than odom -> base_link involves the odom frame")
+                        f"odom -> {child} arrives at {rate:.1f} Hz; one DiffDrive publisher gives {DIFFDRIVE_ODOM_HZ:.0f}")
+        self.assertEqual(others, {}, f"a transform other than odom -> {child} involves the odom frame")
 
         publishers = sorted({i.node_name for i in self.node.get_publishers_info_by_topic("/tf")})
         self.assertEqual(publishers, ["platform_bridge", "robot_state_publisher"], publishers)
 
-        description = self._robot_description()
         self.assertNotIn('<link name="odom"', description.replace("'", '"'), "`odom` is a link of the description")
         self.assertNotIn('name="base_planar_joint"', description.replace("'", '"'),
                          "the planar joint is in the description: KDL would make it a fixed joint (W02)")
-        self.record["odom_to_base_link"] = {"samples": len(stamps), "sim_rate_hz": round(rate, 1), "stamps_strictly_increasing": increasing,
+        self.record["odom_to_base_frame"] = {"child_frame": child, "samples": len(stamps), "sim_rate_hz": round(rate, 1), "stamps_strictly_increasing": increasing,
                                             "expected_rate_hz": DIFFDRIVE_ODOM_HZ, "other_transforms_with_odom": others,
                                             "tf_publishers": publishers, "odom_is_a_link_of_the_description": False,
                                             "planar_joint_in_description": False}
@@ -293,6 +304,8 @@ class TestGazeboSmoke(unittest.TestCase):
         arm_joints = set(LEFT + RIGHT + FINGERS)
         self.assertTrue(set(WHEELS) <= merged and arm_joints <= merged, f"/joint_states is missing joints: {sorted((set(WHEELS) | arm_joints) - merged)}")
         base_names, arm_names = set(sources["/base/joint_states"][-1]), set(sources["/arm/joint_states"][-1])
+        self.assertIn(LIFT, merged, "lift_joint is not on /joint_states: robot_state_publisher publishes nothing above it")
+        self.assertNotIn(LIFT, base_names | arm_names, "a source other than the merger's default reports lift_joint")
         self.assertEqual(base_names, set(WHEELS), "the base's joint states are not exactly the two wheels")
         self.assertTrue(arm_joints <= arm_names, "joint_state_broadcaster is missing arm joints")
         self.assertEqual(base_names & arm_names, set(), f"joints reported by both sources: {sorted(base_names & arm_names)}")

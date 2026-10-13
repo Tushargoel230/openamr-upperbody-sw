@@ -113,11 +113,14 @@
     <disable_collisions link1="openarm_right_ee_link1" link2="openarm_right_ee_link2" reason="Adjacent"/>
 
     <!-- ===== 2. Ours ================================================================================================ -->
-    <!-- The base does not move during manipulation (AD-30), so the world is joined to base_link by a FIXED virtual joint.
-         It is not the planar one on purpose (W02): KDL has no planar joint, and robot_state_publisher has already turned
-         base_planar_joint into a fixed joint, so planning against a planar root would be planning against a joint that
-         the rest of the stack does not see. Base motion in simulation comes from Gazebo's odom -> base_link. -->
-    <virtual_joint name="world_to_base" type="fixed" parent_frame="world" child_link="base_link"/>
+    <!-- The base does not move during manipulation (AD-30), so the world is joined to the root, base_footprint (platform-sw 935efc7,
+         REP 105: on the floor, base_link 0.098 m above it), by a FIXED virtual joint. It is not the planar one on purpose (W02):
+         KDL has no planar joint, and robot_state_publisher has already turned base_planar_joint into a fixed joint, so planning
+         against a planar root would be planning against a joint that the rest of the stack does not see. Base motion in
+         simulation comes from Gazebo's odom -> base_footprint. lift_joint (prismatic, 0 to 0.350 m, effort 0: we have no authority
+         to command it) is in no planning group on purpose: MoveIt sees it as part of the robot state, at whatever the stack
+         reports (a calibration stop), and plans the arms from there. -->
+    <virtual_joint name="world_to_base" type="fixed" parent_frame="world" child_link="base_footprint"/>
 
     <!-- `park` is a PLACEHOLDER: a copy of upstream's `home` (all arm joints zero) and nothing more. It stays that way until
          Adnan's safe-pose definition lands under the manipulation action contract. It was deliberately not given a shape that
@@ -161,11 +164,14 @@
 
     <!-- ===== 3. Derived: self-collision matrix (README, "The SRDF") ================================================= -->
     <!-- BEGIN GENERATED ACM -->
-    <!-- Derived by scripts/derive_acm.py (P12A) from the model's kinematic tree at mast_1350: no sampling, no seed. A pair is
+    <!-- Derived by scripts/derive_acm.py (P12A) from the model's kinematic tree at bp000, lift_joint at 0: no sampling, no seed. A pair is
          disabled for exactly three reasons, upstream-declared (section 1), `Adjacent` (a structural neighbour) and
          `ConstantTransform` (no movable joint between the links, clear in the one evaluation that settles every configuration):
-         16 Adjacent and 77 ConstantTransform pairs here, none of them from a sampler.
+         18 Adjacent and 45 ConstantTransform pairs here, none of them from a sampler.
          Every other pair is enabled. Record: config/acm/acm_generation.yaml; the way to redo it: scripts/regenerate_acm.sh. -->
+    <disable_collisions link1="arm_profile_link" link2="base_link" reason="Adjacent"/>
+    <disable_collisions link1="arm_profile_link" link2="openarm_left_base_link" reason="Adjacent"/>
+    <disable_collisions link1="arm_profile_link" link2="openarm_right_base_link" reason="Adjacent"/>
     <disable_collisions link1="base_link" link2="bl_caster_link" reason="Adjacent"/>
     <disable_collisions link1="base_link" link2="bl_wheel_link" reason="ConstantTransform"/>
     <disable_collisions link1="base_link" link2="br_caster_link" reason="Adjacent"/>
@@ -177,9 +183,8 @@
     <disable_collisions link1="base_link" link2="fr_wheel_link" reason="ConstantTransform"/>
     <disable_collisions link1="base_link" link2="left_wheel_link" reason="Adjacent"/>
     <disable_collisions link1="base_link" link2="lidar_link" reason="Adjacent"/>
-    <disable_collisions link1="base_link" link2="mast_base_link" reason="Adjacent"/>
-    <disable_collisions link1="base_link" link2="openarm_left_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="base_link" link2="openarm_right_base_link" reason="ConstantTransform"/>
+    <disable_collisions link1="base_link" link2="openarm_left_base_link" reason="Adjacent"/>
+    <disable_collisions link1="base_link" link2="openarm_right_base_link" reason="Adjacent"/>
     <disable_collisions link1="base_link" link2="right_wheel_link" reason="Adjacent"/>
     <disable_collisions link1="bl_caster_link" link2="bl_wheel_link" reason="Adjacent"/>
     <disable_collisions link1="bl_caster_link" link2="br_caster_link" reason="ConstantTransform"/>
@@ -190,9 +195,6 @@
     <disable_collisions link1="bl_caster_link" link2="fr_caster_link" reason="ConstantTransform"/>
     <disable_collisions link1="bl_caster_link" link2="fr_wheel_link" reason="ConstantTransform"/>
     <disable_collisions link1="bl_caster_link" link2="lidar_link" reason="ConstantTransform"/>
-    <disable_collisions link1="bl_caster_link" link2="mast_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="bl_caster_link" link2="openarm_left_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="bl_caster_link" link2="openarm_right_base_link" reason="ConstantTransform"/>
     <disable_collisions link1="bl_wheel_link" link2="br_caster_link" reason="ConstantTransform"/>
     <disable_collisions link1="bl_wheel_link" link2="br_wheel_link" reason="ConstantTransform"/>
     <disable_collisions link1="bl_wheel_link" link2="camera_link" reason="ConstantTransform"/>
@@ -201,9 +203,6 @@
     <disable_collisions link1="bl_wheel_link" link2="fr_caster_link" reason="ConstantTransform"/>
     <disable_collisions link1="bl_wheel_link" link2="fr_wheel_link" reason="ConstantTransform"/>
     <disable_collisions link1="bl_wheel_link" link2="lidar_link" reason="ConstantTransform"/>
-    <disable_collisions link1="bl_wheel_link" link2="mast_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="bl_wheel_link" link2="openarm_left_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="bl_wheel_link" link2="openarm_right_base_link" reason="ConstantTransform"/>
     <disable_collisions link1="br_caster_link" link2="br_wheel_link" reason="Adjacent"/>
     <disable_collisions link1="br_caster_link" link2="camera_link" reason="ConstantTransform"/>
     <disable_collisions link1="br_caster_link" link2="fl_caster_link" reason="ConstantTransform"/>
@@ -211,53 +210,27 @@
     <disable_collisions link1="br_caster_link" link2="fr_caster_link" reason="ConstantTransform"/>
     <disable_collisions link1="br_caster_link" link2="fr_wheel_link" reason="ConstantTransform"/>
     <disable_collisions link1="br_caster_link" link2="lidar_link" reason="ConstantTransform"/>
-    <disable_collisions link1="br_caster_link" link2="mast_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="br_caster_link" link2="openarm_left_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="br_caster_link" link2="openarm_right_base_link" reason="ConstantTransform"/>
     <disable_collisions link1="br_wheel_link" link2="camera_link" reason="ConstantTransform"/>
     <disable_collisions link1="br_wheel_link" link2="fl_caster_link" reason="ConstantTransform"/>
     <disable_collisions link1="br_wheel_link" link2="fl_wheel_link" reason="ConstantTransform"/>
     <disable_collisions link1="br_wheel_link" link2="fr_caster_link" reason="ConstantTransform"/>
     <disable_collisions link1="br_wheel_link" link2="fr_wheel_link" reason="ConstantTransform"/>
     <disable_collisions link1="br_wheel_link" link2="lidar_link" reason="ConstantTransform"/>
-    <disable_collisions link1="br_wheel_link" link2="mast_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="br_wheel_link" link2="openarm_left_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="br_wheel_link" link2="openarm_right_base_link" reason="ConstantTransform"/>
     <disable_collisions link1="camera_link" link2="fl_caster_link" reason="ConstantTransform"/>
     <disable_collisions link1="camera_link" link2="fl_wheel_link" reason="ConstantTransform"/>
     <disable_collisions link1="camera_link" link2="fr_caster_link" reason="ConstantTransform"/>
     <disable_collisions link1="camera_link" link2="fr_wheel_link" reason="ConstantTransform"/>
     <disable_collisions link1="camera_link" link2="lidar_link" reason="ConstantTransform"/>
-    <disable_collisions link1="camera_link" link2="mast_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="camera_link" link2="openarm_left_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="camera_link" link2="openarm_right_base_link" reason="ConstantTransform"/>
     <disable_collisions link1="fl_caster_link" link2="fl_wheel_link" reason="Adjacent"/>
     <disable_collisions link1="fl_caster_link" link2="fr_caster_link" reason="ConstantTransform"/>
     <disable_collisions link1="fl_caster_link" link2="fr_wheel_link" reason="ConstantTransform"/>
     <disable_collisions link1="fl_caster_link" link2="lidar_link" reason="ConstantTransform"/>
-    <disable_collisions link1="fl_caster_link" link2="mast_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="fl_caster_link" link2="openarm_left_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="fl_caster_link" link2="openarm_right_base_link" reason="ConstantTransform"/>
     <disable_collisions link1="fl_wheel_link" link2="fr_caster_link" reason="ConstantTransform"/>
     <disable_collisions link1="fl_wheel_link" link2="fr_wheel_link" reason="ConstantTransform"/>
     <disable_collisions link1="fl_wheel_link" link2="lidar_link" reason="ConstantTransform"/>
-    <disable_collisions link1="fl_wheel_link" link2="mast_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="fl_wheel_link" link2="openarm_left_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="fl_wheel_link" link2="openarm_right_base_link" reason="ConstantTransform"/>
     <disable_collisions link1="fr_caster_link" link2="fr_wheel_link" reason="Adjacent"/>
     <disable_collisions link1="fr_caster_link" link2="lidar_link" reason="ConstantTransform"/>
-    <disable_collisions link1="fr_caster_link" link2="mast_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="fr_caster_link" link2="openarm_left_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="fr_caster_link" link2="openarm_right_base_link" reason="ConstantTransform"/>
     <disable_collisions link1="fr_wheel_link" link2="lidar_link" reason="ConstantTransform"/>
-    <disable_collisions link1="fr_wheel_link" link2="mast_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="fr_wheel_link" link2="openarm_left_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="fr_wheel_link" link2="openarm_right_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="lidar_link" link2="mast_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="lidar_link" link2="openarm_left_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="lidar_link" link2="openarm_right_base_link" reason="ConstantTransform"/>
-    <disable_collisions link1="mast_base_link" link2="openarm_left_base_link" reason="Adjacent"/>
-    <disable_collisions link1="mast_base_link" link2="openarm_right_base_link" reason="Adjacent"/>
     <disable_collisions link1="openarm_left_base_link" link2="openarm_right_base_link" reason="Adjacent"/>
     <!-- END GENERATED ACM -->
 

@@ -1,7 +1,7 @@
 """A MoveIt planning scene of the combined model for collision checks that ignore the SRDF: what M03, the matrix derivation and the planning-time
 measurement share. Needs moveit_py, so it runs in a process of its own that leaves with os._exit (a MoveItPy that is torn down segfaults).
 
-    with open_scene("mast_1350") as scene:
+    with open_scene("bp000") as scene:
         scene.set_default_state()
         colliding = scene.colliding(pairs)             # the subset of `pairs` that collide in the current state, with the SRDF's list ignored
 
@@ -26,13 +26,13 @@ def colliding_pairs(check, pairs):
 
 
 class Scene:
-    def __init__(self, mast_id, srdf_file=None, node_name="acm_scene", hardware_profile="mock"):
+    def __init__(self, base_plate=None, srdf_file=None, node_name="acm_scene", hardware_profile="mock"):
         from moveit.core import collision_detection as cd
         from moveit.core.robot_state import RobotState
         from moveit.planning import MoveItPy
         from openamrobot_upperbody_moveit.moveit_config import moveit_config
         self.cd = cd
-        cfg = moveit_config(mast_id, hardware_profile, srdf_file=srdf_file).to_dict()
+        cfg = moveit_config(base_plate, hardware_profile, srdf_file=srdf_file).to_dict()
         cfg["planning_scene_monitor_options"] = {
             "name": "planning_scene_monitor", "robot_description": "robot_description", "joint_state_topic": "/joint_states",
             "attached_collision_object_topic": "/moveit_cpp/planning_scene_monitor",
@@ -46,7 +46,7 @@ class Scene:
         self.urdf_text = cfg["robot_description"]
         self.urdf_root = ET.fromstring(self.urdf_text)
         self.link_names = [link.get("name") for link in self.urdf_root.findall("link")]
-        self.moveit_py = MoveItPy(node_name=f"{node_name}_{mast_id}", config_dict=cfg)
+        self.moveit_py = MoveItPy(node_name=f"{node_name}_{base_plate or 'baseline'}", config_dict=cfg)
         _KEEP_ALIVE.append(self.moveit_py)
         self.robot_model = self.moveit_py.get_robot_model()
         self.state = RobotState(self.robot_model)
@@ -85,6 +85,6 @@ class Scene:
         return colliding_pairs(self.any_collision, list(pairs))
 
 
-def open_scene(mast_id, srdf_file=None, node_name="acm_scene", hardware_profile="mock"):
-    """A Scene to use as a context manager (see the module docstring)."""
-    return Scene(mast_id, srdf_file=srdf_file, node_name=node_name, hardware_profile=hardware_profile)
+def open_scene(base_plate=None, srdf_file=None, node_name="acm_scene", hardware_profile="mock"):
+    """A Scene to use as a context manager (see the module docstring). `base_plate`: bp000 | bp050 (default: option B's baseline)."""
+    return Scene(base_plate, srdf_file=srdf_file, node_name=node_name, hardware_profile=hardware_profile)

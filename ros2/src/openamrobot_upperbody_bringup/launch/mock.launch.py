@@ -1,6 +1,6 @@
 """Mock bringup: the arms on mock_components/GenericSystem, all five controllers active, nothing else.
 
-    ros2 launch openamrobot_upperbody_bringup mock.launch.py [mast_id:=mast_1350] [rviz:=true]
+    ros2 launch openamrobot_upperbody_bringup mock.launch.py [base_plate:=bp000] [head_pitch:=hp25] [rviz:=true]
 
 Starts robot_state_publisher on the combined description with hardware_profile:=mock, ros2_control_node with
 openamrobot_upperbody_control/config/arm_controllers.yaml, and spawners for joint_state_broadcaster,
@@ -8,8 +8,13 @@ left_arm_controller, right_arm_controller, left_gripper_controller and right_gri
 under ros2_control (ADR-003) and is not started here.
 
 Args
-  mast_id  mast_1300 | mast_1350 | mast_1400 | mast_1450   (default mast_1350, the release configuration)
-  rviz     true | false                                     (default false: headless)
+  column       dold_v4_350 | tl3_400   (default dold_v4_350; tl3_400 has no supplier data and does not expand)
+  base_plate   bp000 | bp050             (default bp000: option B's baseline; column axis x +0.060 / +0.110 from base_link)
+  head_pitch   hp15 | hp20 | hp25 | hp30 | hp35   (default hp25)
+  base_tilt    bt05 | bt10 | bt15        (default bt10)
+  rviz         true | false                      (default false: headless)
+The lift is not an argument: lift_joint is a joint (calibration stops L1000 / L1175 / L1350 are positions of it), and with no
+ros2_control interface for it nothing in this launch reports it; moveit.launch.py's stub does.
 
 Overlay: the OpenArm and base meshes resolve through the workspace overlay; source install/setup.bash first (RViz only).
 """
@@ -34,14 +39,16 @@ def spawner(controller):
 
 
 def generate_launch_description():
-    mast_id = LaunchConfiguration("mast_id")
     rviz = LaunchConfiguration("rviz")
 
     robot_description = ParameterValue(
         Command([
             FindExecutable(name="xacro"), " ",
             PathJoinSubstitution([FindPackageShare(DESCRIPTION), "urdf", "combined_robot.xacro"]),
-            " mast_id:=", mast_id,
+            " column:=", LaunchConfiguration("column"),
+            " base_plate:=", LaunchConfiguration("base_plate"),
+            " head_pitch:=", LaunchConfiguration("head_pitch"),
+            " base_tilt:=", LaunchConfiguration("base_tilt"),
             " hardware_profile:=mock",
         ]),
         value_type=str,
@@ -62,8 +69,10 @@ def generate_launch_description():
         on_exit=[spawner(name) for name in ARM_AND_GRIPPER_CONTROLLERS]))
 
     return LaunchDescription([
-        DeclareLaunchArgument("mast_id", default_value="mast_1350",
-                              description="mast_1300 | mast_1350 | mast_1400 | mast_1450"),
+        DeclareLaunchArgument("column", default_value="dold_v4_350", description="dold_v4_350 | tl3_400 (no supplier data: refused)"),
+        DeclareLaunchArgument("base_plate", default_value="bp000", description="bp000 | bp050"),
+        DeclareLaunchArgument("head_pitch", default_value="hp25", description="hp15 | hp20 | hp25 | hp30 | hp35"),
+        DeclareLaunchArgument("base_tilt", default_value="bt10", description="bt05 | bt10 | bt15"),
         DeclareLaunchArgument("rviz", default_value="false", description="true | false. Start RViz2 (default headless)"),
         robot_state_publisher,
         ros2_control_node,

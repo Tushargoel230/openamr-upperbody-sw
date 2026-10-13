@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """How long do the twelve named-pose plans take, with a given SRDF? (P12A: the cost of enabling every pair that has no reason to be disabled.)
 
-    ros2 run openamrobot_upperbody_moveit planning_time.py [--srdf PATH] [--repeats 10] [--mast-id mast_1350] [--json OUT]
+    ros2 run openamrobot_upperbody_moveit planning_time.py [--srdf PATH] [--repeats 10] [--base-plate bp000] [--json OUT]
 
 Plans every named pose of both arms and both grippers, one after the other, offline (moveit_py, OMPL RRTConnect, the same requests as M06 at the
 configured limits), `--repeats` times, and reports per pose the median, the best and the worst wall time and how many of the plans succeeded. Run it
@@ -25,11 +25,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--srdf", default=None)
     parser.add_argument("--repeats", type=int, default=10)
-    parser.add_argument("--mast-id", default="mast_1350")
+    parser.add_argument("--base-plate", default="bp000", choices=("bp000", "bp050"))
     parser.add_argument("--json", default=None)
     args = parser.parse_args(argv)
     import limits_sensitivity as ls
-    moveit_py = ls.make_moveit_py(args.mast_id, srdf_file=args.srdf)
+    moveit_py = ls.make_moveit_py(args.base_plate, srdf_file=args.srdf)
     ls.plan_all(moveit_py, 1.0)                                    # warm-up: not counted
     runs = [ls.plan_all(moveit_py, 1.0) for _ in range(args.repeats)]
     poses = []
@@ -39,7 +39,7 @@ def main(argv=None):
                       "plans_ok": sum(run[index]["ok"] for run in runs), "median_s": round(statistics.median(walls), 4),
                       "best_s": round(min(walls), 4), "worst_s": round(max(walls), 4)})
     total = [round(sum(run[i]["wall_s"] for i in range(len(run))), 3) for run in runs]
-    out = {"srdf": args.srdf or "the installed SRDF", "mast_id": args.mast_id, "repeats": args.repeats, "poses": poses,
+    out = {"srdf": args.srdf or "the installed SRDF", "base_plate": args.base_plate, "repeats": args.repeats, "poses": poses,
            "sequence_total_s": {"median": round(statistics.median(total), 3), "best": min(total), "worst": max(total)},
            "all_plans_ok": all(p["plans_ok"] == p["plans"] for p in poses),
            "collision_check_count": "not exposed by moveit_py's plan result"}

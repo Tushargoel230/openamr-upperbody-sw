@@ -5,7 +5,7 @@
     build_a7_evidence.py --clear
 
 Writes `<evidence dir>/<UTC timestamp>_a7.json` in the openamr.evidence.v1 shape (VERIFICATION.md), `profile: "a7"`,
-`evidence_class: "simulation"`: G01 and G02 (the Gazebo package's launch tests), M01 (once per mast ID), M02, M03, M04, the M05 and M06 checks
+`evidence_class: "simulation"`: G01 and G02 (the Gazebo package's launch tests), M01 (once per lift stop), M02, M03, M04, the M05 and M06 checks
 this step proposes, I01, V01 (still WARN: a person has to answer docs/v01_visual_check.md) and AUX. It reuses the A6 report's machinery
 (build_evidence.py and evidence_common.py of the description package, installed next to it) and its rules:
 
@@ -44,14 +44,17 @@ import evidence_common as ev  # noqa: E402
 REPO = be.REPO
 PROFILE = "a7"
 EVIDENCE_CLASS = "simulation"
-MAST_IDS = ("mast_1300", "mast_1350", "mast_1400", "mast_1450")
+# Option B's lift calibration stops: joint positions with a calibration, NOT configuration IDs (they are not in the config id). M01 runs the
+# mock stack once at each; M02 runs Gazebo once at the one the simulator's default state is (L1000: lift_joint at its zero).
+LIFT_STOPS = ("L1000", "L1175", "L1350")
+SIM_LIFT_STOP = "L1000"
 A7_CHECKS = [
     ("G01", "combined robot in Gazebo: arm controllers, arm goal, Nav2-facing topics unchanged"),
     ("G02", "grippers close in Gazebo and finger_joint2 follows finger_joint1 in the physics (Bullet-Featherstone, passed explicitly)"),
-    ("M01", "named poses plan and execute on mock at every release-candidate mast ID"),
-    ("M02", "named poses plan and execute in Gazebo at mast_1350"),
+    ("M01", "named poses plan and execute on mock at every lift calibration stop (L1000, L1175, L1350)"),
+    ("M02", "named poses plan and execute in Gazebo at the baseline configuration (lift_joint at L1000)"),
     ("M03", "ACM: every disabled pair has a reason that can be shown (upstream-declared, Adjacent, ConstantTransform); every other pair is enabled"),
-    ("M04", "a goal inside the nearest reachable structure volume (mast_base_link) is rejected by planning (the base body is out of the arms' reach)"),
+    ("M04", "a goal inside the nearest reachable structure volume (arm_profile_link) is rejected by planning (the base body is out of the arms' reach)"),
     ("M05", "per-hand gripper values: closed is each hand's own far limit, opposite signs (ADR-009 point 5); the single-number version fails both ways"),
     ("M06", "named-pose plans need some acceleration limit and are insensitive to its value across three orders of magnitude (the limits stay placeholders)"),
     ("L01", "launch test: five controllers active on mock, one trajectory followed"),
@@ -63,22 +66,22 @@ A7_CHECKS = [
 ]
 PACKAGES = {"gazebo": "openamrobot_upperbody_gazebo", "moveit": "openamrobot_upperbody_moveit", "bringup": "openamrobot_upperbody_bringup"}
 EXPECTED_STEPS = ("colcon_test_gazebo", "colcon_test_moveit", "colcon_test_bringup")
-# A check recorded by one sidecar per run, and the runs it must have. M01 is once per mast ID: the cut order in the prompt allows fewer
-# (mast_1350 plus one other, with the reason recorded) through A7_M01_MASTS, and the report then says so.
+# A check recorded by one sidecar per run, and the runs it must have. M01 is once per lift stop: the cut order allows fewer (with the reason
+# recorded) through A7_M01_STOPS, and the report then says so.
 SIDECAR_REQUIRED = {"G01", "G02", "M01", "M02", "M03", "M04", "M05", "M06"}
 REFUSED_DIRTY = be.REFUSED_DIRTY
 
 
-def expected_m01_masts():
-    masts = tuple(m for m in os.environ.get("A7_M01_MASTS", ",".join(MAST_IDS)).split(",") if m)
-    unknown = [m for m in masts if m not in MAST_IDS]
+def expected_m01_stops():
+    stops = tuple(m for m in os.environ.get("A7_M01_STOPS", ",".join(LIFT_STOPS)).split(",") if m)
+    unknown = [m for m in stops if m not in LIFT_STOPS]
     if unknown:
-        raise ev.EvidenceError(f"A7_M01_MASTS names {unknown}; accepted: {', '.join(MAST_IDS)}")
-    return masts
+        raise ev.EvidenceError(f"A7_M01_STOPS names {unknown}; accepted: {', '.join(LIFT_STOPS)}")
+    return stops
 
 
 def all_fresh_sidecars(directory, since):
-    """{check id: [sidecar dicts]}: unlike evidence_common.read_sidecars, EVERY file of an id (M01 has one per mast ID)."""
+    """{check id: [sidecar dicts]}: unlike evidence_common.read_sidecars, EVERY file of an id (M01 has one per lift stop)."""
     out = defaultdict(list)
     for filename in sorted(os.listdir(directory)):
         if ev.SIDECAR_RE.match(filename) and os.path.getmtime(os.path.join(directory, filename)) >= since:
@@ -106,30 +109,31 @@ def clamp_totals(runs):
             "max_over_epsilon_rad": max((c["max_over_epsilon_rad"] for _, c in present), default=None)}
 
 
-def combine_multi(check_id, counts, docs, expected_masts, missing=None):
-    """-> (result, details) for a check recorded once per mast ID (M01) or once (M02, with its mast in the details)."""
+def combine_multi(check_id, counts, docs, expected_stops, missing=None):
+    """-> (result, details) for a check recorded once per lift stop (M01) or once (M02, with its stop in the details)."""
     details = {}
     if counts:
         details = {"tests": counts["tests"], "failed": counts["failures"], "skipped": counts["skipped"]}
         if counts["failed_tests"]:
             details["failed_tests"] = counts["failed_tests"][:40]
-    by_mast = {d["details"].get("mast_id"): d for d in docs}
+    by_stop = {d["details"].get("lift_stop"): d for d in docs}
     runs, problems, no_result = {}, [], []
     if missing:
         details["tests_without_a_result"] = list(missing)[:40]
-    for mast in expected_masts:
-        doc = by_mast.get(mast)
+    for stop in expected_stops:
+        doc = by_stop.get(stop)
         if doc is None:
-            problems.append(f"no result for {mast}")
-            no_result.append(mast)
+            problems.append(f"no result for {stop}")
+            no_result.append(stop)
             continue
-        runs[mast] = {"result": doc["result"], **run_summary(doc["details"])}
+        runs[stop] = {"result": doc["result"], "lift_joint_position_m": doc["details"].get("lift_joint_position_m"),
+                      **run_summary(doc["details"])}
         if doc["result"] != "PASS":
-            problems.append(f"{mast}: {doc['result']}")
-    details["expected_mast_ids"] = list(expected_masts)
+            problems.append(f"{stop}: {doc['result']}")
+    details["expected_lift_stops"] = list(expected_stops)
     details["runs"] = runs
-    if check_id == "M01" and tuple(expected_masts) != MAST_IDS:
-        details["reduced_set"] = f"the cut order reduced M01 to {', '.join(expected_masts)} (A7_M01_MASTS); the other mast IDs were not run"
+    if check_id == "M01" and tuple(expected_stops) != LIFT_STOPS:
+        details["reduced_set"] = f"the cut order reduced M01 to {', '.join(expected_stops)} (A7_M01_STOPS); the other lift stops were not run"
     # The clamp's counters are part of the result: no counters is no evidence that the joint state was only ever float noise away from a limit,
     # and a reading beyond the epsilon is something other than float noise moving a joint, which a PASS must not hide.
     totals = clamp_totals(runs)
@@ -178,7 +182,11 @@ def limitations(sidecars):
         "limits'; nothing here is a validated limit, a payload, a torque, or a statement about a physical robot",
         "the acceleration limits are engineering defaults (source: engineering_default, status: placeholder; rule: velocity / 2 s) written because "
         "upstream declares none (openamrobot-manipulation#10, ADR-009); M06 shows the plans need SOME limit and do not depend on its value",
-        "MoveIt never sees base_link's 4.18 kg inertial: KDL drops the inertia of a root link (W01)",
+        "the lift is not under ros2_control and has no authority to be commanded (option B: effort 0, velocity 0): its state is the "
+        "operating point of a run (the mock stub's lift_position in M01; joint_state_publisher's default zero in Gazebo, not read from the "
+        "physics), and MoveIt plans the arms from it. The three lift stops are calibration IDs, not configuration IDs",
+        "the lift column has no collision geometry (its lateral extent is not sourced): the arms can plan through the column body, and "
+        "arm_profile_link, option B's 340 mm box, is the one collision body of the upper structure",
         "`park` is a placeholder copy of upstream's `home`, until the safe-pose definition lands under the manipulation action contract",
         "the gripper controller is still the deprecated position_controllers/GripperActionController serving GripperCommand (option 1 of "
         "ADR-009 point 4): this report does not choose between the three gripper interfaces (manipulation#11)",
@@ -191,8 +199,9 @@ def limitations(sidecars):
         "from is therefore clamped to the limit by joint_state_clamp.py, by at most its epsilon, and only that topic: no limit was widened and no "
         "pose moved. The clamp's counters are in M01/M02 (clamp_totals) and a reading beyond the epsilon is passed through, never clamped",
         "move_group exits with SIGSEGV when it is stopped (MoveIt 2.12.4); the checks allow that code for that one process and no other",
-        "the arms cannot reach the platform's base body: M04's refused goal is inside mast_base_link's volume, the nearest base-side volume a "
-        "left gripper can be put in",
+        "the arms cannot reach the platform's base body: M04's refused goal is inside arm_profile_link's volume, the nearest structure volume a "
+        "left gripper can be put in; the arms are 62 mm apart at their bases (option B's y = +-0.031) and the left gripper reaches the right "
+        "arm's own links in some random states, which is a reach fact for A4",
         "the collision matrix is DERIVED, not sampled (scripts/derive_acm.py): a pair is disabled only if upstream declares it, it is a structural "
         "neighbour (Adjacent), or no movable joint lies between its links and it is clear in the one evaluation that settles every configuration "
         "(ConstantTransform); every other pair is enabled. The Setup Assistant's sampler, which has no seed and gave a different matrix on every "
@@ -235,14 +244,14 @@ def build(args):
                        ("openamrobot_upperbody_bringup", ("launch",))):
         differing += [f"{pkg}/{d}" for d in be.trees_differ(source(pkg), ev.package_share(pkg), names=names)]
 
-    masts = expected_m01_masts()
+    stops = expected_m01_stops()
     checks = []
     for check_id, name in A7_CHECKS:
         docs = sidecars.get(check_id, [])
         if check_id == "M01":
-            result, details = combine_multi("M01", counts.get("M01"), docs, masts, missing.get("M01"))
+            result, details = combine_multi("M01", counts.get("M01"), docs, stops, missing.get("M01"))
         elif check_id == "M02":
-            result, details = combine_multi("M02", counts.get("M02"), docs, ("mast_1350",), missing.get("M02"))
+            result, details = combine_multi("M02", counts.get("M02"), docs, (SIM_LIFT_STOP,), missing.get("M02"))
         elif check_id == "V01":
             result, details = "WARN", be.v01_details(8)
         elif check_id == "I01":
@@ -285,12 +294,12 @@ def build(args):
 
     with open(os.path.join(share, "config", "datums.yaml")) as f:
         datums = yaml_load(f)
-    with open(os.path.join(share, "config", "mast_ids.yaml")) as f:
-        mast_ids = yaml_load(f)
-    commit, commit_source = ev.upstream_commit_and_source(workspace)
+    upperbody = ev.load_upperbody(share)
     import print_config_id as pci
-    matrix = [c for c in ev.expansion_matrix(mast_ids) if c[1] == "openarm" and c[2] in ("mock", "gazebo")]
-    config_ids = {ev.expansion_label(*c): pci.config_id_of(share, commit, *c) for c in matrix}
+    pins, pin_sources = pci.pins_of(workspace)
+    commit = pins["openarm_description"]
+    matrix = [r for r in ev.expansion_matrix(upperbody) if r["arm_package"] == "openarm" and r["hardware_profile"] in ("mock", "gazebo")]
+    config_ids = {ev.row_label(r): pci.config_id_of(share, pins, r) for r in matrix}
     provenance = defaultdict(int)
     for d in datums["datums"].values():
         provenance[d["status"]] += 1
@@ -301,6 +310,9 @@ def build(args):
         head = ev.git_head(ev.upstream_checkout(workspace, name))
         if head:
             upstream[name] = head
+    platform = ev.git_head(os.path.join(workspace, "src", "openamr-platform-sw"))
+    if platform:        # the base is included unchanged: its commit is an input of every expansion (inside canonical_urdf)
+        upstream["openamr-platform-sw"] = platform[:7]
     simulator = be.simulator_versions()
     try:
         import subprocess
@@ -312,7 +324,8 @@ def build(args):
         "schema": "openamr.evidence.v1", "repo": REPO, "git_hash": ev.git_head(repo), "dirty": dirty,
         "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "profile": PROFILE, "evidence_class": EVIDENCE_CLASS,
         "simulator": {**simulator, "moveit": moveit_version}, "upstream": upstream, "datums_revision": datums["revision"],
-        "checks": checks, "config_ids": config_ids, "moveit_config": moveit_identity(),
+        "checks": checks, "config_ids": config_ids, "config_id_inputs": be.CONFIG_ID_INPUTS,
+        "calibration_ids": be.calibration_ids(upperbody), "moveit_config": moveit_identity(),
         "provenance": {k: provenance[k] for k in ("placeholder", "provisional", "verified")},
         "limitations": limitations(sidecars),
         # What the joint-state clamp did, summed over M01/M02. Not a result of its own: a reading beyond the epsilon makes M01/M02 WARN.

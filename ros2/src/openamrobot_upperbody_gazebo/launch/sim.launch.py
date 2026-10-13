@@ -1,6 +1,6 @@
 """The combined OpenAMRobot 2.0 robot in Gazebo Harmonic: the base on its DiffDrive plugin, both arms on gz_ros2_control.
 
-    ros2 launch openamrobot_upperbody_gazebo sim.launch.py [mast_id:=mast_1350] [headless:=true] [world:=/path/x.sdf]
+    ros2 launch openamrobot_upperbody_gazebo sim.launch.py [base_plate:=bp000] [headless:=true] [world:=/path/x.sdf]
                                                            [rviz:=true]
 
 What it starts, in this order of dependence
@@ -13,19 +13,24 @@ What it starts, in this order of dependence
                          Nav2 and docking use, under the names they use), plus one bridge of ours for the base's joint
                          states onto a separate topic (see below)
   spawners               joint_state_broadcaster, then left_arm, right_arm, left_gripper and right_gripper controllers
-  joint_state_publisher  the ONLY publisher of /joint_states: it merges the base's wheel joints and the arms' joints
+  joint_state_publisher  the ONLY publisher of /joint_states: it merges the base's wheel joints and the arms' joints, and
+                         reports every joint nobody else does (lift_joint) at its default, zero = calibration stop L1000
 
 /joint_states: platform-sw's JointStatePublisher (scoped by its own <joint_name> list to the two wheels) and our
 joint_state_broadcaster (the sixteen arm joints) must not both write to /joint_states. The wheels come in on
 /base/joint_states, the arms on /arm/joint_states, and joint_state_publisher merges them. See the package README for what
 was observed before this was decided.
 
-odom -> base_link: from the DiffDrive plugin through the /tf bridge, and from nowhere else. robot_state_publisher cannot
-publish it, because `odom` is not a link of the description (and with the planar joint enabled KDL turns it into a fixed
-joint, check W02). The default here is enable_planar_base:=false.
+odom -> base_footprint: from the DiffDrive plugin through the /tf bridge, and from nowhere else (platform-sw 935efc7: the odom
+child is base_footprint so that base_link keeps one parent, REP 105). robot_state_publisher cannot publish it, because `odom`
+is not a link of the description (and with the planar joint enabled KDL turns it into a fixed joint, check W02). The default
+here is enable_planar_base:=false.
 
 Args
-  mast_id   mast_1300 | mast_1350 | mast_1400 | mast_1450   (default mast_1350, the release configuration)
+  column       dold_v4_350 | tl3_400   (default dold_v4_350; tl3_400 has no supplier data and does not expand)
+  base_plate   bp000 | bp050             (default bp000: option B's baseline; column axis x +0.060 / +0.110 from base_link)
+  head_pitch   hp15 | hp20 | hp25 | hp30 | hp35   (default hp25)
+  base_tilt    bt05 | bt10 | bt15        (default bt10)
   world     path to a Gazebo world .sdf                       (default: worlds/empty.sdf in this package; platform-sw's is
             $(ros2 pkg prefix --share openamrobot_gazebo)/worlds/walled_world.sdf)
   headless  true | false     (default false) true runs `gz sim -s`: no Gazebo window, as the smoke test does
@@ -75,7 +80,6 @@ def spawner(controller, *extra):
 
 
 def generate_launch_description():
-    mast_id = LaunchConfiguration("mast_id")
     world = LaunchConfiguration("world")
     headless = LaunchConfiguration("headless")
     physics_engine = LaunchConfiguration("physics_engine")
@@ -104,7 +108,10 @@ def generate_launch_description():
         Command([
             FindExecutable(name="xacro"), " ",
             PathJoinSubstitution([FindPackageShare(DESCRIPTION), "urdf", "combined_robot.xacro"]),
-            " mast_id:=", mast_id,
+            " column:=", LaunchConfiguration("column"),
+            " base_plate:=", LaunchConfiguration("base_plate"),
+            " head_pitch:=", LaunchConfiguration("head_pitch"),
+            " base_tilt:=", LaunchConfiguration("base_tilt"),
             " hardware_profile:=gazebo",
             " controllers_file:=", controllers_file,
         ]),
@@ -164,8 +171,10 @@ def generate_launch_description():
                      arguments=["-d", os.path.join(gazebo_share, "config", "sim.rviz")])
 
     return LaunchDescription([
-        DeclareLaunchArgument("mast_id", default_value="mast_1350",
-                              description="mast_1300 | mast_1350 | mast_1400 | mast_1450"),
+        DeclareLaunchArgument("column", default_value="dold_v4_350", description="dold_v4_350 | tl3_400 (no supplier data: refused)"),
+        DeclareLaunchArgument("base_plate", default_value="bp000", description="bp000 | bp050"),
+        DeclareLaunchArgument("head_pitch", default_value="hp25", description="hp15 | hp20 | hp25 | hp30 | hp35"),
+        DeclareLaunchArgument("base_tilt", default_value="bt10", description="bt05 | bt10 | bt15"),
         DeclareLaunchArgument("world", default_value=os.path.join(gazebo_share, "worlds", "empty.sdf"),
                               description="Path to the Gazebo world .sdf"),
         DeclareLaunchArgument("headless", default_value="false",

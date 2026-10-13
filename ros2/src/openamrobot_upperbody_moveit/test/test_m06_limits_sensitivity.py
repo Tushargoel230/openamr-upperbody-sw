@@ -29,7 +29,7 @@ def test_m06_plans_succeed_at_every_scaling_of_the_configured_limits_and_fail_wi
     needs_some = result["without_limits"]["plans_ok"] < result["without_limits"]["plans"]
     write_sidecar("M06", "limits_sensitivity", "named-pose plans need some acceleration limit and do not depend on its value",
                   "FAIL" if load_bearing else "PASS",
-                  {"verdict": result["verdict"], "conclusion": result["conclusion"], "mast_id": result["mast_id"], "velocity_scaling": result["velocity_scaling"],
+                  {"verdict": result["verdict"], "conclusion": result["conclusion"], "base_plate": result["base_plate"], "velocity_scaling": result["velocity_scaling"],
                    "variants": [{k: v[k] for k in ("variant", "acceleration_scaling", "plans", "plans_ok", "total_duration_s")}
                                 for v in result["variants"]],
                    "without_limits": {k: result["without_limits"][k] for k in ("variant", "plans", "plans_ok")},

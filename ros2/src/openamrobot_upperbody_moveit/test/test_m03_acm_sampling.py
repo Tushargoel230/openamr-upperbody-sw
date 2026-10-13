@@ -22,7 +22,7 @@ from openamrobot_upperbody_moveit.acm_scene import colliding_pairs
 
 SCRIPT = os.path.join(get_package_prefix("openamrobot_upperbody_moveit"), "lib", "openamrobot_upperbody_moveit", "validate_acm.py")
 SAMPLES = 2000
-MASTS = ("mast_1300", "mast_1350", "mast_1400", "mast_1450")
+STOPS = ("L1000", "L1175", "L1350")           # option B's lift calibration stops: lift_joint held there, everything else sampled
 
 
 def run_validate(*args, timeout):
@@ -47,22 +47,22 @@ def mutate(text, *, remove=None, relabel=None, add=None):
     return text
 
 
-def validate_mutated(tmp, mast_id="mast_1350", samples=20, **defect):
+def validate_mutated(tmp, lift_stop="L1000", samples=20, **defect):
     srdf, out = os.path.join(tmp, "mutated.srdf"), os.path.join(tmp, "m03.json")
     with open(srdf, "w") as f:
         f.write(mutate(read_text(SRDF_FILE), **defect))
-    done = run_validate("--mast-id", mast_id, "--samples", str(samples), "--srdf", srdf, "--json", out, timeout=300)
+    done = run_validate("--lift-stop", lift_stop, "--samples", str(samples), "--srdf", srdf, "--json", out, timeout=300)
     with open(out) as f:
         return done, json.load(f)["results"][0]
 
 
 # Pairs measured to behave as the mutation says, with nothing ignored (the P10 mutation never worked because it assumed instead of measuring):
-CONSTANT_AND_COLLIDING = ("base_link", "mast_base_link")                     # no joint between them, collides in the default state, so in every state
-COLLIDES_SOMETIMES = ("mast_base_link", "openarm_left_ee_base_link")         # arm joints between them; collides in about 2 of 100 random states
+CONSTANT_AND_COLLIDING = ("base_link", "bl_caster_link")                     # no joint between them, collides in the default state, so in every state
+COLLIDES_SOMETIMES = ("arm_profile_link", "openarm_left_ee_base_link")       # arm joints between them; collides in about 2 of 100 random states (9 of 400)
 UNJUSTIFIED = ("openarm_left_link1", "openarm_left_link3")                   # the old sampled `Never` pair: arm joints between, no neighbour, not upstream's
 
 
-def test_m03_1_every_disabled_pair_has_a_reason_that_can_be_shown_at_every_mast_id():
+def test_m03_1_every_disabled_pair_has_a_reason_that_can_be_shown_at_every_lift_stop():
     with tempfile.TemporaryDirectory() as tmp:
         out = os.path.join(tmp, "m03.json")
         done = run_validate("--samples", str(SAMPLES), "--json", out, timeout=2400)
@@ -73,11 +73,11 @@ def test_m03_1_every_disabled_pair_has_a_reason_that_can_be_shown_at_every_mast_
     results = summary["results"]
     first = results[0] if results else {}
     status = "PASS" if summary["result"] == "PASS" else "FAIL"
-    failing = {r["mast_id"]: {"unjustified": r["unjustified"], "bad_labels": r["bad_labels"], "constant_transform_colliding": r["constant_transform"]["colliding"],
+    failing = {r["lift_stop"]: {"unjustified": r["unjustified"], "bad_labels": r["bad_labels"], "constant_transform_colliding": r["constant_transform"]["colliding"],
                               "cross_check_disagreements": r["constant_transform"]["cross_check_with_sampled_states"]["disagreements"],
                               "enabled_constant_pairs_colliding": r["enabled_constant_pairs_colliding"]}
                for r in results if r["result"] == "FAIL"}
-    n, seed = summary["samples_per_mast"], summary["seed"]
+    n, seed = summary["samples_per_lift_stop"], summary["seed"]
     write_sidecar("M03", "acm_justification", "ACM: every disabled pair has a reason that can be shown (upstream-declared, Adjacent, ConstantTransform); everything "
                   "else is enabled", status, {
         "claim": "every disabled pair is declared by upstream, a structural neighbour, or has no movable joint between its links and is clear in the one "
@@ -85,29 +85,30 @@ def test_m03_1_every_disabled_pair_has_a_reason_that_can_be_shown_at_every_mast_
         "disabled_pairs": first.get("disabled_pairs"), "enabled_pairs": first.get("enabled_pairs"),
         "by_construction": {"constant_transform_pairs": len(first.get("constant_transform", {}).get("pairs", [])),
                             "evaluated": first.get("constant_transform", {}).get("evaluated"),
-                            "colliding": {r["mast_id"]: r["constant_transform"]["colliding"] for r in results},
-                            "cross_check_with_sampled_states": {r["mast_id"]: r["constant_transform"]["cross_check_with_sampled_states"] for r in results},
-                            "pairs_at_the_first_mast_id": first.get("constant_transform", {}).get("pairs")},
-        "unjustified": {r["mast_id"]: r["unjustified"] for r in results}, "bad_labels": {r["mast_id"]: r["bad_labels"] for r in results},
-        "enabled_constant_pairs_colliding": {r["mast_id"]: r["enabled_constant_pairs_colliding"] for r in results},
+                            "colliding": {r["lift_stop"]: r["constant_transform"]["colliding"] for r in results},
+                            "cross_check_with_sampled_states": {r["lift_stop"]: r["constant_transform"]["cross_check_with_sampled_states"] for r in results},
+                            "pairs_at_the_first_lift_stop": first.get("constant_transform", {}).get("pairs"),
+                            "was_in_p12a": 77, "why_fewer": "a prismatic joint (lift_joint) between the base and the arms removes the pairs it separates from what a fixed transform certifies"},
+        "unjustified": {r["lift_stop"]: r["unjustified"] for r in results}, "bad_labels": {r["lift_stop"]: r["bad_labels"] for r in results},
+        "enabled_constant_pairs_colliding": {r["lift_stop"]: r["enabled_constant_pairs_colliding"] for r in results},
         "information_enabled_pairs_sampled": {
             "note": "INFORMATION, not a result: the enabled pairs found colliding in random joint states inside the limits, and how often. Sampling "
                     "falsifies and never certifies: a pair absent here may still collide. For A4 (reach and clearance)",
-            "samples_per_mast_id": n, "seed": seed,
-            "per_mast_id": {r["mast_id"]: {"colliding_pairs": r["enabled_pairs_sampled"]["colliding_pairs"],
-                                           "never_collided": r["enabled_pairs_sampled"]["never_collided"]} for r in results},
-            "most_often_at_the_first_mast_id": first.get("enabled_pairs_sampled", {}).get("most_often")},
+            "samples_per_lift_stop": n, "seed": seed,
+            "per_lift_stop": {r["lift_stop"]: {"colliding_pairs": r["enabled_pairs_sampled"]["colliding_pairs"],
+                                              "never_collided": r["enabled_pairs_sampled"]["never_collided"]} for r in results},
+            "most_often_at_the_first_lift_stop": first.get("enabled_pairs_sampled", {}).get("most_often")},
         "method": "the reasons are recomputed from the URDF's kinematic tree and the SRDF; collision is checked through moveit_py with an allowed-collision "
                   "matrix of its own that allows everything except the pairs under test, so the SRDF's disabled list is never consulted",
-        "acm_record": {k: meta[k] for k in ("method", "date", "mast_id", "counts", "deterministic")},
+        "acm_record": {k: meta[k] for k in ("method", "date", "base_plate", "lift_joint_position_m", "counts", "deterministic")},
         "failures": failing,
-        "seconds_per_mast_id": {r["mast_id"]: r["seconds"] for r in results},
+        "seconds_per_lift_stop": {r["lift_stop"]: r["seconds"] for r in results},
         "stop_condition": "A disabled pair that cannot be justified, or a constant-transform pair that collides, means the matrix is wrong: report the pair, "
                           "do not re-disable it on statistics" if failing else None,
     })
     assert summary["result"] == "PASS", "\n" + done.stdout[-3500:]
-    assert [r["mast_id"] for r in results] == list(MASTS)
-    assert all(len(r["constant_transform"]["pairs"]) == 77 for r in results)
+    assert [r["lift_stop"] for r in results] == list(STOPS)
+    assert all(len(r["constant_transform"]["pairs"]) == 45 for r in results)     # 77 in P12A: the lift is a movable joint between base and arms
     assert all(not r["constant_transform"]["cross_check_with_sampled_states"]["disagreements"] for r in results)
 
 
@@ -148,7 +149,7 @@ def test_m03_5_the_enabled_pairs_that_collide_are_information_and_never_change_t
     """The sampled part reports the enabled pairs that collide in random states, and a clean matrix stays PASS whatever it finds."""
     with tempfile.TemporaryDirectory() as tmp:
         out = os.path.join(tmp, "m03.json")
-        done = run_validate("--mast-id", "mast_1350", "--samples", "150", "--json", out, timeout=300)
+        done = run_validate("--lift-stop", "L1000", "--samples", "150", "--json", out, timeout=300)
         with open(out) as f:
             result = json.load(f)["results"][0]
     assert done.returncode == 0 and result["result"] == "PASS"
