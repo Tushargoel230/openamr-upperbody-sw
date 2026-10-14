@@ -63,6 +63,20 @@ def write_g_sidecar(check_id, slug, name, record, expected=None, physics_engine=
     return ev.write_sidecar(check_id, slug, name, result, details, directory=ev.evidence_dir(ev.share_dir()))
 
 
+def amend_g_sidecar(check_id, slug, key, value, fail=False):
+    """Add `details[key] = value` to a sidecar written earlier by the same test (a finding made after the launch was torn down, when the
+    test class that wrote the sidecar has already finished) and set its result to FAIL when `fail`. It never turns a FAIL into a PASS."""
+    import json
+    ev = _evidence_common()
+    path = os.path.join(ev.evidence_dir(ev.share_dir()), f"{check_id}_{slug}.json")
+    with open(path) as f:
+        doc = json.load(f)
+    doc["details"][key] = value
+    if fail:
+        doc["result"] = "FAIL"
+    return ev.write_sidecar(doc["id"], slug, doc["name"], doc["result"], doc["details"], directory=os.path.dirname(path))
+
+
 # --- physical joint angles, read from Gazebo's link poses and not from ROS ----------------------------------------------
 # /joint_states cannot answer "did the follower finger really move": for a URDF <mimic> joint joint_state_publisher computes
 # the value kinematically from the leader. The link poses are what the physics engine actually did.

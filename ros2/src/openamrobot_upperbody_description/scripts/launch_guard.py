@@ -16,6 +16,10 @@ the launch description can notice it is missing. A process that DIES during the 
 process, each one a known and documented behaviour of the installed software and nothing broader. `test_h01_harness_guards.py` fails any launch
 test module that does not call this, so a new launch test cannot be written without it.
 """
+import os
+import signal
+import time
+
 from launch_testing.asserts import EXIT_OK, assertExitCodes
 
 SIGSEGV = -11       # move_group, moveit_py: observed on every stop of MoveIt 2.12.4 (see the moveit package README)
@@ -60,3 +64,115 @@ def assert_launch_healthy(proc_info, expected, allowed=None):
             if name.startswith(prefix):
                 codes += list(extra)
         assertExitCodes(proc_info, allowable_exit_codes=codes, process=name)
+
+
+# --- the simulator that outlives its launch (P16 task 2) ------------------------------------------------------------------------------------
+# `gz sim` is started by a ruby wrapper that forks the server. When the launch stops, the wrapper dies of the SIGINT (SIM_ALLOWED above) and the
+# server is supposed to be stopped through /server_control (sim.launch.py); in about 2 of 8 A7 runs, and in the first G02 run of P16, it was not:
+# the server ended up a child of init, still running, still holding its transport partition. Nothing above sees it: the wrapper is the process the
+# launch owns, and it has exited with a code the guard allows. So the check looks for the server itself, and keys on the one thing that is this
+# run's and nobody else's: the GZ_PARTITION the test put in its environment before the launch, which every process of the launch inherits (a
+# test that does not set one has nothing this function may look for, and it refuses). A `gz sim` of another run, of another test or of the
+# person at the keyboard has another partition (or none) and is never matched.
+GZ_SERVER_GRACE_S = 10.0     # wall seconds a server that was asked to stop may take to go before it counts as having survived
+REAP_TERM_WAIT_S = 3.0
+
+
+def _pid_dirs(proc_root):
+    return sorted(int(name) for name in os.listdir(proc_root) if name.isdigit())
+
+
+def _read_bytes(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except OSError:     # gone in between, or another user's: not ours to look at
+        return b""
+
+
+def _state_and_ppid(proc_root, pid):
+    """(state letter, ppid) from /proc/<pid>/stat; the command name in it may contain spaces and parentheses, hence the rpartition."""
+    raw = _read_bytes(os.path.join(proc_root, str(pid), "stat")).decode("utf-8", "replace")
+    after = raw.rpartition(")")[2].split()
+    return (after[0], int(after[1])) if len(after) >= 2 else ("?", -1)
+
+
+def is_gz_sim_command(tokens):
+    """`gz sim ...` (the forked server, whose argv[0] is `gz`) or `ruby .../gz sim ...` (the wrapper): `sim` as an argument and a `gz` in the first
+    two. `gz service ...` (the shutdown request), `gz topic ...` (a probe) and a test whose command line merely mentions gz are not simulators."""
+    return "sim" in tokens[1:4] and any(os.path.basename(t) == "gz" for t in tokens[:2])
+
+
+def gz_sim_processes_of(partition, proc_root="/proc", exclude_pids=()):
+    """[{pid, ppid, state, cmdline}] of the live `gz sim` processes whose environment says GZ_PARTITION=<partition>. Zombies are not running
+    anything and are left out. `partition` must be non-empty."""
+    if not partition:
+        raise ValueError("an empty GZ_PARTITION would match every simulator of the machine, not this run's")
+    wanted = b"GZ_PARTITION=" + partition.encode()
+    found = []
+    for pid in _pid_dirs(proc_root):
+        if pid in exclude_pids:
+            continue
+        environ = _read_bytes(os.path.join(proc_root, str(pid), "environ"))
+        if wanted not in environ.split(b"\0"):
+            continue
+        # the forked server rewrites its argv into ONE string ("gz sim -r -s ..."), so split on whitespace as well as on NUL
+        tokens = _read_bytes(os.path.join(proc_root, str(pid), "cmdline")).decode("utf-8", "replace").replace("\0", " ").split()
+        if not is_gz_sim_command(tokens):
+            continue
+        state, ppid = _state_and_ppid(proc_root, pid)
+        if state in ("Z", "X"):
+            continue
+        found.append({"pid": pid, "ppid": ppid, "state": state, "cmdline": " ".join(tokens)[:300]})
+    return found
+
+
+def gz_server_shutdown_report(partition, grace_s=GZ_SERVER_GRACE_S, reap=True, proc_root="/proc", poll_s=0.25):
+    """After the launch under test has been torn down: wait up to `grace_s` for every `gz sim` of this run (`partition`) to be gone, and say what
+    is left. A simulator that was asked to stop takes a moment to do so, so a server seen in the first instant is not yet a finding; one that is
+    still there at the end of the grace period is. It is judged FIRST: the verdict in the returned dict (`survivors`, non-empty or not) is fixed
+    before anything is signalled. Only then, with `reap` true, the survivors are stopped (SIGTERM, then SIGKILL after REAP_TERM_WAIT_S) so a
+    failed run does not leave a simulator eating three cores under the next one; what was done to them is in `reaped`. Never the other way
+    round: a remedy applied before the assertion would turn this check into a clean-up that cannot fail."""
+    started = time.monotonic()
+    survivors = gz_sim_processes_of(partition, proc_root)
+    while survivors and time.monotonic() - started < grace_s:
+        time.sleep(poll_s)
+        survivors = gz_sim_processes_of(partition, proc_root)
+    report = {"partition": partition, "grace_s": grace_s, "waited_s": round(time.monotonic() - started, 2),
+              "survivors": survivors, "reaped": []}
+    if survivors and reap:
+        for proc in survivors:
+            report["reaped"].append({"pid": proc["pid"], "signal": _stop(proc["pid"], proc_root)})
+    return report
+
+
+def _stop(pid, proc_root):
+    """SIGTERM, and SIGKILL if the process is still there REAP_TERM_WAIT_S later (`gz sim` ignores a plain SIGTERM sent to its wrapper; the server
+    itself does die of it only sometimes, observed). Returns the strongest signal that was needed."""
+    for sig, wait in ((signal.SIGTERM, REAP_TERM_WAIT_S), (signal.SIGKILL, 2.0)):
+        try:
+            os.kill(pid, sig)
+        except ProcessLookupError:
+            return signal.Signals(sig).name if sig == signal.SIGTERM else "SIGTERM"
+        except PermissionError:
+            return "not permitted"
+        end = time.monotonic() + wait
+        while time.monotonic() < end:
+            if _state_and_ppid(proc_root, pid)[0] in ("Z", "X", "?"):
+                return signal.Signals(sig).name
+            time.sleep(0.1)
+    return "SIGKILL (still listed)"
+
+
+def gz_survivor_message(report):
+    return (f"{len(report['survivors'])} gz sim process(es) of this run (GZ_PARTITION={report['partition']}) survived the launch's teardown by "
+            f"{report['waited_s']} s: {[(p['pid'], p['ppid']) for p in report['survivors']]} (pid, ppid); stopped afterwards with "
+            f"{report['reaped']}. The launch's own process guard cannot see this: the ruby wrapper it owns had exited with an allowed code")
+
+
+def assert_no_gz_server_survives(partition, **kwargs):
+    """Fail if a `gz sim` of this run (`partition`) is still alive after the grace period. Returns the report when none is."""
+    report = gz_server_shutdown_report(partition, **kwargs)
+    assert not report["survivors"], gz_survivor_message(report)
+    return report

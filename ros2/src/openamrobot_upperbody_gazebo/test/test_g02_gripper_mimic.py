@@ -26,6 +26,7 @@ import unittest
 os.environ["ROS_DOMAIN_ID"] = str(random.randint(101, 200))
 os.environ["ROS_AUTOMATIC_DISCOVERY_RANGE"] = "LOCALHOST"
 os.environ["GZ_PARTITION"] = f"g02_{os.getpid()}"
+PARTITION = os.environ["GZ_PARTITION"]      # every process of the launch inherits it: it is what makes a surviving gz server THIS run's
 
 import launch  # noqa: E402
 import launch_testing.actions  # noqa: E402
@@ -39,12 +40,13 @@ from rclpy.action import ActionClient  # noqa: E402
 from rclpy.parameter import Parameter  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sim_test_support import finger_angles, gz_link_poses, launch_engine_constants, write_g_sidecar  # noqa: E402
+from sim_test_support import amend_g_sidecar, finger_angles, gz_link_poses, launch_engine_constants, write_g_sidecar  # noqa: E402
 
 from ament_index_python.packages import get_package_prefix as _prefix  # noqa: E402
 
 sys.path.insert(0, os.path.join(_prefix("openamrobot_upperbody_description"), "lib", "openamrobot_upperbody_description"))
-from launch_guard import MOVE_GROUP_ALLOWED, SIM_ALLOWED, assert_launch_healthy, assert_no_process_died  # noqa: E402
+from launch_guard import (MOVE_GROUP_ALLOWED, SIM_ALLOWED, assert_launch_healthy, assert_no_process_died,  # noqa: E402
+                          gz_server_shutdown_report, gz_survivor_message)
 
 EXPECTED_PROCESSES = ["gazebo", "robot_state_publisher", "parameter_bridge", "create", "joint_state_publisher", "spawner"]
 
@@ -151,3 +153,15 @@ class TestShutdown(unittest.TestCase):
     def test_g02_processes_started_and_exited_cleanly(self, proc_info):
         """The processes of the launch started, and none ended with a code that is neither 0 nor a documented shutdown behaviour (launch_guard.py)."""
         assert_launch_healthy(proc_info, expected=EXPECTED_PROCESSES, allowed=SIM_ALLOWED)
+
+    def test_g02_no_gz_server_of_this_run_survives_the_teardown(self):
+        """P16: after the launch has been torn down no `gz sim` carrying this run's GZ_PARTITION is still alive. `gz sim` is a ruby wrapper
+        and the server it forks; the wrapper is what the launch owns and what the check above reads, and the server was left running after
+        about 2 of 8 A7 runs (and the first G02 run of P16) with nothing noticing. FAIL, not WARN: a simulator that outlives its test
+        holds three cores and a transport partition, and is how the next run's numbers moved. The verdict is taken before the survivor is
+        stopped (launch_guard.gz_server_shutdown_report); the finding is also written into G02's sidecar, because the report lists the
+        names of failed tests and not their messages."""
+        report = gz_server_shutdown_report(PARTITION)
+        amend_g_sidecar("G02", "gripper_mimic", "gz_server_after_shutdown", report, fail=bool(report["survivors"]))
+        self.assertFalse(report["survivors"], gz_survivor_message(report))
+

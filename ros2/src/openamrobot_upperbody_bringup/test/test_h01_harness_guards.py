@@ -75,3 +75,11 @@ def test_h01_the_registration_expression_knows_every_way_a_test_is_registered(li
     code = "\n".join(l for l in line.splitlines() if not l.lstrip().startswith("#"))
     found = [os.path.basename(m.group("path")) for m in REGISTERED.finditer(code)]
     assert found == ([expected] if expected else [])
+
+
+def test_h01_g02_looks_for_a_gz_server_that_outlives_its_launch():
+    """P16: the ruby wrapper is what the launch owns and what the process guard reads; the server it forks was left running after about 2 of 8
+    A7 runs and nothing noticed. G02's post-shutdown phase must ask launch_guard whether a `gz sim` of its own GZ_PARTITION survived."""
+    text = read(os.path.join(SRC, "openamrobot_upperbody_gazebo", "test", "test_g02_gripper_mimic.py"))
+    assert "gz_server_shutdown_report(" in text, "G02 no longer checks for a surviving gz server (launch_guard.gz_server_shutdown_report)"
+    assert re.search(r"PARTITION\s*=\s*os\.environ\[\"GZ_PARTITION\"\]", text), "G02 must key the check on its own GZ_PARTITION"

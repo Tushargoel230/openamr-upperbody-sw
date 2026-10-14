@@ -163,8 +163,19 @@ which also writes the `gazebo` evidence report. Each test starts a headless serv
 | G01 | 90 s (about 35 s), default engine (DART) | five controllers `active`; an arm goal completes and tracks while the other arm and the base stay still; platform-sw's bridge topics exist by name and type; `/cmd_vel` moves the base and `/odom` reports it; one publisher of `odom -> base_footprint`; `/joint_states` has one publisher carrying wheels, arms and `lift_joint` once each |
 | G02 | 90 s (about 20 s), Bullet-Featherstone passed explicitly | both grippers close, and `finger_joint2` follows `finger_joint1` in the physics (link poses, not `/joint_states`) |
 
+G02 also asserts, after its launch has been torn down, that **no `gz sim` of its own `GZ_PARTITION` is still alive** (P16): the ruby
+wrapper is what the launch owns and what the process guard reads, and the server it forks was left running after about 2 of 8 A7 runs with
+nothing noticing. It is a FAIL, never a WARN, and it keys on the partition the test put in its environment before the launch (every process
+of the launch inherits it), so a simulator of another run, another test or the person at the keyboard is never matched. A server that was
+asked to stop is given `GZ_SERVER_GRACE_S` (10 s) to go; the verdict is fixed before anything is signalled, and only then is a survivor
+stopped (SIGTERM, then SIGKILL) so a failed run does not leave three cores busy under the next one. The finding is in G02's sidecar
+(`details.gz_server_after_shutdown`). `test/canary_gz_orphan.sh` runs G02 against a copy of this package whose `sim.launch.py` lacks the
+`/server_control` stop handler and exits 0 only if G02 failed naming the survivor; `test_launch_guard_gz_orphan.py` (description package)
+pins the detector on decoy processes. Read the record before relying on it: see `evidence/reports/README.md` (P16), which says how often the
+orphan was seen and what was and was not demonstrated.
+
 Mutations checked: a second `odom -> base_footprint` publisher and a second writer on `/joint_states` fail G01; the DART engine
-fails G02.
+fails G02; a launch without the `/server_control` stop handler fails G02 (the canary above).
 
 ## Notes for whoever runs this
 
