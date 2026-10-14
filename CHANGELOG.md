@@ -5,6 +5,24 @@ All notable changes to this repository. Evidence for the description is static a
 
 ## [Unreleased]
 
+### Added / Changed (P16)
+
+- **G02 fails when a `gz sim` of its own partition outlives its launch.** The ruby wrapper is what the launch owns and what the process guard reads;
+  the server it forks was left running after about 2 of 8 A7 runs and nothing noticed. G02's post-shutdown phase now looks (within a 10 s grace
+  period) for any `gz sim` whose environment carries the test's own `GZ_PARTITION`; a survivor is a FAIL (not a WARN), judged before it is
+  signalled and only then stopped, and written into G02's sidecar (`details.gz_server_after_shutdown`). Chosen over a new G03 because the orphan
+  is a property of G02's own teardown and a G03 would need a second simulator launch of its own to observe anything. Proven by a decoy-process
+  unit test, a canary (`test/canary_gz_orphan.sh`: the real G02 against a launch without the `/server_control` stop handler, which must fail naming
+  the survivor) and one natural orphan found in the first run of the session, before the check existed. **Not proven on a natural orphan with the
+  check in place: 0 of 12 live runs produced one** (`evidence/reports/README.md`, P16). M02's launch leaves a simulator behind too after a failed
+  run; the check is on G02 only.
+- **The eight V01 items of the lift model are measured** (`docs/v01_visual_check.md`, `evidence/v01/`), none reads outside its expected value, two
+  sub-questions that need eyes are CANNOT-MEASURE, and V01 stays WARN because `lift_mass_tl3_400` is null. Renders per lift stop and an isometric
+  are in `evidence/renders/`.
+- **M02's clamp rise was bisected and the cause was not found** (`evidence/m02_bisect/RESULTS.md`): the ACM, the mass, the arm separation and the
+  open command are each ruled out, and so is platform-sw's new base (old body on the new base reads 188 and 216); the rise is
+  `right_finger_joint1` resting on its open limit in the new body. The epsilon is untouched.
+
 ### Fixed (P15, task 0)
 
 - **`joint_state_clamp.py` exits 0 on SIGINT and SIGTERM.** P14 ran A7 twice on an unchanged commit and got 2 FAIL, then 0 FAIL; the cause was
