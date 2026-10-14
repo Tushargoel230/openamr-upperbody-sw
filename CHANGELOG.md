@@ -7,7 +7,8 @@ All notable changes to this repository. Evidence for the description is static a
 
 ### Added / Changed (P16)
 
-- **G02 fails when a `gz sim` of its own partition outlives its launch.** The ruby wrapper is what the launch owns and what the process guard reads;
+- **G02, G01 and M02 fail when a `gz sim` of their own partition outlives their launch.** (G02 first; G01 and M02 after a natural orphan of G01's
+  launch degraded the rest of an A7 run in the second evidence pass.) The ruby wrapper is what the launch owns and what the process guard reads;
   the server it forks was left running after about 2 of 8 A7 runs and nothing noticed. G02's post-shutdown phase now looks (within a 10 s grace
   period) for any `gz sim` whose environment carries the test's own `GZ_PARTITION`; a survivor is a FAIL (not a WARN), judged before it is
   signalled and only then stopped, and written into G02's sidecar (`details.gz_server_after_shutdown`). Chosen over a new G03 because the orphan
@@ -15,7 +16,7 @@ All notable changes to this repository. Evidence for the description is static a
   unit test, a canary (`test/canary_gz_orphan.sh`: the real G02 against a launch without the `/server_control` stop handler, which must fail naming
   the survivor) and one natural orphan found in the first run of the session, before the check existed. **Not proven on a natural orphan with the
   check in place: 0 of 12 live runs produced one** (`evidence/reports/README.md`, P16). M02's launch leaves a simulator behind too after a failed
-  run; the check is on G02 only.
+  run (the check now covers it).
 - **The eight V01 items of the lift model are measured** (`docs/v01_visual_check.md`, `evidence/v01/`), none reads outside its expected value, two
   sub-questions that need eyes are CANNOT-MEASURE, and V01 stays WARN because `lift_mass_tl3_400` is null. Renders per lift stop and an isometric
   are in `evidence/renders/`.

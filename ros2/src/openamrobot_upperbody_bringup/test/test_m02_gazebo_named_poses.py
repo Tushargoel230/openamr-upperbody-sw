@@ -115,4 +115,4 @@ class TestProcessesAlive(unittest.TestCase):
 @unittest.skipUnless(A7_ENABLED, SKIP_REASON)
 class TestShutdown(unittest.TestCase):
     def test_m02_processes_started_and_exited_cleanly(self, proc_info):
-        stack_healthy(proc_info, expected=EXPECTED_PROCESSES, simulator=True)
+        stack_healthy(proc_info, expected=EXPECTED_PROCESSES, simulator=True, sidecar=("M02", f"gazebo_{LIFT_STOP}"))

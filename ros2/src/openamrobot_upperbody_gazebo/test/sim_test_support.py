@@ -64,17 +64,9 @@ def write_g_sidecar(check_id, slug, name, record, expected=None, physics_engine=
 
 
 def amend_g_sidecar(check_id, slug, key, value, fail=False):
-    """Add `details[key] = value` to a sidecar written earlier by the same test (a finding made after the launch was torn down, when the
-    test class that wrote the sidecar has already finished) and set its result to FAIL when `fail`. It never turns a FAIL into a PASS."""
-    import json
+    """evidence_common.amend_sidecar for a Gazebo check's sidecar, in the directory write_g_sidecar used."""
     ev = _evidence_common()
-    path = os.path.join(ev.evidence_dir(ev.share_dir()), f"{check_id}_{slug}.json")
-    with open(path) as f:
-        doc = json.load(f)
-    doc["details"][key] = value
-    if fail:
-        doc["result"] = "FAIL"
-    return ev.write_sidecar(doc["id"], slug, doc["name"], doc["result"], doc["details"], directory=os.path.dirname(path))
+    return ev.amend_sidecar(check_id, slug, key, value, fail=fail, directory=ev.evidence_dir(ev.share_dir()))
 
 
 # --- physical joint angles, read from Gazebo's link poses and not from ROS ----------------------------------------------

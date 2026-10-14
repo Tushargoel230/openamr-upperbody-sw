@@ -103,9 +103,24 @@ def stack_alive(proc_info):
     launch_guard.assert_no_process_died(proc_info)
 
 
-def stack_healthy(proc_info, expected, simulator=False):
+def stack_healthy(proc_info, expected, simulator=False, sidecar=None):
     """After the launch: every process in `expected` started and every process exited cleanly, allowing move_group's known SIGSEGV at stop and,
-    with the simulator, its documented shutdown exits (launch_guard.py has the list and the reasons)."""
+    with the simulator, its documented shutdown exits (launch_guard.py has the list and the reasons). With the simulator, also that no `gz sim`
+    carrying this test's own GZ_PARTITION survived the teardown (P16): looked at FIRST, so that a failed health check does not leave the
+    server running and unrecorded; the finding goes into the sidecar `sidecar` = (check id, slug) names, if it exists."""
     description_scripts()
     import launch_guard
-    launch_guard.assert_launch_healthy(proc_info, expected=expected, allowed=launch_guard.SIM_ALLOWED if simulator else launch_guard.MOVE_GROUP_ALLOWED)
+    report = None
+    if simulator:
+        report = launch_guard.gz_server_shutdown_report(os.environ["GZ_PARTITION"])
+        if sidecar:
+            import evidence_common as ev
+            from ament_index_python.packages import get_package_share_directory
+            share = get_package_share_directory("openamrobot_upperbody_description")
+            ev.amend_sidecar(sidecar[0], sidecar[1], "gz_server_after_shutdown", report, fail=bool(report["survivors"]),
+                             directory=ev.evidence_dir(share))
+    try:
+        launch_guard.assert_launch_healthy(proc_info, expected=expected, allowed=launch_guard.SIM_ALLOWED if simulator else launch_guard.MOVE_GROUP_ALLOWED)
+    finally:
+        if report is not None:
+            assert not report["survivors"], launch_guard.gz_survivor_message(report)

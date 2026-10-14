@@ -37,6 +37,7 @@ import unittest
 os.environ["ROS_DOMAIN_ID"] = str(random.randint(101, 200))
 os.environ["ROS_AUTOMATIC_DISCOVERY_RANGE"] = "LOCALHOST"
 os.environ["GZ_PARTITION"] = f"g01_{os.getpid()}"
+PARTITION = os.environ["GZ_PARTITION"]      # what makes a surviving gz server THIS run's (launch_guard.gz_server_shutdown_report)
 
 import launch  # noqa: E402
 import launch_testing  # noqa: E402
@@ -63,7 +64,8 @@ from sim_test_support import ros_type_name, write_g_sidecar  # noqa: E402
 from ament_index_python.packages import get_package_prefix as _prefix  # noqa: E402
 
 sys.path.insert(0, os.path.join(_prefix("openamrobot_upperbody_description"), "lib", "openamrobot_upperbody_description"))
-from launch_guard import MOVE_GROUP_ALLOWED, SIM_ALLOWED, assert_launch_healthy, assert_no_process_died  # noqa: E402
+from launch_guard import (MOVE_GROUP_ALLOWED, SIM_ALLOWED, assert_launch_healthy, assert_no_process_died,  # noqa: E402
+                          gz_server_shutdown_report, gz_survivor_message)
 
 EXPECTED_PROCESSES = ["gazebo", "robot_state_publisher", "parameter_bridge", "create", "joint_state_publisher", "spawner"]
 
@@ -330,3 +332,12 @@ class TestShutdown(unittest.TestCase):
     def test_g01_processes_started_and_exited_cleanly(self, proc_info):
         """The processes of the launch started, and none ended with a code that is neither 0 nor a documented shutdown behaviour (launch_guard.py)."""
         assert_launch_healthy(proc_info, expected=EXPECTED_PROCESSES, allowed=SIM_ALLOWED)
+
+    def test_g01_no_gz_server_of_this_run_survives_the_teardown(self):
+        """P16: as in G02. A natural orphan was seen after G01's launch in the second evidence pass of P16 (partition g01_*): it ran for the
+        rest of that A7 run at about three cores and M02, two tests later, failed a pose. The verdict is taken before the survivor is stopped."""
+        report = gz_server_shutdown_report(PARTITION)
+        from sim_test_support import amend_g_sidecar
+        amend_g_sidecar("G01", "gazebo_smoke", "gz_server_after_shutdown", report, fail=bool(report["survivors"]))
+        self.assertFalse(report["survivors"], gz_survivor_message(report))
+

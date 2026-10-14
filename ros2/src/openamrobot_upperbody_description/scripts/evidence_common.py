@@ -69,6 +69,21 @@ def write_sidecar(check_id, slug, name, result, details, directory=None):
     return path
 
 
+def amend_sidecar(check_id, slug, key, value, fail=False, directory=None):
+    """Add `details[key] = value` to a sidecar a test wrote earlier (a finding made after the launch was torn down, when the class that wrote
+    the sidecar has finished) and set its result to FAIL when `fail`. It never turns a FAIL into a PASS. Returns the path, or None when there
+    is no such sidecar (a test that died before writing one: the failing test already says so)."""
+    path = os.path.join(directory or evidence_dir(), f"{check_id}_{slug}.json")
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        doc = json.load(f)
+    doc["details"][key] = value
+    if fail:
+        doc["result"] = "FAIL"
+    return write_sidecar(doc["id"], slug, doc["name"], doc["result"], doc["details"], directory=os.path.dirname(path))
+
+
 def read_sidecars(directory):
     """{check id: sidecar dict} for every sidecar in the directory."""
     out = {}

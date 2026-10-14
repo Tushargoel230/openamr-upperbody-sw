@@ -77,9 +77,15 @@ def test_h01_the_registration_expression_knows_every_way_a_test_is_registered(li
     assert found == ([expected] if expected else [])
 
 
-def test_h01_g02_looks_for_a_gz_server_that_outlives_its_launch():
+@pytest.mark.parametrize("package,name,needle", [
+    ("openamrobot_upperbody_gazebo", "test_g02_gripper_mimic.py", "gz_server_shutdown_report("),
+    ("openamrobot_upperbody_gazebo", "test_g01_gazebo_smoke.py", "gz_server_shutdown_report("),
+    ("openamrobot_upperbody_bringup", "test_m02_gazebo_named_poses.py", "simulator=True"),
+])
+def test_h01_every_gazebo_launch_looks_for_a_gz_server_that_outlives_it(package, name, needle):
     """P16: the ruby wrapper is what the launch owns and what the process guard reads; the server it forks was left running after about 2 of 8
-    A7 runs and nothing noticed. G02's post-shutdown phase must ask launch_guard whether a `gz sim` of its own GZ_PARTITION survived."""
-    text = read(os.path.join(SRC, "openamrobot_upperbody_gazebo", "test", "test_g02_gripper_mimic.py"))
-    assert "gz_server_shutdown_report(" in text, "G02 no longer checks for a surviving gz server (launch_guard.gz_server_shutdown_report)"
-    assert re.search(r"PARTITION\s*=\s*os\.environ\[\"GZ_PARTITION\"\]", text), "G02 must key the check on its own GZ_PARTITION"
+    A7 runs (after G02 in P15, after G01 in the second evidence pass of P16) and nothing noticed. Each launch test that starts Gazebo must ask
+    launch_guard whether a `gz sim` of its own GZ_PARTITION survived: G02 and G01 directly, M02 through stack_healthy(simulator=True)."""
+    text = read(os.path.join(SRC, package, "test", name))
+    assert needle in text, f"{package}/{name} no longer checks for a surviving gz server ({needle})"
+    assert re.search(r"GZ_PARTITION", text), f"{package}/{name} does not key the check on its own GZ_PARTITION"
