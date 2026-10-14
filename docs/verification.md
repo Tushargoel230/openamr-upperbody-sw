@@ -62,7 +62,7 @@ versions). It refuses to write from a dirty tree, like the other report. Its che
 | G01 | in a headless Gazebo on the launch's default engine (DART): the five arm controllers are `active`; a `left_arm_controller` goal completes and tracks while the other arm and the base stay still; every topic of platform-sw's bridge file exists by name and type; `/cmd_vel` moves the base and `/odom` reports it; exactly one publisher of `odom -> base_footprint` (platform-sw's DiffDrive child frame since 935efc7, read from the description; strictly increasing stamps at the plugin's 50 Hz); `/joint_states` has one publisher carrying the wheels, the arms and `lift_joint` once each |
 | G02 | both grippers close and `finger_joint2` follows `finger_joint1` in the physics (link poses, not `/joint_states`); it passes `physics_engine:=gz-physics-bullet-featherstone-plugin` explicitly, because the launch defaults to DART (platform-sw's engine) and the grippers do not close there: on DART it fails, which is the documented limitation, not a defect |
 | I01 | the installed gazebo and description packages match the source |
-| V01 | `WARN` until a person has answered `v01_visual_check.md`; "looks fine" does not clear it |
+| V01 | `WARN`. The eight items of the lift model were measured by script in P16 (none reads outside its expected value; two sub-questions that need eyes are CANNOT-MEASURE); it stays `WARN` until `lift_mass_tl3_400` is sourced, whatever the eight say. "Looks fine" does not clear it |
 
 **What `simulation` permits:** the model behaves as G01 and G02 say in that simulator on that machine. **What it does not:** any
 statement about a physical robot, about the real arm's controller, gains or latency (the arms' position interface is a velocity
@@ -218,7 +218,7 @@ Current result (A6, `evidence/20261007T164436Z_dev.json`): 22 `PASS`, 6 `WARN`, 
 | E01 | Height, width and depth are lower bounds from link origins and primitives; meshes are not loaded. A figure under the limit proves nothing, so it is never `PASS` by design | A4 measures the envelope with meshes. Until then it stays `WARN` |
 | W01 | `base_link` has a 4.18 kg inertial and KDL drops the inertia of a root link, so `robot_state_publisher` and MoveIt never see it. The usual workaround changes the contract's root, and the base is platform-sw's | A base-macro refactor by the WP-F5 owner. It matters in A7 |
 | W02 | `robot_state_publisher` converts the planar joint to fixed, because KDL has no planar joint. A consumer limitation; A6's acceptance (joint present, `check_urdf` accepts it) is unaffected | Not clearable here. In A7 planar motion comes from Gazebo's `odom -> base_link` |
-| V01 | No person has answered the visual checklist. A numeric check is not a visual one | A person runs the simulator with RViz beside it, looks, and answers each item of [`v01_visual_check.md`](v01_visual_check.md) in their own words |
+| V01 | The eight items are measured (P16, `evidence/v01/`, renders in `evidence/renders/`), but no person has looked at the running simulator and RViz, and `lift_mass_tl3_400` is null so one of the two columns was not measured. A numeric check is not a visual one | A person runs the simulator with RViz beside it, looks, and answers the two sub-questions marked CANNOT-MEASURE in [`v01_visual_check.md`](v01_visual_check.md); the datum comes from the supplier |
 
 ## Reading a report
 

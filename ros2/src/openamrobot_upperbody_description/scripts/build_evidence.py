@@ -128,19 +128,54 @@ V01_ANSWERED = {"1": "(item 1 as it stood in P14, about the mast) the mast read 
                      "profile 14 mm shorter than the 1250 mm Alex specified on 28 Sep, so the appearance was an accurate thin extrusion "
                      "and not a sizing defect; its orientation and its mass were defects (V01-F1, V01-F2), both now closed. The mast is "
                      "gone: item 1 of the checklist now asks about the lift column and has no recorded answer"}
+# The eight items of the lift model, measured in P16 (raw readings: evidence/v01/*.json; renders: evidence/renders/). Items 1 to 4 are read
+# from the expanded URDF by forward kinematics (what tf2_echo prints), item 3 from MoveIt's collision check, items 5 to 8 from a headless
+# Gazebo + MoveIt run. "cannot_measure" names what a person with RViz would have judged by eye and a script cannot.
+V01_LIFT_MEASURED = {
+    "1": {"verdict": "PASS", "expected": "base_footprint->lift_column_base_link x 0.060 z 0.304 (bp000), x 0.110 (bp050); openarm_left_base_link z 1.000 / 1.175 / 1.350, x and y unchanged",
+          "measured": "x 0.060 z 0.304 (bp000), x 0.110 (bp050); left base z 1.000 / 1.175 / 1.350 at x 0.240 y +0.031 at all three stops",
+          "note": "no <visual> and no <collision> on lift_column_base_link or lift_carriage_link: nothing is drawn for the column"},
+    "2": {"verdict": "PASS", "expected": "arm_profile_link 0.120 fore-aft x 0.060 across x 0.340, centre 0.180 ahead of the column axis; carriage->arm base x 0.180 y +-0.031 z 0.166 (62 mm apart)",
+          "measured": "box 0.12 x 0.06 x 0.34, centre x 0.180 from the carriage origin; left base (0.180, +0.031, 0.166), right (0.180, -0.031, 0.166); long side is fore-aft",
+          "note": "read from the URDF, not from RViz seen from above"},
+    "3": {"verdict": "PASS", "expected": "0 enabled pairs colliding at each of three stops and both base plates",
+          "measured": "0 of 478 enabled pairs colliding at L1000, L1175, L1350 on bp000 and bp050; 18 touching pairs, all of them the disabled Adjacent ones",
+          "note": "counted on the collision geometry (MoveIt's check), which is the quantity the item names; the visual meshes of the arms are different files and were not intersected separately"},
+    "4": {"verdict": "PASS", "expected": "head_camera_mount_link z 1.223 + lift, x 0.262 (bp000); optical axis 25 degrees down; wrist camera y +-0.05 z -0.03 from ee_base",
+          "measured": "z 1.223 / 1.398 / 1.573, x 0.262 (0.312 at bp050); optical z axis elevation -25.0 degrees; wrist cameras (0, +-0.05, -0.03), 0.058 m from the hand base origin",
+          "note": "whether 0.058 m is 'near the hand' is a judgement about the real hand and was not made; head_camera_mount_link carries no geometry"},
+    "5": {"verdict": "PASS", "expected": "about 1.0 m and about 2.5 rad after 5 s each; carriage offset change 0.000",
+          "measured": "distance 0.9995 m (odom), yaw 2.465 rad, base_footprint->lift_carriage_link unchanged (offset change 0.0 m)",
+          "cannot_measure": "'RViz's model and Gazebo's model further apart than a wheel width' compares two windows by eye; the script's lookup of Gazebo's own base pose returned nothing, so no number stands in for it"},
+    "6": {"verdict": "PASS", "expected": "joint1/2/4 at 0.3 / -0.6 / 1.2 within 0.02; right arm and wheels change < 0.001; largest single-step jump a fraction of the final value",
+          "measured": "0.30001 / -0.60001 / 1.19995; right arm max change 1.2e-5, wheels 0.0; largest step in the first second 0.0015 / 0.0030 / 0.0060 rad",
+          "note": "result error_code 0"},
+    "7": {"verdict": "PASS", "expected": "finger_joint1 and finger_joint2 equal within 0.01; the right hand opposite in sign",
+          "measured": "left 0.4008 / 0.4008, right -0.4000 / -0.4000 (/joint_states); physical link-pose angles left 0.4008 / 0.4002, right -0.4000 / -0.4000",
+          "note": "/joint_states carries finger_joint2 as the URDF mimic of finger_joint1 and so cannot disagree with it: the link-pose angles are the physical reading (G02's method)"},
+    "8": {"verdict": "PASS", "expected": "left/right hands_up joint4 1.5 within 0.01; scene robot and real end effector differ < 0.01 m; park equals home; grippers closed +0.7854 / -0.7854, open 0",
+          "measured": "joint4 1.50037 (left), 1.49916 (right); goal-state vs real end-effector difference at most 0.0005 m over six arm poses; park == home in the SRDF for both arms; "
+                      "closed 0.78457 / -0.78456, open within 0.001 of 0; 10 of 10 requests SUCCESS, no 'Planning failed' after home",
+          "cannot_measure": "'the Scene Robot in RViz' is an RViz object; the goal state's end-effector (forward kinematics of the goal joint values) against the real one's tf stands in for it"},
+}
+V01_STAYS_WARN_BECAUSE = ("lift_mass_tl3_400 is null (no supplier mass for the fallback TL3 400 column), so one of the two columns the model offers cannot be "
+                          "built; V01 stays WARN until that datum is sourced, however the eight items land. The eight below are measured on dold_v4_350 only")
 V01_READING = ("The manual check found what the automated ones could not: no test of ours examined an axis assignment or the plausibility "
-               "of a placeholder, and the two rules it proposed are now checks (T12, T10). V01 stays WARN: no item of the current "
-               "checklist (items 2 to 8 and the rewritten item 1) has a recorded answer, and a closed finding is not an answered checklist")
-V01_LIMITATION = ("V01 is WARN: P14's manual look at the mast found two defects (V01-F1 confirmed correct by the design owner, V01-F2 closed "
-                  "by the 11.7 kg catalogue figure) and both are resolved by the lift; the current checklist, which states what to measure, "
-                  "has no recorded answer. This report launches nothing for V01 and records no inspection of its own")
+               "of a placeholder, and the two rules it proposed are now checks (T12, T10). The eight items of the lift model were measured in P16 "
+               "(see answered_items: none FAIL, two carry a part that only eyes could judge). V01 stays WARN: " + V01_STAYS_WARN_BECAUSE)
+V01_LIMITATION = ("V01 is WARN. P14's look at the mast found two defects (V01-F1 confirmed correct by the design owner, V01-F2 closed by the 11.7 kg catalogue figure), both resolved by the lift. P16 measured the eight items of the lift model "
+                  "(evidence/v01/): none reads outside its expected value, and two sub-questions that need eyes are marked cannot_measure. It stays "
+                  "WARN because " + V01_STAYS_WARN_BECAUSE + ". This report launches nothing for V01 and records no inspection of its own")
 
 
 def v01_details(items, **extra):
-    """The details of V01 in every report: what was answered, what was found, what is still open. `items` is the checklist's length."""
-    return {"performed": "a person looked at the simulation in P14 and answered item 1 of the mast checklist (since deleted); "
-                         "no item of the current checklist (1 to %d) has a recorded answer" % items,
-            "answered_items": {}, "answered_before_the_lift": dict(V01_ANSWERED), "unanswered_items": list(range(1, items + 1)),
+    """The details of V01 in every report: what was measured, what was found, what is still open. `items` is the checklist's length."""
+    answered = {k: dict(v) for k, v in V01_LIFT_MEASURED.items()}
+    return {"performed": "P14: a person looked at the mast (item 1 of the old checklist, since deleted). P16: the eight items of the lift model "
+                         "were measured by script (evidence/v01/), not looked at by a person",
+            "answered_items": answered, "answered_before_the_lift": dict(V01_ANSWERED),
+            "unanswered_items": [i for i in range(1, items + 1) if str(i) not in answered],
+            "stays_warn_because": V01_STAYS_WARN_BECAUSE,
             "findings": [dict(f) for f in V01_FINDINGS], "reading": V01_READING, "checklist": "docs/v01_visual_check.md", **extra}
 # Checks whose sidecar is where their details (and any WARN) live: no sidecar means the test did not complete.
 SIDECAR_REQUIRED = {"T02", "T04", "T07", "T08", "T09", "T10", "T13", "E01", "C01", "C02", "W01", "W02", "G01", "G02"}

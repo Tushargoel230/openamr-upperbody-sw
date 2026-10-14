@@ -292,11 +292,14 @@ def test_v01_records_what_the_looking_found_and_stays_warn():
     so, and must not become a PASS: only item 1 has an answer, and a check whose value was finding defects is not 'found nothing'."""
     details = be.v01_details(8)
     assert [f["id"] for f in details["findings"]] == ["V01-F1", "V01-F2"]
-    assert details["answered_items"] == {} and details["unanswered_items"] == [1, 2, 3, 4, 5, 6, 7, 8]
+    # P16 measured the eight items of the lift model: each has a verdict and the number read beside the number expected
+    assert sorted(details["answered_items"], key=int) == ["1", "2", "3", "4", "5", "6", "7", "8"] and details["unanswered_items"] == []
+    assert all(a["verdict"] in ("PASS", "FAIL", "CANNOT-MEASURE") and a["expected"] and a["measured"] for a in details["answered_items"].values())
+    assert "lift_mass_tl3_400" in details["stays_warn_because"]
     assert set(details["answered_before_the_lift"]) == {"1"}                 # the mast's item 1, kept as history and not counted
     text = json.dumps(details)
     assert "probably rotated 90 degrees" in text and "implausible" in text
-    assert "found what the automated ones could not" in details["reading"] and "stays WARN" in details["reading"]
+    assert "found what the automated ones could not" in details["reading"] and "V01 stays WARN" in details["reading"]
     assert "no human has" not in text and "nobody has" not in text           # the record no longer says the check found nothing
     f1, f2 = details["findings"]
     assert "confirmed correct by the design owner" in f1["outcome"] and "closed by the supplier catalogue figure" in f2["outcome"]

@@ -5,11 +5,11 @@ Numeric checks are not visual ones: the 80 mm square mast section passed every t
 **"Looks fine" does not clear it.** Answer each of the eight items below with what you **measured or counted**, not with how it looked:
 every item names the number to read and where to read it from, and the number it should be.
 
-## Status: WARN. The look at the mast found two defects; the lift model has not been looked at
+## Status: WARN. The look at the mast found two defects; the eight items of the lift model are measured (P16, below) and V01 stays WARN
 
 **P14 looked at the mast (then item 1) and found two defects no automated check was examining.** The mast is gone, so that answer
-describes an object that no longer exists and is not counted as an answer for the lift model: **none of the eight items below has a
-recorded answer, and V01 is `WARN`.** A closed finding is not an answered checklist, and a check whose value was finding defects is
+describes an object that no longer exists and is not counted as an answer for the lift model. **The eight items below were measured in P16
+(table at the end); V01 is still `WARN`, because `lift_mass_tl3_400` is null.** A closed finding is not an answered checklist, and a check whose value was finding defects is
 not recorded as having found nothing.
 
 - **V01-F1, the profile was probably rotated 90 degrees. Confirmed correct by the design owner.** The mast box was 60 mm fore-aft and
@@ -110,4 +110,29 @@ A trajectory to run for item 6 (moves the left arm's joints 1, 2 and 4 over 4 se
 One line per item: the item number and the numbers you read. They go into the step's report and into the evidence for V01; the check
 turns `PASS` only when all eight have an answer with the numbers, and `FAIL` if any reading is outside what the item says.
 
-Recorded so far: **none** of the eight (P14's look was at the mast, which no longer exists; see Status above). V01 is `WARN`.
+## Recorded: the eight items of the lift model, measured (P16, 14 Oct 2026)
+
+Every item was measured by script, on the lift model (`dold_v4_350`, baseline configuration), and the reading is written next to the number
+the item expects. **A person did not look at a screen**: where an item asks for a judgement that needs eyes, that part is marked
+CANNOT-MEASURE and nothing stands in for it. Raw readings: `evidence/v01/`. Renders (one per lift stop, one isometric, drawn from the URDF's
+own visual geometry, no simulator): `evidence/renders/`.
+
+| # | Expected | Measured | Verdict |
+|---|---|---|---|
+| 1 | column axis x 0.060, z 0.304 (bp000), x 0.110 (bp050); arm base z 1.000 / 1.175 / 1.350, x and y unchanged | x 0.060, z 0.304 / x 0.110; arm base z 1.000 / 1.175 / 1.350 at x 0.240, y +0.031 at all three | **PASS**. The column has no `<visual>` and no `<collision>`: nothing is drawn for it |
+| 2 | profile 0.120 fore-aft x 0.060 x 0.340, centre 0.180 ahead; arm bases (0.180, +-0.031, 0.166), 62 mm apart | box 0.12 x 0.06 x 0.34 at x 0.180; bases (0.180, +0.031, 0.166) and (0.180, -0.031, 0.166); long side fore-aft | **PASS** (read from the URDF, not from RViz) |
+| 3 | 0 colliding enabled pairs at each stop and both plates | 0 of 478 enabled pairs at L1000, L1175, L1350 on bp000 and bp050; the 18 touching pairs are the disabled Adjacent ones | **PASS** on the collision geometry (the quantity the item names); the arms' visual meshes are different files and were not intersected separately |
+| 4 | head mount z 1.223 + lift, x 0.262; optical axis 25 deg down; wrist cameras (0, +-0.05, -0.03) | z 1.223 / 1.398 / 1.573, x 0.262 (0.312 at bp050); elevation -25.0 deg; (0, +-0.05, -0.03), 0.058 m from the hand base | **PASS**. "Near the hand" is a judgement about the real hand and was not made |
+| 5 | about 1.0 m, about 2.5 rad; offset change 0.000 | 0.9995 m, 2.465 rad; offset change 0.0 | **PASS** for the numbers. CANNOT-MEASURE: whether RViz's and Gazebo's models are further apart than a wheel width (two windows by eye; the script's lookup of Gazebo's base pose returned nothing) |
+| 6 | joints 1/2/4 0.3 / -0.6 / 1.2 +-0.02; right arm, wheels < 0.001; first-second step a fraction of the final value | 0.30001 / -0.60001 / 1.19995; right arm 1.2e-5, wheels 0.0; largest step 0.0015 / 0.0030 / 0.0060 rad | **PASS** |
+| 7 | finger_joint2 = finger_joint1 within 0.01; right opposite in sign | left 0.4008 / 0.4008, right -0.4000 / -0.4000 in `/joint_states` (a kinematic mimic: cannot disagree); physical link-pose angles left 0.4008 / 0.4002, right -0.4000 / -0.4000 | **PASS** |
+| 8 | joint4 1.5 +-0.01; scene vs real end effector < 0.01 m; park == home; grippers +0.7854 / -0.7854, open 0 | joint4 1.50037 (left), 1.49916 (right); goal-state vs real end effector at most 0.0005 m (six arm poses); park == home (both arms); closed 0.78457 / -0.78456; 10 of 10 requests SUCCESS | **PASS** for the numbers. CANNOT-MEASURE: "the Scene Robot in RViz" is an RViz object; the goal state's forward kinematics against the real tf stands in for it |
+
+**What this does not change.** V01 stays `WARN`, and would whatever these eight said: `lift_mass_tl3_400` is null (no supplier mass for the
+fallback TL3 400 column), so one of the two columns the model offers cannot be built, and nothing here measured it. These eight are
+measured on `dold_v4_350` alone. The column has no collision geometry and one invented lateral dimension; the renders draw its envelope as a
+magenta wire box that is an annotation, not model geometry.
+
+Findings of this pass: none of the eight reads outside its expected value. By eye, in the renders: at `L1175` and `L1350` the carriage and
+`arm_profile_link` float above the base with nothing drawn between them, which is what "no column geometry" looks like and is the reason
+the renders carry the annotation.
