@@ -26,10 +26,10 @@ Class: `static+mock` for the A6 suite, `simulation` for A7. **No physical eviden
 | `SKIP` | a stated, reasoned non-comparison (the one legitimate case: no git checkout to compare an upstream pin with) |
 | `NOT_RUN` | a registered check left no result; never a `PASS`, and it fails the exit status |
 
-- **A7 regression** (`run_a7_regression.sh`): **13 PASS / 1 WARN (V01) / 0 FAIL / 0 NOT_RUN**, five consecutive runs on `7daa2ab` (the shutdown-race fix, before the rebase onto `main` and before option B was adopted: these prove the fix) plus three runs on `dada509` (the code of this PR: the last commit that changed code).
-- **A6 suite** (`verify_a6.sh`): **24 PASS / 4 WARN (T08, E01, W02, V01) / 0 FAIL / 0 NOT_RUN** on `1168f45`. The first run of that step failed H01 (reports kept; fixed in `1168f45`).
+- **A7 regression** (`run_a7_regression.sh`): **13 PASS / 1 WARN (V01) / 0 FAIL / 0 NOT_RUN**, five consecutive runs on `7daa2ab` (the shutdown-race fix, before the rebase onto `main` and before option B was adopted: these prove the fix) plus three runs on `dada509`, and three more on `aa94fc3`, the last commit that changed code. One further run, on `9bc327c`, **failed** (11 PASS / 1 WARN / 2 FAIL) under an orphaned simulator of G01's launch that nothing detected; its report is kept (see `evidence/reports/README.md`, P16).
+- **A6 suite** (`verify_a6.sh`): **24 PASS / 4 WARN (T08, E01, W02, V01) / 0 FAIL / 0 NOT_RUN** on `1168f45`, and on `aa94fc3` (three runs, the same numbers). The first run of that step failed H01 (reports kept; fixed in `1168f45`).
 - The reports are in `evidence/reports/`, with `README.md` listing commit and result for each, including the failed ones. `evidence/frozen_a6_993b000/` is the frozen expansion set of the earlier mast-model A6, with a verifier.
-- Two of the eight A7 runs left a `gz sim` server running after the launch under test was torn down. The process guard did not see it; this is recorded as a finding below.
+- Two of the eight A7 runs of P15 left a `gz sim` server running after the launch under test was torn down, and one more did after G01 in P16. G02, G01 and M02 now fail when a simulator of their own partition survives their launch; that check is proven through the launch-test path with an injected fault and was **not** observed to catch a natural orphan (0 of 12 live G02 runs produced one).
 
 ## Dependencies
 
@@ -45,11 +45,11 @@ Class: `static+mock` for the A6 suite, `simulation` for A7. **No physical eviden
 ## Known gaps
 
 - `lift_mass_tl3_400` is `null` (no supplier mass for the fallback TiMOTION TL3 400 column). By design a null datum that is read is a hard-fail that names itself: the `tl3_400` configuration does not expand.
-- V01 (manual visual check) is `WARN`: none of its eight items has been answered on the lift model yet, and it stays `WARN` until `lift_mass_tl3_400` is sourced.
-- M02: the joint-state clamp's margin to its epsilon (1e-5 rad) is about 3x, not the 10x it was set with: activations went from 184-277 to about 1750 per run and the largest overshoot from 9.9e-7 to 3.1e-6 rad, almost all `openarm_right_finger_joint1/2` at their open limit. Nothing is beyond the epsilon and the poses reach their goals. Cause under investigation; the lift's prismatic joint was tested and rejected. The epsilon has not been widened.
+- V01 (manual visual check) is `WARN`. Its eight items were measured by script on the lift model (none reads outside its expected value; two sub-questions that need eyes are CANNOT-MEASURE; `evidence/v01/`, renders in `evidence/renders/`), and it stays `WARN` until `lift_mass_tl3_400` is sourced, however the eight land. No person has looked at the running simulator.
+- M02: the joint-state clamp's margin to its epsilon (1e-5 rad) is about 3x, not the 10x it was set with: activations went from 184-277 to about 1750 per run and the largest overshoot from 9.9e-7 to 3.1e-6 rad, almost all `openarm_right_finger_joint1/2` at their open limit. Nothing is beyond the epsilon and the poses reach their goals. Bisected in P16 (`evidence/m02_bisect/RESULTS.md`): the ACM, the modelled mass, the arm separation and position, the open command and platform-sw's new base are each ruled out; the cause is not found. It is `right_finger_joint1` resting on its open limit in the new body (tens of microradians inside it in the old one). Counts scatter 646 to 1054 between runs of one unchanged configuration. The epsilon has not been widened.
 - No runtime producer of the configuration identity has an owner: `config_id` is computed offline from files; nothing in a running system publishes it.
 - Arms are 62 mm apart at their bases: no contact at home, but the left gripper reaches right-arm links in about 3% of random left-arm states (sampled).
-- A `gz sim` server is orphaned after the launch test in about 2 of 8 A7 runs; not detected by the process guard.
+- A `gz sim` server is orphaned after a launch test in some A7 runs (about 2 of 8 in P15, 1 of 8 in P16 plus one natural one in the first G02 run); the process guard does not see it, the new check does.
 
 ## `config_id` inputs changed
 

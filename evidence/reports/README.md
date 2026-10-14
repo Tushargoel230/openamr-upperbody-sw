@@ -56,3 +56,43 @@ it is not understood. **The consequence that matters:** the epsilon was set at t
 a margin of about 3. Nobody should widen the epsilon on this (it is ADR-009's number and the clamp must not launder a real excursion): it is a finding.
 
 Class: `static+mock` for `_dev`, `simulation` for `_a7`. No physical evidence. The frozen expansion set is in `../frozen_a6_993b000/`.
+
+## P16
+
+Two evidence passes, three A6 and three A7 runs each. Pass 1 ran on `9bc327c` (the G02-only orphan check), pass 2 on `aa94fc3` (the same check
+on G01 and M02 as well). `aa94fc3` is the last commit that changed code; the commits after it add only reports and documents.
+
+| file | what | commit | result |
+|---|---|---|---|
+| `20261014T121519Z_dev.json`, `...T121726Z_dev.json`, `...T121931Z_dev.json` | A6 suite, pass 1, runs 1 to 3 | `9bc327c` | 24 PASS, 4 WARN (T08, E01, W02, V01), 0 FAIL, 0 NOT_RUN, each |
+| `20261014T122605Z_a7.json`, `...T123243Z_a7.json` | A7, pass 1, runs 1 and 2 | `9bc327c` | 13 PASS, 1 WARN (V01), 0 FAIL, 0 NOT_RUN, each |
+| `20261014T123917Z_a7.json` | A7, pass 1, run 3: **FAILED** | `9bc327c` | 11 PASS, 1 WARN, 2 FAIL (M02, and AUX with it): one named pose CONTROL_FAILED (11 of 12) |
+| `20261014T124435Z_dev.json`, `...T124640Z_dev.json`, `...T124844Z_dev.json` | A6 suite, pass 2, runs 1 to 3 | `aa94fc3` | 24 PASS, 4 WARN, 0 FAIL, 0 NOT_RUN, each |
+| `20261014T125516Z_a7.json`, `...T130148Z_a7.json`, `...T130822Z_a7.json` | A7, pass 2, runs 1 to 3 | `aa94fc3` | 13 PASS, 1 WARN (V01), 0 FAIL, 0 NOT_RUN, each |
+
+**The failed run, and its cause.** During pass 1 run 3 a `gz sim` server of **G01's** launch (partition `g01_65237`) was left running after G01's
+teardown (G01's own `parameter_bridge` had exited -6, one of the allowed shutdown behaviours). It ran at about three cores for the rest of the run,
+and M02, two tests later, sent a pose whose controller never executed (`left_arm` request, final error 1.5 rad). Nothing detected the orphan: the
+check of that commit was on G02 only, and G02's own launch was clean. The check was extended to G01 and to M02's launch (`63ed6d1`) and pass 2
+was run on that commit. **This is one failed run in six on the code of the step, with a cause that was seen, not inferred; it is not hidden by
+pass 2.** Pass 2's three clean runs say the tree passes when no orphan arises; they do not say the orphan cannot arise.
+
+**What moved against P15, and why.** Between `dada509` and `aa94fc3` nothing the simulator or the model sees changed (the commits are tests,
+harness, documents and evidence), and the numbers show it: every check and every count is as in P15 except (1) G01 and G02 (and M02's sidecar)
+now carry `gz_server_after_shutdown` (new field); (2) per-run message counts (1511 to 1520 in M02, 4025 to 4389 in M01); (3) the M02 clamp counters:
+
+| run | activations | episodes | largest overshoot |
+|---|---|---|---|
+| P15, three runs of `dada509` | 1800, 1707, 1783 | 88, 81, 61 | 1.9e-06, 3.1e-06, 1.9e-06 rad |
+| pass 2, three runs of `aa94fc3` | 1795, 957, 1832 | 37, 39, 52 | 1.3e-06, 8.6e-07, 6.2e-07 rad |
+
+These moved inside the scatter that P16's bisect measured for an **unchanged** tree (right-finger activations 873, 646, 1054 in three runs
+of one configuration; `evidence/m02_bisect/RESULTS.md`), so they are not attributed to anything in the diff: there is nothing in the diff that
+could move them, and the scatter itself is the thing that is not understood. The margin to the epsilon (1e-5) is still about 3x on the worst
+overshoot seen in any run of this step (4.2e-06 rad, in a variant run of the bisect), not 10x. The epsilon was not widened.
+
+**Orphans seen in this step (natural), for the rate.** G02 launch, first run of the session (before the check existed): 1. G02 launch under
+the check: 0 of 12 (plus 6 of the pass runs). G01's launch: 1 in pass 1 (above). M02's launch: left servers behind only after failed runs
+(8 of 12 runs of the first, contaminated bisect attempt; none in the valid ones). The 25% of P15 was not reproduced; the check on G02 was
+shown to work through the whole launch-test path only with a deliberately injected fault (`canary_gz_orphan.sh`).
+
