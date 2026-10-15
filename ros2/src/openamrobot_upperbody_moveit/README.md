@@ -249,7 +249,7 @@ forbid), and moving `home` would invent a pose (what `park`'s placeholder commen
 | **Clamps TO the limit** | a reading past a limit by at most epsilon is published *at* the limit, never beyond it |
 | **Beyond epsilon is not noise** | a reading further out is published unchanged, logged as an error, counted as `over_epsilon`, and the request is still refused (`test_joint_state_clamp_loop.py` shows it); the clamp does not hide a real drift |
 | **Logs** | every *episode* of clamping (a joint resting on its limit is one episode of many activations) is logged at WARN with the joint and the magnitude; each activation is logged at DEBUG and counted |
-| **Counts** | `~/get_stats` returns `activations`, `episodes`, `max_magnitude_rad`, `over_epsilon`, per joint; M01 and M02 put them in their sidecars and the A7 report sums them in `clamp` |
+| **Counts and what gates** | `~/get_stats` returns `activations`, `episodes`, `max_magnitude_rad`, `over_epsilon`, per joint. **M02 gates on exactly two of these numbers** (P17): `over_epsilon` must be 0 and the largest overshoot magnitude (`max_magnitude_rad`, or `max_over_epsilon_rad` if larger) must be below the epsilon. `activations` and `episodes` are **diagnostic only**: they scatter 2-3x on an unchanged tree (646-1054 right-finger activations in one configuration, P16), so they are reported under `diagnostic_only`, labelled, and gate nothing. M01 and M02 put them in their sidecars and the A7 report sums them in `clamp` |
 
 A deterministic reproduction needs no Gazebo: `test_joint_state_clamp_loop.py` holds `openarm_left_joint4` at -2.5e-7 and shows the request
 refused without the clamp (`clamp:=false`) and planning with it. The start gate of M01/M02 (wait until the joints are inside their limits for a

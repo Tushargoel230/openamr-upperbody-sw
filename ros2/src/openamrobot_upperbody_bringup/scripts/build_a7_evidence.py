@@ -57,6 +57,8 @@ A7_CHECKS = [
     ("M04", "a goal inside the nearest reachable structure volume (arm_profile_link) is rejected by planning (the base body is out of the arms' reach)"),
     ("M05", "per-hand gripper values: closed is each hand's own far limit, opposite signs (ADR-009 point 5); the single-number version fails both ways"),
     ("M06", "named-pose plans need some acceleration limit and are insensitive to its value across three orders of magnitude (the limits stay placeholders)"),
+    ("M07", "at rest in Gazebo no joint sits within the joint_rest_margin_rad datum of either of its limits (FAIL, not WARN; lift_joint is not measured, "
+            "and says why)"),
     ("L01", "launch test: five controllers active on mock, one trajectory followed"),
     ("H01", "every test file is registered and every launch test checks that its processes started and exited cleanly"),
     ("H02", "every test CMake registered left a result file (nothing registered but not run)"),
@@ -68,7 +70,7 @@ PACKAGES = {"gazebo": "openamrobot_upperbody_gazebo", "moveit": "openamrobot_upp
 EXPECTED_STEPS = ("colcon_test_gazebo", "colcon_test_moveit", "colcon_test_bringup")
 # A check recorded by one sidecar per run, and the runs it must have. M01 is once per lift stop: the cut order allows fewer (with the reason
 # recorded) through A7_M01_STOPS, and the report then says so.
-SIDECAR_REQUIRED = {"G01", "G02", "M01", "M02", "M03", "M04", "M05", "M06"}
+SIDECAR_REQUIRED = {"G01", "G02", "M01", "M02", "M03", "M04", "M05", "M06", "M07"}
 REFUSED_DIRTY = be.REFUSED_DIRTY
 
 
@@ -91,22 +93,37 @@ def all_fresh_sidecars(directory, since):
     return out
 
 
+CLAMP_GATE_KEYS = ("excursions_beyond_epsilon", "largest_overshoot_rad", "largest_overshoot_joint", "epsilon_rad", "passes", "reasons")
+CLAMP_DIAGNOSTIC_LABEL = ("DIAGNOSTIC ONLY: gates nothing. Activation and episode counts scatter 2-3x on an unchanged tree (P16), so they are "
+                          "reported and are not a criterion")
+
+
 def run_summary(details):
     clamp = details.get("clamp") or {}
+    diagnostic = clamp.get("diagnostic_only") or {}
     return {"poses_ok": details.get("poses_ok"), "poses_run": details.get("poses_run"), "worst_final_error_rad": details.get("worst_final_error_rad"),
-            "clamp": {k: clamp.get(k) for k in ("present", "epsilon_rad", "messages", "activations", "episodes", "max_magnitude_rad",
-                                                "max_magnitude_joint", "over_epsilon", "max_over_epsilon_rad")}}
+            "clamp": {"present": clamp.get("present"), "epsilon_rad": clamp.get("epsilon_rad"),
+                      "gate": {k: (clamp.get("gate") or {}).get(k) for k in CLAMP_GATE_KEYS},
+                      "diagnostic_only": {"label": CLAMP_DIAGNOSTIC_LABEL, **{k: diagnostic.get(k) for k in ("messages", "activations", "episodes")}}}}
 
 
 def clamp_totals(runs):
-    """The clamp's counters across the runs of M01/M02: how often it fired, the largest magnitude it clamped, and any reading it did not clamp."""
+    """The clamp across the runs of M01/M02. Two numbers are the verdict (`gate`): readings beyond epsilon and the largest overshoot magnitude.
+    Activations and episodes are summed under `diagnostic_only`, labelled as such, and are never read by the verdict."""
     rows = [(name, r["clamp"]) for name, r in runs.items() if r.get("clamp")]
     present = [(n, c) for n, c in rows if c.get("present")]
-    return {"epsilon_rad": next((c["epsilon_rad"] for _, c in present), None), "runs_with_a_clamp": len(present), "runs": len(rows),
-            "activations": sum(c["activations"] for _, c in present), "episodes": sum(c["episodes"] for _, c in present),
-            "max_magnitude_rad": max((c["max_magnitude_rad"] for _, c in present), default=None),
-            "over_epsilon": sum(c["over_epsilon"] for _, c in present),
-            "max_over_epsilon_rad": max((c["max_over_epsilon_rad"] for _, c in present), default=None)}
+    gates = [c["gate"] for _, c in present if c.get("gate")]
+    excursions = sum(g["excursions_beyond_epsilon"] or 0 for g in gates)
+    largest = max((g["largest_overshoot_rad"] or 0.0 for g in gates), default=None)
+    epsilon = next((c["epsilon_rad"] for _, c in present if c.get("epsilon_rad") is not None), None)
+    reasons = [r for g in gates for r in (g.get("reasons") or [])]
+    return {"runs_with_a_clamp": len(present), "runs": len(rows),
+            "gate": {"epsilon_rad": epsilon, "excursions_beyond_epsilon": excursions, "excursions_must_be": 0,
+                     "largest_overshoot_rad": largest, "largest_overshoot_must_be_below_rad": epsilon,
+                     "passes": bool(gates) and len(gates) == len(rows) and all(g.get("passes") for g in gates), "reasons": reasons},
+            "diagnostic_only": {"label": CLAMP_DIAGNOSTIC_LABEL,
+                                "activations": sum((c.get("diagnostic_only") or {}).get("activations") or 0 for _, c in present),
+                                "episodes": sum((c.get("diagnostic_only") or {}).get("episodes") or 0 for _, c in present)}}
 
 
 def combine_multi(check_id, counts, docs, expected_stops, missing=None):
@@ -141,6 +158,10 @@ def combine_multi(check_id, counts, docs, expected_stops, missing=None):
     for name, run in runs.items():
         if not (run.get("clamp") or {}).get("present"):
             problems.append(f"{name}: no joint-state clamp counters in the run")
+    # M02 is gated on the two numbers and nothing else: a run with any excursion beyond epsilon, or a largest overshoot not below it, FAILS.
+    # M01 (mock: no physics) keeps its older, weaker reading of the same number: WARN. The activation and episode counts gate neither.
+    if check_id == "M02" and runs and not totals["gate"]["passes"]:
+        problems.append("clamp gate: " + ("; ".join(totals["gate"]["reasons"]) or "no clamp numbers"))
     if counts and counts["failures"]:
         return "FAIL", {**details, "problems": problems or ["a test of this check failed"]}
     if any(doc["result"] == "FAIL" for doc in docs):
@@ -153,9 +174,10 @@ def combine_multi(check_id, counts, docs, expected_stops, missing=None):
         return "FAIL", {**details, "problems": problems}
     if details.get("reduced_set"):
         return "WARN", {**details, "problems": [details["reduced_set"]]}
-    if totals["over_epsilon"]:
-        return "WARN", {**details, "problems": [f"the clamp met {totals['over_epsilon']} reading(s) beyond its epsilon (largest {totals['max_over_epsilon_rad']:.3g} "
-                                                f"rad): not float noise, passed through unclamped; the poses still reached their goals, but look at why"]}
+    if totals["gate"]["excursions_beyond_epsilon"]:
+        return "WARN", {**details, "problems": [f"the clamp met {totals['gate']['excursions_beyond_epsilon']} reading(s) beyond its epsilon (largest "
+                                                f"{totals['gate']['largest_overshoot_rad']:.3g} rad): not float noise, passed through unclamped; the poses "
+                                                f"still reached their goals, but look at why"]}
     return "PASS", details
 
 

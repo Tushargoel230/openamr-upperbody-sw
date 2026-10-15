@@ -2,7 +2,7 @@
 # Schema v1, see 10_architecture/DATUMS.md. Values may change; names and the frame structure may not.
 # Computed values (e.g. the lift's inertia tensor) are NOT stored here; upstream-owned values (option B's geometry, the arm) are read from upstream YAML.
 schema_version: 1
-revision: "2026-10-13.a"          # bump on every change to this file; goes into config_id (test_datums_revision.py enforces it)
+revision: "2026-10-15.a"          # bump on every change to this file; goes into config_id (test_datums_revision.py enforces it)
 units: {length: m, angle: rad, mass: kg}
 
 # Datums that are reported but never feed the model (DATUMS.md rule 1).
@@ -14,6 +14,7 @@ report_only:
   - envelope_max_depth
   - gross_mass_limit
   - f2s_vehicle_mass_estimate
+  - joint_rest_margin_rad
 
 # Datums whose xacro consumer has not been written yet: <datum>: <step that will consume it>.
 # The step that adds the consumer deletes the entry in the same commit; T13 fails if it does not.
@@ -125,3 +126,11 @@ datums:
     ref: "Alex, F2S design proposal, 28 Sep 2026 (gross mass about 93 kg vs the 120 kg cap); second-hand via DESIGN_UPDATE_2026-10-05 s1, the F2S document is not in this repo"
     owner: "Alex (F2S)"
     note: "Vehicle level, not per link. T10 prints it next to the modelled total so 22 kg against 120 kg is not read as headroom; it feeds nothing."
+
+  joint_rest_margin_rad:
+    value: 1.0e-3
+    source: placeholder
+    status: placeholder
+    ref: "M07 (VERIFICATION.md, rev19.0 pass, 14 Oct 2026): no joint's rest position may sit within this many radians of either of its limits. Chosen from what was measured in P17 (evidence/m02_bisect/RESULTS.md, 'Finger torque at rest'): the rest position of one joint differs between runs of an unchanged tree by up to 2.8e-4 rad (left_finger_joint1; 9e-6 for the right finger), and the arm joint4s rest 9.3e-5 to 1.0e-4 inside their lower limit. A margin below the between-run scatter makes M07 pass in one run and fail in the next; 1e-3 is 3.6 times the largest scatter seen and about 0.057 degrees."
+    owner: "architecture chat (M07) / Tushar"
+    note: "A margin, not a hardware number: it feeds no model and no xacro (report_only). Replace it with a figure someone has a reason for (a joint's mechanical stop clearance, a controller deadband) when one exists. It is not tuned to any outcome: at 1e-3 the check FAILS on four joints (both finger_joint1 and both joint4), and it would fail the old body on the same four, because in both bodies the open and zero poses ARE limits. Changing the value changes M07's verdict and nothing else."

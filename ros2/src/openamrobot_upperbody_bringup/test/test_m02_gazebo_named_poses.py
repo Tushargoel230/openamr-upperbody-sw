@@ -34,8 +34,9 @@ from openamrobot_upperbody_moveit.move_group_client import MoveGroupClient  # no
 from openamrobot_upperbody_moveit.named_poses import GRIPPER_JOINT, SIDES  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, clamp_record, named_pose_plan, run_sequence, stack_alive, stack_healthy,  # noqa: E402
-                        write_run_sidecar)
+from a7_support import (A7_ENABLED, ACCELERATION_SCALING, ARM_CONTROLLERS, CONTROLLERS_ACTIVE_WITHIN_S, SKIP_REASON, TOLERANCE,  # noqa: E402
+                        VELOCITY_SCALING, clamp_gate, clamp_record, named_pose_plan, run_sequence, stack_alive, stack_healthy,
+                        wait_for_controllers_active, write_run_sidecar)
 
 LIFT_STOP = "L1000"            # joint_state_publisher reports lift_joint at its default zero; no ros2_control interface moves it
 # The engine this check REQUIRES, passed explicitly on purpose (see the docstring); the launch's own default is DART.
@@ -73,7 +74,8 @@ class TestNamedPosesInGazebo(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         rows = cls.record.get("poses", [])
-        ok = bool(rows) and all(r["ok"] for r in rows)
+        gate = clamp_record(cls.client)
+        ok = bool(rows) and all(r["ok"] for r in rows) and gate["gate"]["passes"] and cls.record.get("controllers_active", False)
         details = {"lift_stop": LIFT_STOP, "lift_joint_position_m": 0.0, "base_plate": "bp000",
                    "lift_state_source": "joint_state_publisher's default (zero), not the physics: platform-sw's JointStatePublisher is "
                                         "scoped to the wheels and the lift has no ros2_control interface",
@@ -86,7 +88,9 @@ class TestNamedPosesInGazebo(unittest.TestCase):
                    "poses_run": len(rows), "poses_ok": sum(1 for r in rows if r["ok"]),
                    "requests_per_pose": 1,       # no retry: a refused request is a FAILed pose (see MoveGroupClient.move)
                    "worst_final_error_rad": max((r["final_max_joint_error_rad"] for r in rows), default=None),
-                   "clamp": clamp_record(cls.client),
+                   "clamp": gate,
+                   "criteria": "exactly two numbers gate the clamp part of M02: excursions beyond epsilon (must be 0) and the largest overshoot "
+                               "magnitude (must be below epsilon = 1e-5 rad). Activation and episode counts are DIAGNOSTIC ONLY and gate nothing",
                    "poses": rows, **{k: v for k, v in cls.record.items() if k != "poses"}}
         write_run_sidecar("M02", f"gazebo_{LIFT_STOP}", f"named poses plan and execute in Gazebo at the baseline, lift at {LIFT_STOP}",
                           "PASS" if ok else "FAIL", details)
@@ -95,11 +99,26 @@ class TestNamedPosesInGazebo(unittest.TestCase):
 
     def test_m02_1_every_named_pose_plans_and_executes_with_a_final_error_under_tolerance(self):
         self.assertTrue(self.client.wait_for_server(READY_WITHIN_S), f"move_group's /move_action did not appear within {READY_WITHIN_S:.0f} s")
+        # Before the first pose: the arm controllers (and the rest of the five) must be ACTIVE. A pose sent while a controller is still
+        # configuring is refused or dropped and then reads as a robot failure; that would be measuring the harness. If they never activate this
+        # FAILs here, with their states, and no pose is sent.
+        ok, states, waited = wait_for_controllers_active(self.node, CONTROLLERS_ACTIVE_WITHIN_S)
+        self.record["controllers"] = {"required": list(ARM_CONTROLLERS), "states": states, "waited_s": waited, "timeout_s": CONTROLLERS_ACTIVE_WITHIN_S}
+        self.record["controllers_active"] = ok
+        self.assertTrue(ok, f"the controllers did not all reach active within {CONTROLLERS_ACTIVE_WITHIN_S:.0f} s (waited {waited} s): {states}; "
+                            "no pose was sent")
         joints = [f"openarm_{side}_joint{i}" for side in SIDES for i in range(1, 8)] + [GRIPPER_JOINT[s] for s in SIDES]
         self.assertTrue(self.client.wait_for_joints(joints, 120.0), "/joint_states never listed all 16 controlled joints")
         self.record["poses"], failures, self.record["start"] = run_sequence(self.client, named_pose_plan(), result_timeout=240.0)
         self.assertFalse(failures, "\n".join(failures))
         self.assertEqual(len(self.record["poses"]), 4 * 2 + 2 * 2)
+
+    def test_m02_2_the_clamp_stayed_inside_its_epsilon(self):
+        """The two numbers (criteria in the module's sidecar): excursions beyond epsilon = 0 and the largest overshoot < 1e-5 rad. Runs after the
+        pose test (unittest orders by name) and reads the same clamp, so it reports on the whole sequence."""
+        gate = clamp_gate(self.client.clamp_stats())
+        self.record["clamp_gate"] = gate
+        self.assertTrue(gate["passes"], "; ".join(gate["reasons"]))
 
 
 EXPECTED_PROCESSES = ["gazebo", "robot_state_publisher", "parameter_bridge", "create", "joint_state_publisher", "spawner", "move_group", "joint_state_clamp"]

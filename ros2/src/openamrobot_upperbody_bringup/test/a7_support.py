@@ -1,6 +1,7 @@
 """Shared by the M01 and M02 launch tests: the named-pose sequence, the settle-and-measure step, and the per-run sidecar."""
 import os
 import sys
+import time
 
 from openamrobot_upperbody_moveit.joint_state_clamp import EPSILON
 from openamrobot_upperbody_moveit.moveit_config import srdf_path
@@ -84,16 +85,81 @@ def run_sequence(client, plan, result_timeout=120.0, start_wait=60.0):
     return rows, failures, start
 
 
+CLAMP_DIAGNOSTIC_LABEL = ("DIAGNOSTIC ONLY: gates nothing. P16 measured 646-1054 activations inside one unchanged configuration, so a count "
+                          "that scatters 2-3x on an unchanged tree is not a measurement and is not a criterion (DESIGN_LOG 2026-10-14)")
+
+
+def clamp_gate(stats):
+    """The TWO numbers M02 gates on, from the clamp's `get_stats` dict (or None when there was no clamp):
+       1. excursions beyond epsilon: readings further past a limit than epsilon, passed through unclamped. Must be 0.
+       2. the largest overshoot magnitude of the run, clamped or not. Must be below epsilon (1e-5 rad).
+    Epsilon is the module's own constant: a clamp RUNNING with a wider one fails here, and no outcome widens it. Activation and episode counts are
+    not in this function and gate nothing."""
+    if stats is None:
+        return {"passes": False, "reasons": ["no joint-state clamp counters in the run: no evidence about the overshoot at all"],
+                "epsilon_rad": EPSILON, "excursions_beyond_epsilon": None, "largest_overshoot_rad": None}
+    excursions = int(stats.get("over_epsilon", 0))
+    largest = max(float(stats.get("max_magnitude_rad") or 0.0), float(stats.get("max_over_epsilon_rad") or 0.0))
+    running = stats.get("epsilon_rad")
+    reasons = []
+    if excursions != 0:
+        reasons.append(f"{excursions} reading(s) beyond epsilon {EPSILON:g} rad (must be 0)")
+    if not largest < EPSILON:
+        reasons.append(f"largest overshoot {largest:.3g} rad is not below epsilon {EPSILON:g} rad")
+    if running is None or float(running) > EPSILON:
+        reasons.append(f"the running clamp's epsilon is {running!r}, wider than the {EPSILON:g} rad it was set to")
+    return {"passes": not reasons, "reasons": reasons, "epsilon_rad": EPSILON, "excursions_beyond_epsilon": excursions,
+            "excursions_must_be": 0, "largest_overshoot_rad": largest, "largest_overshoot_must_be_below_rad": EPSILON,
+            "largest_overshoot_joint": stats.get("max_over_epsilon_joint") if float(stats.get("max_over_epsilon_rad") or 0.0) > float(
+                stats.get("max_magnitude_rad") or 0.0) else stats.get("max_magnitude_joint")}
+
+
 def clamp_record(client):
-    """What the joint-state clamp did during this run, for the sidecar: its counters (activations, episodes, the largest magnitude, readings
-    beyond the epsilon), or the statement that no clamp ran. The counters are the point of the clamp: one that fires constantly, or by more
-    than its epsilon, says something other than float noise is moving a joint."""
+    """What the joint-state clamp did during this run, for the sidecar. `gate` holds the two numbers a run is judged on (clamp_gate);
+    `diagnostic_only` holds the counts that are reported and gate nothing, labelled as such. Or the statement that no clamp ran."""
     stats = client.clamp_stats()
     if stats is None:
-        return {"present": False, "note": "no /joint_state_clamp/get_stats: move_group planned from the raw /joint_states"}
-    return {"present": True, **stats,
+        return {"present": False, "gate": clamp_gate(None),
+                "note": "no /joint_state_clamp/get_stats: move_group planned from the raw /joint_states"}
+    diagnostic = {k: stats[k] for k in ("messages", "activations", "episodes", "joints") if k in stats}
+    return {"present": True, "epsilon_rad": stats.get("epsilon_rad"), "gate": clamp_gate(stats),
+            "over_epsilon": stats.get("over_epsilon"), "max_magnitude_rad": stats.get("max_magnitude_rad"),
+            "max_magnitude_joint": stats.get("max_magnitude_joint"), "max_over_epsilon_rad": stats.get("max_over_epsilon_rad"),
+            "max_over_epsilon_joint": stats.get("max_over_epsilon_joint"),
+            "diagnostic_only": {"label": CLAMP_DIAGNOSTIC_LABEL, **diagnostic},
             "note": "joint_state_clamp.py: a reading past a joint limit by at most epsilon_rad is published at the limit, to move_group only; "
                     "a reading further out is passed through and counted as over_epsilon. No limit was widened and no pose moved"}
+
+
+ARM_CONTROLLERS = ("joint_state_broadcaster", "left_arm_controller", "right_arm_controller", "left_gripper_controller", "right_gripper_controller")
+CONTROLLERS_ACTIVE_WITHIN_S = 120.0     # wall s from the call; the controller manager of a headless server is up in 10-25 s on this machine
+
+
+def wait_for_controllers_active(node, timeout_s=CONTROLLERS_ACTIVE_WITHIN_S, names=ARM_CONTROLLERS, manager="/controller_manager"):
+    """Block until every controller in `names` reports `active`, or `timeout_s` of wall time passes. -> (ok, {name: state}, waited_s).
+    A pose sent before this is true is a test of the harness, not of the robot (a controller that is not active refuses or drops the goal),
+    so a caller treats `ok` False as a FAIL of its own with the states in the message, and never sends the pose."""
+    import rclpy
+    from controller_manager_msgs.srv import ListControllers
+    started = time.monotonic()
+    client = node.create_client(ListControllers, f"{manager}/list_controllers")
+    states = {}
+    try:
+        if not client.wait_for_service(timeout_sec=timeout_s):
+            return False, states, round(time.monotonic() - started, 1)
+        while time.monotonic() - started < timeout_s:
+            future = client.call_async(ListControllers.Request())
+            end = time.monotonic() + 2.0
+            while not future.done() and time.monotonic() < end:
+                rclpy.spin_once(node, timeout_sec=0.05)
+            if future.done() and future.result() is not None:
+                states = {c.name: c.state for c in future.result().controller}
+                if all(states.get(name) == "active" for name in names):
+                    return True, states, round(time.monotonic() - started, 1)
+            time.sleep(0.25)
+        return False, states, round(time.monotonic() - started, 1)
+    finally:
+        node.destroy_client(client)
 
 
 def stack_alive(proc_info):
