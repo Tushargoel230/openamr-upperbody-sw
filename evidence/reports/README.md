@@ -97,3 +97,44 @@ the check: 0 of 12 (and 0 of the 6 G02 launches of the two passes). G01's launch
 (8 of 12 runs of the first, contaminated bisect attempt; none in the valid ones). The 25% of P15 was not reproduced; the check on G02 was
 shown to work through the whole launch-test path only with a deliberately injected fault (`canary_gz_orphan.sh`).
 
+
+## P17
+
+The code of this step is `013b524` (the last commit that changed code, other than `test_a7_controller_wait.py` and its CMake line, added after
+the passes and run alone). The pushed head differs from it by report copies, measurement data and documents. `WARN` is not `PASS`.
+
+| file | what | commit | result |
+|---|---|---|---|
+| `20261015T113447Z_dev.json`, `...T113759Z_dev.json`, `...T114111Z_dev.json` | A6 suite, the **first** pass, runs 1 to 3: **FAILED**, all three the same way | `a713533` | 23 PASS, 4 WARN, 1 FAIL (AUX), 0 NOT_RUN: `test_evidence_dir.py` rejected the stop helper's report, which used the system temp directory. Fixed in `013b524` (the report is evidence and lives in the evidence directory) |
+| `20261015T114559Z_dev.json`, `...T114920Z_dev.json`, `...T115241Z_dev.json` | A6 suite, runs 1 to 3 | `013b524` | 24 PASS, 4 WARN (T08, E01, W02, V01), 0 FAIL, 0 NOT_RUN, each |
+| `20261015T120152Z_a7.json` | A7, run 1: **FAILED** | `013b524` | 11 PASS, 1 WARN (V01), 3 FAIL (G01, M07, AUX), 0 NOT_RUN |
+| `20261015T121048Z_a7.json`, `...T121946Z_a7.json` | A7, runs 2 and 3 | `013b524` | 13 PASS, 1 WARN (V01), 2 FAIL (M07, and AUX with it), 0 NOT_RUN, each |
+
+**M07 FAILs by design, so no A7 run is green.** It names `openarm_right_finger_joint1` (rests at +2.6e-8 rad, past its open limit), and
+`openarm_left_finger_joint1`, `openarm_left_joint4` and `openarm_right_joint4`, which rest 2e-4 to 5e-4 and 1.0e-4 rad inside theirs. AUX fails
+with it because the bringup `colcon test` step exits 1 (the same shape as P16's "M02, and AUX with it"). Every other check of the A7 report is
+as before.
+
+**The failed A7 run, and what it shows.** In run 1, G01's `gz sim` server ignored the SIGINT, ignored the `/server_control` request (which
+timed out) and ignored SIGTERM, and was ended by the stop helper's SIGKILL at 9.2 s. The run FAILed with the helper's report in its message and
+**no server was left running** (`details.gz_server_after_shutdown` in the report). This is the hang of `launch/sim.launch.py`'s header, seen live
+for the first time with the helper in place: **SIGINT does not prevent it**, it was one in 49 launches since (36 in the orphan count below, 12
+here, one M07 run), against about one in 13 before. 36 of the 36 launches of the orphan count stopped on the first step, in 1.32 to 1.44 s; of the 12 launches here, the A7 reports carry the
+helper's report for G01, G02 and M07 (eight stopped on the first step in 1.32 to 1.44 s, one was forced), and the M02 launches' helper reports
+are in their sidecars, of which only the last run's was kept (stopped, 1.43 s). The cause of the hang is inside gz-sim and was not found.
+
+**M02's two numbers** (gate; `details.clamp_totals.gate` in each A7 report): excursions beyond epsilon 0, 0, 0; largest overshoot
+1.54e-06, 1.54e-06 and 1.52e-06 rad (epsilon 1e-5, so about 6.5x). Activations and episodes, labelled `diagnostic_only`: 1839 / 89, 1802 / 66,
+1819 / 60. M02 waited 0.0 s for its controllers in the run whose sidecar was kept (they were already `active`).
+
+**Orphans seen by the detector after the handler fix: 0 in 12 runs each of G01, G02 and M02** (`../shutdown_p17/orphan_count_36_runs.json`; one
+launch each through `colcon test`, interleaved). The natural rate before the fix was about 1 in 13 per launch. **That is not "fixed"**: 12 clean
+runs of a one-in-13 event have a 38% chance of occurring with nothing changed (0.92^12), and the live force-stop above shows the underlying
+hang still happens. What the fix changes is that a hung server no longer survives its run and no longer fails the next one. In the same 36 runs
+G02 FAILED once (`gz_link_poses` parsed two JSON messages as one; fixed in `aa0a455`, afterwards, and passed in the three A7 runs here).
+
+**The measurement behind the design** (`../shutdown_p17/`): `timing_c.jsonl` six launches of the original service request under launch_testing
+(one orphan); `timing_d.jsonl` twelve of the same with the first version of the helper, which followed the process tree and called a
+reparented server "gone" (d1 is that case: the driver found the server alive 40 s later); `timing_e.jsonl` and `timing_f.jsonl` twelve launches
+each with SIGINT sent to the server, all stopped in 1.32 to 1.54 s. The service request in `c` and `d` stopped in 1.64 to 1.79 s when it worked;
+in 4 launches of those 18 it did not (two server segfaults in libgz-sim8 during teardown, two servers that never began it).

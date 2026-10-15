@@ -32,6 +32,12 @@ All notable changes to this repository. Evidence for the description is static a
 - **Finger effort at rest was read in both trees** (`evidence/m02_bisect/RESULTS.md`, last section): the sign did not change between the bodies,
   which refutes P16's hypothesis; the old body also rests within 2.5e-5 rad of the same four limits; why the new right finger sits at the limit
   and the left one does not is not answered.
+- **Evidence pass on `013b524`** (`evidence/reports/README.md`, P17): A6 24 PASS / 4 WARN / 0 FAIL, three runs (the first pass, on `a713533`, failed
+  3 of 3: the helper's report was in the system temp directory, which `test_evidence_dir.py` forbids; fixed). A7: M07 FAILs in all three runs by
+  design (and AUX with it); run 1 also failed G01 because its server ignored SIGINT, the service request and SIGTERM and was SIGKILLed by the
+  helper at 9.2 s: the force-stop path, seen live once in 49 launches, leaving nothing running. **0 orphans in 12 runs each of G01, G02 and M02
+  after the fix (natural rate before: about 1 in 13)** is a count, not a claim that the hang is gone. `test_a7_controller_wait.py` pins M02's
+  controller wait and its FAIL, against a fake controller manager.
 - `tools/compare_option_b_wrapper.sh`: the byte-level comparison of option B's wrapper against `upstream/main` that the PR body cites.
 
 ### Added / Changed (P16)
