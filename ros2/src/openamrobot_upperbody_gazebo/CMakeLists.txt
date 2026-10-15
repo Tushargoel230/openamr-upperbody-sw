@@ -5,6 +5,9 @@ install(DIRECTORY worlds models launch config DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(launch_testing_ament_cmake REQUIRED)
+  find_package(ament_cmake_pytest REQUIRED)
+  # how sim.launch.py stops the simulator, on decoy processes and on the launch description (P17); no Gazebo, no ROS graph
+  ament_add_pytest_test(sim_launch_shutdown test/test_sim_launch_shutdown.py TIMEOUT 120)
   # G01 starts a real Gazebo server and a controller manager. It picks its own ROS_DOMAIN_ID and GZ_PARTITION (see the test),
   # so it cannot see or be seen by another stack or simulator on the machine. 90 s is the budget for startup and every assertion.
   add_launch_test(test/test_g01_gazebo_smoke.py TIMEOUT 90)

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Canary for G02's "no gz server of this run survives the teardown" (P16 task 2): proves the check FAILS on an orphaned simulator.
 #
-# It runs the real G02 launch test against a COPY of the installed package whose sim.launch.py has the /server_control stop handler
-# left out. Without that handler the SIGINT that ends the launch kills the ruby wrapper and leaves the server running: the documented way
-# the simulator is orphaned. The copy is put first on AMENT_PREFIX_PATH; nothing in the checkout or the install is changed.
+# It runs the real G02 launch test against a COPY of the installed package whose sim.launch.py has the stop handler (`stop_server`, the
+# helper that signals the server) left out. Without it the launch's SIGINT reaches only the shell around `gz sim` and the server is left
+# running: the documented way the simulator is orphaned. The copy is put first on AMENT_PREFIX_PATH; nothing in the checkout or the install
+# is changed.
 #
 # Exit 0 when G02 FAILED because a `gz sim` of its own partition survived (the check works), 1 when it did not (the check is blind),
 # 2 when the canary could not be built. A natural orphan is not needed and is not what this shows: it shows the check, through the whole
@@ -28,7 +29,7 @@ text = open(path).read()
 line = "        stop_server,\n"
 if text.count(line) != 1:
     sys.exit("canary_gz_orphan: sim.launch.py no longer lists stop_server once in its LaunchDescription: the canary needs updating")
-open(path, "w").write(text.replace(line, "        # CANARY: the /server_control stop handler is left out\n"))
+open(path, "w").write(text.replace(line, "        # CANARY: the stop handler is left out\n"))
 PY
 
 export AMENT_PREFIX_PATH="$WORK/prefix:$AMENT_PREFIX_PATH"

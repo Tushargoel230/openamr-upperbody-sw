@@ -21,6 +21,7 @@
   <!-- platform-sw's bridge config is used by reference, and its world is available through the world argument -->
   <exec_depend>openamrobot_gazebo</exec_depend>
   <test_depend>launch_testing</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>launch_testing_ament_cmake</test_depend>
   <test_depend>launch_testing_ros</test_depend>
   <test_depend>rclpy</test_depend>

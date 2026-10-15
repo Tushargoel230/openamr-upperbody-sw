@@ -8,6 +8,7 @@ P16 task 2. The decoys are `sleep` processes whose argv[0] is `gz sim -r -s ...`
   - a server that stops within the grace period is not a finding;
   - an empty partition is refused (it would match every simulator on the machine).
 """
+import json
 import os
 import signal
 import subprocess
@@ -138,3 +139,61 @@ def test_a_zombie_is_not_a_running_server(decoys, tmp_path):
     assert lg.gz_sim_processes_of("zz", proc_root=str(tmp_path)) == []
     (pid_dir / "stat").write_text("4242 (gz sim) S 1 4242 4242 0 -1 0")
     assert [p["pid"] for p in lg.gz_sim_processes_of("zz", proc_root=str(tmp_path))] == [4242]
+
+
+# --- P17: the stop helper's report is part of the verdict ----------------------------------------------------------------------------------
+def write_helper_report(partition, **fields):
+    with open(lg.gz_stop_report_path(partition), "w") as f:
+        json.dump(fields, f)
+
+
+@pytest.fixture
+def helper_report():
+    paths = []
+
+    def make(partition, **fields):
+        write_helper_report(partition, **fields)
+        paths.append(lg.gz_stop_report_path(partition))
+    yield make
+    for path in paths:
+        if os.path.exists(path):
+            os.unlink(path)
+
+
+def test_a_server_the_helper_had_to_force_is_a_finding_even_though_it_is_gone(helper_report):
+    """The helper signalled it and it is gone by the time this runs: no process to find, and the run still has to FAIL, because the server
+    accepted the stop request and did not stop."""
+    helper_report(part("forced"), state="force_stopped", survivors=[424242], signals=["SIGTERM", "SIGKILL"], gone=True)
+    report = lg.gz_server_shutdown_report(part("forced"), grace_s=0.2)
+    assert [p["pid"] for p in report["survivors"]] == [424242]
+    assert report["survivors"][0]["forced_by_the_stop_helper"] == ["SIGTERM", "SIGKILL"]
+    assert report["reaped"][0]["signal"].startswith("by the stop helper")
+    message = lg.gz_survivor_message(report)
+    assert "did not stop on request" in message and "SIGKILL" in message
+    assert not os.path.exists(lg.gz_stop_report_path(part("forced"))), "the report is consumed, so a later run of the same partition cannot inherit it"
+
+
+def test_a_helper_that_stopped_the_server_on_request_is_not_a_finding(helper_report):
+    helper_report(part("fine"), state="stopped", servers_at_request=[1], elapsed_s=1.7)
+    report = lg.gz_server_shutdown_report(part("fine"), grace_s=0.2)
+    assert report["survivors"] == [] and report["stop_helper"]["state"] == "stopped"
+
+
+def test_no_helper_report_is_not_a_finding_and_is_recorded_as_none():
+    report = lg.gz_server_shutdown_report(part("nohelper"), grace_s=0.2)
+    assert report["survivors"] == [] and report["stop_helper"] is None
+
+
+def test_a_helper_still_watching_is_waited_for_and_its_state_is_not_called_a_pass(helper_report, monkeypatch):
+    helper_report(part("watching"), state="started")
+    monkeypatch.setattr(lg, "HELPER_REPORT_WAIT_S", 0.5)
+    started = time.monotonic()
+    report = lg.gz_server_shutdown_report(part("watching"), grace_s=0.1)
+    assert time.monotonic() - started >= 0.5, "a report in state `started` must be waited for"
+    assert report["stop_helper"]["state"] == "started" and report["survivors"] == []
+
+
+def test_assert_no_gz_server_survives_fails_on_a_forced_server(helper_report):
+    helper_report(part("forcedassert"), state="force_stopped", survivors=[424243], signals=["SIGTERM", "SIGKILL"], gone=True)
+    with pytest.raises(AssertionError, match="did not stop on request"):
+        lg.assert_no_gz_server_survives(part("forcedassert"), grace_s=0.2)

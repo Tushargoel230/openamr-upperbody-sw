@@ -84,14 +84,25 @@ def _q_inv(q):
     return (-q[0], -q[1], -q[2], q[3])
 
 
+def first_json_message(text):
+    """The first JSON object in `text`. `gz topic -e -n 1 --json-output` is asked for ONE message and has printed two (a second one arrives
+    before it exits): json.loads then raised "Extra data" and failed G02 for a reason that has nothing to do with the grippers (1 run in 12,
+    P17). The first message is the one that was asked for; whatever follows it is ignored."""
+    import json
+    stripped = text.lstrip()
+    if not stripped:
+        raise ValueError("gz topic printed no message")
+    first, _ = json.JSONDecoder().raw_decode(stripped)
+    return first
+
+
 def gz_link_poses(world="empty", timeout=20):
     """{link name: {"orientation": {x,y,z,w}, ...}} from one message of the world's dynamic pose topic (gz transport, so the
     GZ_PARTITION of the running simulation must be in this process's environment, as the test sets it)."""
-    import json
     import subprocess
     out = subprocess.run(["gz", "topic", "-e", "-t", f"/world/{world}/dynamic_pose/info", "-n", "1", "--json-output"],
                          capture_output=True, text=True, timeout=timeout).stdout
-    return {p["name"]: p for p in json.loads(out)["pose"]}
+    return {p["name"]: p for p in first_json_message(out)["pose"]}
 
 
 def finger_angles(poses, side):

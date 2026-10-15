@@ -16,8 +16,10 @@ the launch description can notice it is missing. A process that DIES during the 
 process, each one a known and documented behaviour of the installed software and nothing broader. `test_h01_harness_guards.py` fails any launch
 test module that does not call this, so a new launch test cannot be written without it.
 """
+import json
 import os
 import signal
+import tempfile
 import time
 
 from launch_testing.asserts import EXIT_OK, assertExitCodes
@@ -76,6 +78,31 @@ def assert_launch_healthy(proc_info, expected, allowed=None):
 # person at the keyboard has another partition (or none) and is never matched.
 GZ_SERVER_GRACE_S = 10.0     # wall seconds a server that was asked to stop may take to go before it counts as having survived
 REAP_TERM_WAIT_S = 3.0
+HELPER_REPORT_WAIT_S = 3.0   # a helper that wrote {"state": "started"} and has not finished: how long its final report is waited for
+
+# P17: sim.launch.py stops the server through a detached helper that asks it to stop, watches it, and signals it if it does not go (see that
+# file's header). A server that had to be signalled DID NOT STOP ON REQUEST, whether or not it is still there when this runs, so the helper's
+# report is part of the verdict: such a server is listed among the survivors (marked `forced_by_the_stop_helper`) and the check FAILs exactly as
+# for an orphan. Without that, forcing it would turn a finding into a quiet pass, which is the allowance this file exists not to have.
+def gz_stop_report_path(partition):
+    """The helper's report for `partition`. sim.launch.py's gz_stop_report_path names the same file (test_sim_launch_shutdown.py pins that)."""
+    return os.path.join(tempfile.gettempdir(), f"oa_gz_stop_{partition}.json")
+
+
+def read_gz_stop_report(partition, wait_s=HELPER_REPORT_WAIT_S, poll_s=0.1):
+    """The stop helper's report of this run, or None when no helper ran (a launch without the stop handler, which is the orphan canary). A
+    report still in state `started` is waited for up to `wait_s`: the helper is mid-watch and its final word is what matters."""
+    path = gz_stop_report_path(partition)
+    deadline = time.monotonic() + wait_s
+    while True:
+        try:
+            with open(path) as f:
+                report = json.load(f)
+        except (OSError, ValueError):
+            return None
+        if report.get("state") != "started" or time.monotonic() >= deadline:
+            return report
+        time.sleep(poll_s)
 
 
 def _pid_dirs(proc_root):
@@ -141,8 +168,24 @@ def gz_server_shutdown_report(partition, grace_s=GZ_SERVER_GRACE_S, reap=True, p
         survivors = gz_sim_processes_of(partition, proc_root)
     report = {"partition": partition, "grace_s": grace_s, "waited_s": round(time.monotonic() - started, 2),
               "survivors": survivors, "reaped": []}
+    if proc_root == "/proc":       # the helper's report is a fact about the real machine, not about a fake /proc tree
+        helper = read_gz_stop_report(partition)
+        report["stop_helper"] = helper
+        if helper and helper.get("state") == "force_stopped":
+            listed = {proc["pid"] for proc in survivors}
+            for pid in helper.get("survivors", []):
+                if pid not in listed:
+                    survivors.append({"pid": pid, "ppid": None, "state": "forced", "forced_by_the_stop_helper": helper.get("signals"),
+                                      "cmdline": "gz sim (accepted the stop request and did not go; stopped by signal)"})
+        try:
+            os.unlink(gz_stop_report_path(partition))
+        except OSError:
+            pass
     if survivors and reap:
         for proc in survivors:
+            if proc["state"] == "forced":      # already signalled, and gone, by the helper: nothing left to reap
+                report["reaped"].append({"pid": proc["pid"], "signal": "by the stop helper: " + "+".join(proc.get("forced_by_the_stop_helper") or [])})
+                continue
             report["reaped"].append({"pid": proc["pid"], "signal": _stop(proc["pid"], proc_root)})
     return report
 
@@ -166,9 +209,12 @@ def _stop(pid, proc_root):
 
 
 def gz_survivor_message(report):
+    forced = [p for p in report["survivors"] if p.get("forced_by_the_stop_helper")]
+    note = (f" {len(forced)} of them did not stop on request (the server answered the stop request and never went; the launch's stop helper had "
+            f"to signal it: {forced[0]['forced_by_the_stop_helper']})." if forced else "")
     return (f"{len(report['survivors'])} gz sim process(es) of this run (GZ_PARTITION={report['partition']}) survived the launch's teardown by "
             f"{report['waited_s']} s: {[(p['pid'], p['ppid']) for p in report['survivors']]} (pid, ppid); stopped afterwards with "
-            f"{report['reaped']}. The launch's own process guard cannot see this: the ruby wrapper it owns had exited with an allowed code")
+            f"{report['reaped']}.{note} The launch's own process guard cannot see this: the ruby wrapper it owns had exited with an allowed code")
 
 
 def assert_no_gz_server_survives(partition, **kwargs):
