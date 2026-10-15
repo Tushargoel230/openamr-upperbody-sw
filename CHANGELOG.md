@@ -5,6 +5,35 @@ All notable changes to this repository. Evidence for the description is static a
 
 ## [Unreleased]
 
+### Added / Changed / Fixed (P17)
+
+- **The simulator is stopped once per launch, by a detached helper, and a server that has to be forced is a FAIL.** `sim.launch.py`'s `OnShutdown`
+  fired twice on every shutdown (the shell's death is a second `Shutdown`) and re-executed the same `ExecuteProcess`: "executed more than once",
+  which abandoned the rest of the shutdown; on the `ros2 launch` + SIGINT path the stop request was not started at all (launch refuses to start an
+  action once `context.is_shutdown` is set). Measured before changing anything (`launch/sim.launch.py` header has the numbers): launch signals the
+  `/bin/sh` around `gz sim`, never the server; the `/server_control` request went wrong 4 times in 18 launches (two server segfaults inside
+  libgz-sim8 during teardown, two servers that accepted the request, never began teardown and ignored SIGTERM, one of which was orphaned by
+  launch's SIGTERM of the shell at 5 s). SIGINT sent to the server itself, as Ctrl-C does, went wrong 0 times in 24 launches. The helper now does:
+  SIGINT to the `gz sim` processes; the service request as well after 3 s if one is still there; SIGTERM then SIGKILL after 8 s; servers followed by
+  pid (a first version walked the process tree and called a reparented server "gone"; found by the driver, not by a test). Its report is written
+  before it sends anything harder than SIGINT and `launch_guard.gz_server_shutdown_report` reads it: a forced server is a survivor even though it
+  is gone. **The ORPH detector is unchanged for a server that is still running and no allowance was added.** Not found: why a server hangs in its
+  teardown after being asked to stop (inside gz-sim / gz_ros2_control). The force-stop path is proven on decoy processes only; it was never
+  exercised live (36 of 36 runs stopped on the first step).
+- **M07, the rest-position check** (`test_m07_rest_position_margin.py`, A7): no joint's rest position may be within `joint_rest_margin_rad` of
+  either limit; FAIL, not WARN. The margin is a datum (`datums.yaml`, `placeholder`, 1e-3 rad, report-only; revision bumped, so every
+  `config_id` changes), taken from the between-run scatter of a rest position (up to 2.8e-4 rad) and not tuned to a verdict. **It FAILs today** on
+  `openarm_right_finger_joint1` (rests at +2.6e-8 rad, past its open limit), and on `openarm_left_finger_joint1` and both `joint4`; `lift_joint`
+  is listed as not measured, with the reason.
+- **M02 gates on exactly two numbers**: readings beyond epsilon (0) and the largest overshoot magnitude (below 1e-5). Activation and episode
+  counts are reported under `diagnostic_only`, labelled, and gate nothing. The epsilon is not widened. **M02 waits for the five controllers to be
+  `active`** (120 s, FAIL naming their states) before it sends the first pose.
+- **G02's own helper no longer fails on two JSON messages** (`gz topic -n 1` printed two; `json.loads` raised "Extra data": 1 of 12 live G02 runs).
+- **Finger effort at rest was read in both trees** (`evidence/m02_bisect/RESULTS.md`, last section): the sign did not change between the bodies,
+  which refutes P16's hypothesis; the old body also rests within 2.5e-5 rad of the same four limits; why the new right finger sits at the limit
+  and the left one does not is not answered.
+- `tools/compare_option_b_wrapper.sh`: the byte-level comparison of option B's wrapper against `upstream/main` that the PR body cites.
+
 ### Added / Changed (P16)
 
 - **G02, G01 and M02 fail when a `gz sim` of their own partition outlives their launch.** (G02 first; G01 and M02 after a natural orphan of G01's
