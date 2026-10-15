@@ -217,26 +217,28 @@ def test_the_shutdown_handler_asks_once_however_many_shutdowns_arrive(sim, monke
     assert kwargs.get("start_new_session") is True, "detached: it must outlive a launch that is already shutting down"
 
 
-def test_the_helper_reports_to_the_file_launch_guard_reads(sim):
+def test_the_helper_reports_to_the_file_launch_guard_reads(sim, tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAMR_EVIDENCE_DIR", str(tmp_path))
     description = os.path.join(HERE, os.pardir, os.pardir, "openamrobot_upperbody_description", "scripts")
     sys.path.insert(0, description)
     try:
         import launch_guard
     finally:
         sys.path.remove(description)
-    assert sim.gz_stop_report_path("g02_1234") == launch_guard.gz_stop_report_path("g02_1234")
+    ours, theirs = sim.gz_stop_report_path("g02_1234"), launch_guard.gz_stop_report_path("g02_1234")
+    assert ours is not None and ours == theirs == str(tmp_path / "gz_stop_g02_1234.json")
 
 
 def test_run_as_a_script_the_launch_file_is_the_helper_and_imports_nothing_of_ros(tmp_path):
-    """`python3 sim.launch.py --stop-gz-server 0` must start in well under a second and exit 0 with no ROS environment at all: that is what makes the
-    stop request go out before the shutdown has done anything else."""
-    env = {"PATH": os.environ["PATH"], "GZ_PARTITION": f"helper_{os.getpid()}", "TMPDIR": str(tmp_path)}
+    """`python3 sim.launch.py --stop-gz-server 0 REPORT` must start in well under a second and exit 0 with no ROS environment at all: that is
+    what makes the stop go out before the shutdown has done anything else. With no pid there is no server: the report says so."""
+    env = {"PATH": os.environ["PATH"]}
+    report = tmp_path / "gz_stop_helper.json"
     started = time.monotonic()
-    done = subprocess.run([sys.executable, SIM_LAUNCH, "--stop-gz-server", "0"], env=env, capture_output=True, text=True, timeout=30)
+    done = subprocess.run([sys.executable, SIM_LAUNCH, "--stop-gz-server", "0", str(report)], env=env, capture_output=True, text=True, timeout=30)
     assert done.returncode == 0, done.stderr
-    assert time.monotonic() - started < 10     # 3 s of it is `gz service`'s own timeout when no server answers
-    report = json.load(open(tmp_path / f"oa_gz_stop_helper_{os.getpid()}.json"))
-    assert report["state"] == "no_server"
+    assert time.monotonic() - started < 10
+    assert json.load(open(report))["state"] == "no_server"
 
 
 # --- the sim test support (P17): the one G02 failure in 36 live runs was a helper parsing two messages as one -------------------------------

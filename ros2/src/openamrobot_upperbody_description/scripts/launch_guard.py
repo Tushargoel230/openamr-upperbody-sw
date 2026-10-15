@@ -19,7 +19,6 @@ test module that does not call this, so a new launch test cannot be written with
 import json
 import os
 import signal
-import tempfile
 import time
 
 from launch_testing.asserts import EXIT_OK, assertExitCodes
@@ -85,8 +84,11 @@ HELPER_REPORT_WAIT_S = 3.0   # a helper that wrote {"state": "started"} and has 
 # report is part of the verdict: such a server is listed among the survivors (marked `forced_by_the_stop_helper`) and the check FAILs exactly as
 # for an orphan. Without that, forcing it would turn a finding into a quiet pass, which is the allowance this file exists not to have.
 def gz_stop_report_path(partition):
-    """The helper's report for `partition`. sim.launch.py's gz_stop_report_path names the same file (test_sim_launch_shutdown.py pins that)."""
-    return os.path.join(tempfile.gettempdir(), f"oa_gz_stop_{partition}.json")
+    """The helper's report for `partition`: `gz_stop_<partition>.json` in the evidence directory (evidence_common.evidence_dir, the one every
+    sidecar goes to; a report is part of a run's evidence and evidence is never kept in a temp directory). sim.launch.py's gz_stop_report_path
+    resolves it the same way and hands it to the helper (test_sim_launch_shutdown.py pins that they name one file)."""
+    import evidence_common
+    return os.path.join(evidence_common.evidence_dir(evidence_common.share_dir()), f"gz_stop_{partition}.json")
 
 
 def read_gz_stop_report(partition, wait_s=HELPER_REPORT_WAIT_S, poll_s=0.1):

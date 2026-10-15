@@ -40,6 +40,14 @@ def decoy(argv0, partition, seconds=60):
     return proc
 
 
+@pytest.fixture(autouse=True)
+def evidence_dir(tmp_path, monkeypatch):
+    """The helper's report lives in the evidence directory (P17): every test of this module gets its own, so none reads or leaves a file in the
+    workspace's real one."""
+    monkeypatch.setenv("OPENAMR_EVIDENCE_DIR", str(tmp_path / "evidence"))
+    return tmp_path / "evidence"
+
+
 @pytest.fixture
 def decoys():
     started = []
@@ -143,7 +151,9 @@ def test_a_zombie_is_not_a_running_server(decoys, tmp_path):
 
 # --- P17: the stop helper's report is part of the verdict ----------------------------------------------------------------------------------
 def write_helper_report(partition, **fields):
-    with open(lg.gz_stop_report_path(partition), "w") as f:
+    path = lg.gz_stop_report_path(partition)
+    assert os.path.dirname(path) == os.environ["OPENAMR_EVIDENCE_DIR"], "the report is in the evidence directory, not a temp directory"
+    with open(path, "w") as f:
         json.dump(fields, f)
 
 

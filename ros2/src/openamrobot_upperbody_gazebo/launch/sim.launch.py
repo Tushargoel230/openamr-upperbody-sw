@@ -46,7 +46,6 @@ import os
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 
 # --- stopping the simulator (P17 task 1) --------------------------------------------------------------------------------------------------
@@ -69,7 +68,8 @@ import time
 # the launch's state), in this order: SIGINT to the `gz sim` processes; after GZ_STOP_RETRY_AFTER_S, if one is still there, the /server_control
 # request as well; after GZ_STOP_GRACE_S, SIGTERM and then SIGKILL. The servers are followed by pid, because launch's SIGTERM of the shell at 5 s
 # reparents them out of its tree. The helper writes its report to gz_stop_report_path() BEFORE it signals anything harder than SIGINT, and
-# launch_guard.gz_server_shutdown_report reads it: a server that had to be forced is a FAIL of the run that did it, never a quiet pass.
+# launch_guard.gz_server_shutdown_report reads it (from the evidence directory): a server that had to be forced is a FAIL of the run that did it,
+# never a quiet pass.
 GZ_STOP_RETRY_AFTER_S = 3.0     # s after the SIGINT before the service request is made as well (a stop takes 1.3-1.8 s when it works)
 GZ_STOP_GRACE_S = 8.0           # s after the first request that a server may take to go on its own; then SIGTERM, then SIGKILL
 GZ_STOP_TERM_WAIT_S = 1.0       # s between the SIGTERM and the SIGKILL
@@ -77,9 +77,20 @@ GZ_STOP_REQUEST_TIMEOUT_S = 3.0
 
 
 def gz_stop_report_path(partition):
-    """Where the helper leaves its report for the partition `partition` (the test's GZ_PARTITION, which every process of the launch inherits).
-    launch_guard.gz_stop_report_path must name the same file; test_sim_launch_shutdown.py pins that."""
-    return os.path.join(tempfile.gettempdir(), f"oa_gz_stop_{partition}.json")
+    """Where the helper leaves its report for the partition `partition` (the test's GZ_PARTITION, which every process of the launch inherits):
+    `gz_stop_<partition>.json` in the EVIDENCE directory, because the report is part of a run's evidence (the test copies it into its sidecar) and
+    evidence is never kept in a temp directory (test_evidence_dir.py). Resolved with the description package's own evidence_common, the same
+    function launch_guard.gz_stop_report_path uses, so the two cannot name different files; None when that package cannot be imported (the helper
+    then stops the server and writes no report). Not run by the helper itself: the launch resolves it and passes it on the command line."""
+    try:
+        from ament_index_python.packages import get_package_prefix
+        lib = os.path.join(get_package_prefix("openamrobot_upperbody_description"), "lib", "openamrobot_upperbody_description")
+        if lib not in sys.path:
+            sys.path.insert(0, lib)
+        import evidence_common
+        return os.path.join(evidence_common.evidence_dir(evidence_common.share_dir()), f"gz_stop_{partition}.json")
+    except Exception:       # noqa: BLE001 - a report that cannot be placed is not a reason to leave the server running
+        return None
 
 
 def _read(path):
@@ -221,10 +232,9 @@ def stop_gz_server(shell_pid, interrupt=None, request=request_server_stop, retry
     return report
 
 
-if __name__ == "__main__" and len(sys.argv) == 3 and sys.argv[1] == "--stop-gz-server":
-    # the detached helper (see above); nothing below this point is imported
-    _partition = os.environ.get("GZ_PARTITION", "")
-    stop_gz_server(int(sys.argv[2]) or None, report_path=gz_stop_report_path(_partition) if _partition else None)
+if __name__ == "__main__" and len(sys.argv) in (3, 4) and sys.argv[1] == "--stop-gz-server":
+    # the detached helper (see above); nothing below this point is imported. argv[3], when given, is where it writes its report.
+    stop_gz_server(int(sys.argv[2]) or None, report_path=(sys.argv[3] if len(sys.argv) == 4 else None))
     raise SystemExit(0)
 
 from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
@@ -356,8 +366,10 @@ def generate_launch_description():
             return None
         gazebo_shell["stop_requested"] = True
         helper = os.path.join(gazebo_share, "launch", "sim.launch.py")
-        subprocess.Popen([sys.executable, helper, "--stop-gz-server", str(gazebo_shell["pid"] or 0)], stdin=subprocess.DEVNULL,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        partition = os.environ.get("GZ_PARTITION", "")
+        report = gz_stop_report_path(partition) if partition else None
+        subprocess.Popen([sys.executable, helper, "--stop-gz-server", str(gazebo_shell["pid"] or 0), *([report] if report else [])],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         return None
 
     track_gazebo_shell = RegisterEventHandler(OnProcessStart(on_start=remember_the_shell))
