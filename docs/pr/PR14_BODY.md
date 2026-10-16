@@ -8,10 +8,10 @@
 ## Evidence
 
 - Base SHA: `f57e54cfc9e7f9536e94c52749502cc983fb908e` (openAMRobot/openamr-upperbody-sw `main`)
-- Head SHA: `8e1aba120f42d645734c57be702daa82d3da571b` (the tested code; the next commit on the branch adds only this file and removes `PR1_BODY.md`)
+- Head SHA: `ff8f9add4f7b431bc300160033be853f5b618bfc` (the tested code; the commit after it changes only this file)
 - Workspace: `openamrobot-manifest` `8111c48e48f93c20f2142534ffc340857234bf7a` (`vcs import`). In that workspace:
   - this repository at the head above;
-  - `openamr-platform-sw` `15d0eb5254af4984cc66b2a236fec5a640a42466` (`main`);
+  - `openamr-platform-sw` `d619012d15ee8fbbd6a52e3c945ade9bf4752644` (`main`, with #70: 2.0 sensor frames, simplified collision, Gazebo range and IMU sensors);
   - `openamrobot-manipulation` `095e6c7bbd270db6d21de9664a654bb37919a2eb`;
   - `src/upstream/openarm_description` `14ff67b638ff1c738a1b9a6be8aaa5ce5ed2c831` and `src/upstream/openarm_ros2` `4e837e1d0dae692ff67b560b69d8d281d7a8d4ed` (the pins in `config/upstream_pins.yaml`).
 - Machine: Ubuntu 24.04 container, ROS 2 Jazzy binaries, `/usr/bin/python3` = 3.12, 4 cores, no GPU (ogre2 renders in software; the simulator runs at about 0.4x real time). controller_manager 4.48.1, MoveIt 2.12.4.
@@ -31,11 +31,55 @@ timeout 1800 bash src/openamr-upperbody-sw/ros2/src/openamrobot_upperbody_descri
 timeout 3600 bash src/openamr-upperbody-sw/ros2/src/openamrobot_upperbody_bringup/scripts/run_a7_regression.sh  # twice
 ```
 
-The evidence reports are `20261016T140434Z_dev.json` and `20261016T140930Z_dev.json` (A6), and `20261016T142206Z_a7.json` and `20261016T143422Z_a7.json` (A7). They were written by the harness from the clean tree at `8e1aba1`. They are not committed in this change.
+The evidence reports are `20261016T150136Z_dev.json` (A6) and `20261016T151057Z_a7.json` (A7), written by the harness from the clean tree at `ff8f9ad`. The earlier runs on `8e1aba1` (platform-sw `15d0eb5`) are `20261016T140434Z_dev.json`, `20261016T140930Z_dev.json`, `20261016T142206Z_a7.json` and `20261016T143422Z_a7.json`. None of them is committed in this change.
 
 ## Tests
 
-On `8e1aba1`:
+### On `ff8f9ad`, platform-sw `d619012` (main, with #70)
+
+Run once each, sequentially, after a rebuild.
+
+| Run | Result |
+|---|---|
+| `verify_a6.sh` | **25 PASS, 3 WARN (E01, W02, V01), 0 FAIL, 0 NOT_RUN** (exit 0). T08 is PASS now: #70 removed the base's collision meshes. |
+| `run_a7_regression.sh` | **10 PASS, 2 WARN (M07, V01), 3 FAIL (M01, M03, AUX), 0 NOT_RUN** (exit 1) |
+
+Test counts behind those two runs (passed / failed / skipped):
+
+| Package | Result |
+|---|---|
+| `openamrobot_upperbody_description` | 636 / 0 / 0 |
+| `openamrobot_upperbody_control` | 8 / 0 / 0 |
+| `openamrobot_upperbody_gazebo` | 28 / 0 / 0 |
+| `openamrobot_upperbody_moveit` | 78 / 5 / 3 |
+| `openamrobot_upperbody_bringup` | A6 run: 52 / 0 / 16 (A7-gated). A7 run: 65 / 3 / 0 |
+
+**The three A7 FAILs.** Neither cause is in this branch's code:
+
+- **M03 and AUX: platform-sw #70's collision geometry.** The chassis box of `base_link` (0.780 x 0.580 x 0.245 m, bottom at z 0.050 m above the floor) and the four caster-wheel spheres (r 0.026 m, centre z 0.0264 m, top 0.0524 m) overlap by 2.4 mm. That is a permanent collision of constant pairs, `base_link` with each `{fl,fr,bl,br}_wheel_link`.
+  - `regenerate_acm.sh` refuses to disable such a pair ("a permanent collision of the model, not disabled, nothing written"): 91 derived pairs against 95 in the contract.
+  - The contract still disables the four as `ConstantTransform`, a label M03 shows to be false.
+  - Fixing it belongs in platform-sw: a caster-wheel sphere clear of the chassis box, or a box that ends above the wheels. It is not disabled here.
+- **M01: a start-up race in the M01 harness.** It is not a model change.
+  - At every lift stop the first `left_arm` goals ended `CONTROL_FAILED`: "Action client not connected to action server: left_arm_controller/follow_joint_trajectory". The controllers of the mock stack were still being spawned when M01 sent its first pose.
+  - M01 does not wait for its controllers to be active; M02 and M07 do, through `a7_support.wait_for_controllers_active`.
+  - On `8e1aba1` it passed in both A7 runs. The fix is for M01 to use the same wait. It is not part of this change.
+- **M07 is WARN** (the four upstream-limit joints) and covers all 16 expected joints.
+
+**The base description of #70, checked on Jazzy** (`robo_urdf.urdf.xacro`):
+- `base_tilt` bt05, bt10 and bt15 expand and pass `check_urdf`; bt99 is rejected.
+- 25 links and 24 joints: no duplicate names, one parent per link, root `base_footprint`.
+- Every frame of #70's table matches, from `base_link`, to 0.05 mm, and the axes match:
+  - `base_camera_link` (0.387, 0, 0.046), pitch 5/10/15° up;
+  - `imu_link` (0.0544, 0, 0.1210), yaw -90° (sensor X to -y, Y to +x, Z to +z);
+  - `lidar_link` (0.330, 0, 0.124), yaw pi;
+  - `us_front_*` (0.3906, ±0.130, -0.0066) and `us_rear_*` (-0.3886, ±0.130, -0.0066), yaw pi;
+  - `tof_front` and `tof_rear` (±0.399, 0, -0.0066), 20° down, the rear one yaw pi.
+- In a 60 s headless `gz_simulator` run, all eight sensor topics publish with their own `frame_id`:
+  - `/imu`, `/tof/front` and `/tof/rear` at 50.0 Hz sim time;
+  - `/scan` and the four `/ultrasonic/*` at 10.0 Hz.
+
+### On `8e1aba1`, platform-sw `15d0eb5` (before #70)
 
 | Run | Result |
 |---|---|
@@ -47,20 +91,15 @@ On `8e1aba1`:
 
 `colcon test` per package (passed / failed / skipped):
 
-| Package | Tests | Passed | Failed | Skipped |
-|---|---|---|---|---|
-| `openamrobot_upperbody_description` | 635 | 635 | 0 | 0 |
-| `openamrobot_upperbody_control` | 8 | 8 | 0 | 0 |
-| `openamrobot_upperbody_gazebo` | 28 | 28 | 0 | 0 |
-| `openamrobot_upperbody_moveit` | 86 | 83 | 0 | 3 |
-| `openamrobot_upperbody_bringup` | 68 | 52 | 0 | 16 |
+| Package | Passed | Failed | Skipped |
+|---|---|---|---|
+| `openamrobot_upperbody_description` | 635 | 0 | 0 |
+| `openamrobot_upperbody_control` | 8 | 0 | 0 |
+| `openamrobot_upperbody_gazebo` | 28 | 0 | 0 |
+| `openamrobot_upperbody_moveit` | 83 | 0 | 3 |
+| `openamrobot_upperbody_bringup` | 52 | 0 | 16 |
 
-- **The 19 skips** are the A7-gated cases (which run in A7 and pass there) and the clamp-loop cases left to their other registration. They are listed in #16, and each reason names it. A skip is not a pass.
-- **A7, every check:** G01, G02, M01, M02, M03, M04, M05, M06, L01, H01, H02, I01 and AUX PASS; M07 and V01 are WARN.
-  - M07 WARNs on the four joints whose rest pose is an upstream limit: `openarm_{left,right}_finger_joint1` and `openarm_{left,right}_joint4`.
-  - All 16 expected joints were covered, with at least 600 samples each.
-  - V01 is WARN until a person answers `docs/v01_visual_check.md`.
-- **`config_id`:** 14 of the 15 recorded ids differ from `49d2368`, because of the column geometry in `b45d8f6`. They are the same in both A6 runs.
+The 19 skips are listed in #16, and each reason names it. `config_id`: 14 of the 15 recorded ids differ from `49d2368`, because of the column geometry in `b45d8f6`.
 
 **Failing runs before the change, one per behaviour change:**
 
@@ -71,6 +110,7 @@ On `8e1aba1`:
 | `1637743` | `test_sim_launch_spawners.py` fails 3 of 4 on the old `sim.launch.py`. On this machine the old launch left `joint_state_broadcaster` inactive (G01 NOT_RUN, G02 and M02 FAIL in two A7 runs on `49d2368`). |
 | `84d80a9` | `test_a7_controller_deadline.py` fails 3 of 4 on the old helper (all-active just after the deadline returned ok). `test_m07_coverage.py` fails 5 of 5: its helpers do not exist in the old code. |
 | `20886a6` | T04's pinned list fails until the two frames are listed. |
+| `ff8f9ad` | On platform-sw `d619012`, the old `test_t07_collision.py` fails 2 tests (seven consumed sensor frames with a visual and no collision, then KeyError). The new file passes 9 of 9. |
 
 ## Not verified
 
@@ -81,7 +121,9 @@ On `8e1aba1`:
 - No human visual review in RViz or Gazebo: V01 is WARN; L1000/L1175/L1350 × bp000/bp050 are still to be looked at.
 - Not run on a hosted CI runner or on a machine with a GPU. All runs are from one VM.
 - The gz-sim teardown hang (the server ignores the stop request) is not fixed. It did not occur in these runs; the detached stop helper still forces such a server, and the run then FAILs.
-- The platform-sw drafts #68 (`imu_link` at the CAD Rev B position) and #69 (Gazebo IMU sensor) are not consumed. These results are on platform-sw `15d0eb5`.
+- A7 on platform-sw `d619012` is not green: M03 and AUX (#70's chassis box overlaps the caster wheels) and M01 (a harness race). See Tests. Only one A6 run and one A7 run were made on it.
+- `colcon test` of the five packages was not rerun on `d619012` as a separate step; its counts above come from the A6 and A7 runs.
+- The #70 sensor values are checked against #70's own table, not against the CAD.
 - `license/cla` on PR #14 is still pending.
 - The six conditional skips that did not trigger here (C02, C01, datums revision, W02, SRDF import) are listed in #16 but not changed.
 - V01's recorded measurement text in `build_evidence.py` still says "0 of 478 enabled pairs" (P16). The matrix now enables 535 of 630; V01 has not been re-measured.
@@ -185,7 +227,7 @@ Tushar's statement about platform-sw is kept under "Description at 49d2368" belo
 
 - **Overlapping work:**
   - This change sits on PR #14 (Tushar's `feat/a7-gazebo-moveit` @ `49d2368`, draft).
-  - platform-sw #68 (draft, `imu_link` pose of 16 Oct) and #69 (draft, Gazebo IMU sensor). Both change the base this model includes: #69 changes 14 of 15 `config_id`s, and #68 moves `imu_link`. This contract lists `imu_link` by name only, so both are compatible.
+  - platform-sw #70 (merged, main `d619012`) supersedes #68 and #69. It brings the 2.0 sensor frames, simplified collision and the Gazebo range and IMU sensors into the base this model includes. The contract lists its frames by name only, so the new `imu_link` pose needs no change here; T07 now records the consumed sensor frames (`ff8f9ad`).
   - platform-sw #53 (draft, Gemini RGB-D), and the planned base-description PR (platform-sw #49).
 - **Reused:**
   - The upstream OpenArm v2.0 description and `openarm_ros2` MoveIt config at the pins, with Apache-2.0 headers kept on the derived files.
@@ -212,7 +254,7 @@ No safety path is touched. No file matches the `safety_paths` globs of `openAMRo
 ## AI disclosure
 
 - **Tushar's commits** (`f57e54c..49d2368`): developed with Claude Code (Anthropic), as Tushar states below ("AI assistance"). Each commit carries `Assisted-by: Claude Code`.
-- **Follow-up commits** (`49d2368..8e1aba1`) and this file: produced by Claude Code at Alex Reznichenko's request, and signed off by him (DCO). That covers the verification runs, the code, test and configuration changes, the regenerated collision matrix, the `decision-allow` markers, the SPDX headers, issue #16 and this description.
+- **Follow-up commits** (`49d2368..ff8f9ad`) and this file: produced by Claude Code at Alex Reznichenko's request, and signed off by him (DCO). That covers the verification runs, the code, test and configuration changes, the regenerated collision matrix, the `decision-allow` markers, the SPDX headers, issue #16 and this description.
 - No upstream file is modified.
 
 ## Follow-up commits on this branch
@@ -226,6 +268,7 @@ No safety path is touched. No file matches the `safety_paths` globs of `openAMRo
 | `405d162` | `decision-allow` markers on the 48 historical or negative-test register lines; the stale `mast_id` launch argument in the clamp-loop test is removed. |
 | `ed8c56d` | Duplicate `moveit_msgs` removed; the frame reference points at `frame_contract.yaml`; SPDX MIT headers on 116 source files without a header. |
 | `8e1aba1` | Every skip names #16. |
+| `ff8f9ad` | T07 records platform-sw's consumed sensor frames (#70) instead of failing them. |
 
 ## Description at 49d2368 (Tushar Goel, unchanged)
 
