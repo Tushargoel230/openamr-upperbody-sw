@@ -16,6 +16,11 @@ All notable changes to this repository. Evidence for the description is static a
 - **M07 reports WARN, not FAIL, for the four joints whose rest pose is an upstream limit** (`openarm_{left,right}_finger_joint1`,
   `openarm_{left,right}_joint4`, reason "rest pose at an upstream limit"), within the margin on either side of that limit. Any other joint within the
   margin, or one of those read further past its limit than the margin, is still a FAIL; WARN is not PASS.
+- **Controller start-up in `sim.launch.py`: the joint_state_broadcaster spawner has a 30 s switch timeout (`--switch-timeout`, with
+  `--service-call-timeout 45` so the spawner's 10 s default call timeout does not end the wait first), and the arm and gripper spawners start only
+  when it exits 0.** On a 4-core machine with CPU-only rendering the broadcaster's first switch timed out after the
+  spawner's default 5 s, the spawner exited 1, and the other four spawners still started (G01, G02, M02 and M07 then saw four of five controllers
+  active). `test_sim_launch_spawners.py` pins both.
 
 ### Added / Changed / Fixed (P17)
 

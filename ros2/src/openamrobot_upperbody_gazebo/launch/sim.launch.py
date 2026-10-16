@@ -12,7 +12,9 @@ What it starts, in this order of dependence
   ros_gz_bridge          platform-sw's own gz_bridge.yaml, BY REFERENCE (clock, /cmd_vel, /odom, /tf, sensors; every topic
                          Nav2 and docking use, under the names they use), plus one bridge of ours for the base's joint
                          states onto a separate topic (see below)
-  spawners               joint_state_broadcaster, then left_arm, right_arm, left_gripper and right_gripper controllers
+  spawners               joint_state_broadcaster (switch timeout JSB_SWITCH_TIMEOUT_S, service-call timeout longer than that), then,
+                         only if that spawner exits 0,
+                         left_arm, right_arm, left_gripper and right_gripper controllers
   joint_state_publisher  the ONLY publisher of /joint_states: it merges the base's wheel joints and the arms' joints, and
                          reports every joint nobody else does (lift_joint) at its default, zero = calibration stop L1000
 
@@ -239,7 +241,7 @@ if __name__ == "__main__" and len(sys.argv) in (3, 4) and sys.argv[1] == "--stop
 
 from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import AppendEnvironmentVariable, DeclareLaunchArgument, IncludeLaunchDescription, RegisterEventHandler
+from launch.actions import AppendEnvironmentVariable, DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, RegisterEventHandler
 from launch.conditions import IfCondition, UnlessCondition
 from launch.event_handlers import OnProcessExit, OnProcessStart, OnShutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -263,6 +265,14 @@ DEFAULT_PHYSICS_ENGINE = "gz-physics-dartsim-plugin"          # the tests record
 BULLET_FEATHERSTONE_ENGINE = "gz-physics-bullet-featherstone-plugin"   # honours the URDF <mimic>; what G02 and M02 pass
 SPAWN_HEIGHT = "0.15"          # m above the ground plane; the model settles onto its wheels and casters in the first second
 CONTROLLER_MANAGER_TIMEOUT = "120"      # s the spawners wait for the controller manager that the simulator hosts
+# s the joint_state_broadcaster's switch may take. The spawner's default is 5 s; on a slow machine (CPU-only rendering, the simulator at
+# about 0.01x real time during startup) the first switch timed out, the spawner exited 1, and the arm and gripper spawners still started,
+# so the stack ran with four of five controllers active (16 Oct verification). The Jazzy spawner takes --switch-timeout.
+JSB_SWITCH_TIMEOUT_S = "30"
+# s the spawner waits for the switch_controller service's answer. Its default (10 s) is shorter than the switch timeout above, so a slow
+# switch was abandoned at 10 s and retried, and the spawner exited 1 although the switch then completed: measured, 16 Oct. Longer than the
+# switch timeout, so the controller manager's own timeout is what decides.
+JSB_SERVICE_CALL_TIMEOUT_S = "45"
 
 
 def spawner(controller, *extra):
@@ -270,6 +280,15 @@ def spawner(controller, *extra):
                 arguments=[controller, "--controller-manager", "/controller_manager",
                            "--controller-manager-timeout", CONTROLLER_MANAGER_TIMEOUT, *extra],
                 parameters=[{"use_sim_time": True}])
+
+
+def after_joint_state_broadcaster(event, context):
+    """OnProcessExit of the joint_state_broadcaster spawner: the arm and gripper spawners, only if it exited 0. A broadcaster that did not
+    activate leaves the stack without /arm/joint_states; starting the other controllers anyway hid that (four of five active), so a failed
+    broadcaster now stops the chain and says why. The tests that wait for five active controllers then fail, naming the broadcaster."""
+    if event.returncode == 0:
+        return [spawner(name) for name in ARM_AND_GRIPPER_CONTROLLERS]
+    return [LogInfo(msg=f"joint_state_broadcaster spawner exited {event.returncode}: the arm and gripper spawners are not started")]
 
 
 def generate_launch_description():
@@ -342,10 +361,10 @@ def generate_launch_description():
         parameters=[{"config_file": os.path.join(gazebo_share, "config", "gz_bridge_base_joint_states.yaml")}])
 
     joint_state_broadcaster = spawner(
-        "joint_state_broadcaster", "--controller-ros-args", "-r joint_states:=/arm/joint_states")
+        "joint_state_broadcaster", "--switch-timeout", JSB_SWITCH_TIMEOUT_S, "--service-call-timeout", JSB_SERVICE_CALL_TIMEOUT_S,
+        "--controller-ros-args", "-r joint_states:=/arm/joint_states")
     then_the_rest = RegisterEventHandler(OnProcessExit(
-        target_action=joint_state_broadcaster,
-        on_exit=[spawner(name) for name in ARM_AND_GRIPPER_CONTROLLERS]))
+        target_action=joint_state_broadcaster, on_exit=after_joint_state_broadcaster))
 
     joint_state_merger = Node(
         package="joint_state_publisher", executable="joint_state_publisher", name="joint_state_publisher",
