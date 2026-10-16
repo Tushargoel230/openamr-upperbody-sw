@@ -8,10 +8,10 @@
 ## Evidence
 
 - Base SHA: `f57e54cfc9e7f9536e94c52749502cc983fb908e` (openAMRobot/openamr-upperbody-sw `main`)
-- Head SHA: `ff8f9add4f7b431bc300160033be853f5b618bfc` (the tested code; the commit after it changes only this file)
+- Head SHA: `703fce9f44c73a67dbfb8799e5dc89920d3bbb8c` (the tested code; the commit after it changes only this file)
 - Workspace: `openamrobot-manifest` `8111c48e48f93c20f2142534ffc340857234bf7a` (`vcs import`). In that workspace:
   - this repository at the head above;
-  - `openamr-platform-sw` `d619012d15ee8fbbd6a52e3c945ade9bf4752644` (`main`, with #70: 2.0 sensor frames, simplified collision, Gazebo range and IMU sensors);
+  - `openamr-platform-sw` `8531089e9eca1fdc56998853f0f67bf3f1e12434`: PR #71, branch `fix/chassis-collision-caster-overlap`, on `main` `d619012` (#70). #71 raises the chassis collision box bottom to 0.055 m. It is not merged at the time of writing;
   - `openamrobot-manipulation` `095e6c7bbd270db6d21de9664a654bb37919a2eb`;
   - `src/upstream/openarm_description` `14ff67b638ff1c738a1b9a6be8aaa5ce5ed2c831` and `src/upstream/openarm_ros2` `4e837e1d0dae692ff67b560b69d8d281d7a8d4ed` (the pins in `config/upstream_pins.yaml`).
 - Machine: Ubuntu 24.04 container, ROS 2 Jazzy binaries, `/usr/bin/python3` = 3.12, 4 cores, no GPU (ogre2 renders in software; the simulator runs at about 0.4x real time). controller_manager 4.48.1, MoveIt 2.12.4.
@@ -31,11 +31,15 @@ timeout 1800 bash src/openamr-upperbody-sw/ros2/src/openamrobot_upperbody_descri
 timeout 3600 bash src/openamr-upperbody-sw/ros2/src/openamrobot_upperbody_bringup/scripts/run_a7_regression.sh  # twice
 ```
 
-The evidence reports are `20261016T150136Z_dev.json` (A6) and `20261016T151057Z_a7.json` (A7), written by the harness from the clean tree at `ff8f9ad`. The earlier runs on `8e1aba1` (platform-sw `15d0eb5`) are `20261016T140434Z_dev.json`, `20261016T140930Z_dev.json`, `20261016T142206Z_a7.json` and `20261016T143422Z_a7.json`. None of them is committed in this change.
+The evidence reports are `20261016T185914Z_dev.json` (A6), and `20261016T190708Z_a7.json` and `20261016T191444Z_a7.json` (A7), written by the harness from the clean tree at `703fce9`. The earlier runs are `20261016T150136Z_dev.json` and `20261016T151057Z_a7.json` (`ff8f9ad` on platform-sw `d619012`), and `20261016T140434Z_dev.json`, `20261016T140930Z_dev.json`, `20261016T142206Z_a7.json` and `20261016T143422Z_a7.json` (`8e1aba1` on `15d0eb5`). None of them is committed in this change.
 
 ## Tests
 
 Summary:
+- **On `703fce9` with platform-sw `8531089` (#71, on main with #70):**
+  - `colcon test`, five packages: 826 tests, 805 passed, 2 failed, 19 skipped.
+  - A6: 25 PASS / 3 WARN / 0 FAIL / 0 NOT_RUN.
+  - A7, twice: 11 PASS / 2 WARN / 2 FAIL / 0 NOT_RUN. M03 and AUX fail on two negative tests whose example pair #71 made collision-free. The committed collision matrix is correct; see below.
 - **On `ff8f9ad` with platform-sw `d619012` (main, with #70):**
   - A6: 25 PASS / 3 WARN / 0 FAIL / 0 NOT_RUN.
   - A7: 10 PASS / 2 WARN / 3 FAIL / 0 NOT_RUN. M03 and AUX fail on #70's chassis/caster-wheel collision overlap; M01 fails on a harness start-up race.
@@ -44,6 +48,25 @@ Summary:
   - `colcon test`: 825 tests, 806 passed, 0 failed, 19 skipped.
   - A6: 24 PASS / 4 WARN / 0 FAIL, twice.
   - A7: 13 PASS / 2 WARN / 0 FAIL, twice.
+
+### On `703fce9`, platform-sw `8531089` (PR #71: the chassis box clears the caster wheels)
+
+Run sequentially after a rebuild. Every launch ran under a timeout, and nothing was left running after any step.
+
+| Run | Result |
+|---|---|
+| `check_urdf`, `base_tilt` bt05 / bt10 / bt15 | All pass |
+| Chassis box vs caster spheres | The box spans 0.0550 to 0.2950 m above the floor; each caster-wheel sphere tops out at 0.0524 m. **Clearance +2.6 mm on all four**, at all three tilts. The caster boxes (top 0.0522 m) are clear too. |
+| `colcon test`, five packages | **826 tests: 805 passed, 2 failed, 19 skipped**. description 636 / 0 / 0, control 8 / 0 / 0, gazebo 28 / 0 / 0, moveit 81 / 2 / 3, bringup 52 / 0 / 16 |
+| `verify_a6.sh` | **25 PASS, 3 WARN (E01, W02, V01), 0 FAIL, 0 NOT_RUN** (exit 0) |
+| `run_a7_regression.sh`, run 1 | **11 PASS, 2 WARN (M07, V01), 2 FAIL (M03, AUX), 0 NOT_RUN** |
+| `run_a7_regression.sh`, run 2 | **11 PASS, 2 WARN (M07, V01), 2 FAIL (M03, AUX), 0 NOT_RUN** |
+
+- **M01 passes at L1000, L1175 and L1350 in both runs.** `703fce9` makes it wait for the controllers before its first pose.
+- **G01, G02, M02 and M04 to M06 pass.** M07 is WARN on the four upstream-limit joints, with all 16 expected joints covered. Bringup in A7: 68 / 0 / 0.
+- **M03 and AUX fail on two negative tests, not on the matrix.** `test_m03_3` and `test_m03_4` mutate the matrix around a fixed example pair, `CONSTANT_AND_COLLIDING = ("base_link", "bl_caster_link")`, "collides in the default state". #71 made that pair collision-free (2.8 mm), so the expected FAIL no longer comes.
+  - The committed matrix is correct for this base: `regenerate_acm.sh` derives exactly the contract (95 pairs, fingerprint `sha256:50ba49b5…`, 0 differences). So `--write` changes nothing, and nothing is regenerated.
+  - Proposed fix, not in this change: use `("base_link", "lidar_link")` as the example. It is Adjacent, has a fixed transform, and the lidar cylinder lies inside the chassis box. With only that constant changed, both tests pass (2 of 2, scratch copy).
 
 ### On `ff8f9ad`, platform-sw `d619012` (main, with #70)
 
@@ -131,8 +154,8 @@ The 19 skips are listed in #16, and each reason names it. `config_id`: 14 of the
 - No human visual review in RViz or Gazebo: V01 is WARN; L1000/L1175/L1350 × bp000/bp050 are still to be looked at.
 - Not run on a hosted CI runner or on a machine with a GPU. All runs are from one VM.
 - The gz-sim teardown hang (the server ignores the stop request) is not fixed. It did not occur in these runs; the detached stop helper still forces such a server, and the run then FAILs.
-- A7 on platform-sw `d619012` is not green: M03 and AUX (#70's chassis box overlaps the caster wheels) and M01 (a harness race). See Tests. Only one A6 run and one A7 run were made on it.
-- `colcon test` of the five packages was not rerun on `d619012` as a separate step; its counts above come from the A6 and A7 runs.
+- A7 on platform-sw `8531089` is not green: M03 and AUX fail on the outdated negative-test example pair (see Tests; one-line fix proposed). On `d619012` it also failed on #70's caster overlap and on the M01 race, both fixed since. #71 is not merged.
+- On `d619012`, `colcon test` of the five packages was not run as a separate step; its counts come from the A6 and A7 runs. On `8531089` it was run.
 - The #70 sensor values are checked against #70's own table, not against the CAD.
 - `license/cla` on PR #14 is still pending.
 - The six conditional skips that did not trigger here (C02, C01, datums revision, W02, SRDF import) are listed in #16 but not changed.
@@ -238,6 +261,7 @@ Tushar's statement about platform-sw is kept under "Description at 49d2368" belo
 - **Overlapping work:**
   - This change sits on PR #14 (Tushar's `feat/a7-gazebo-moveit` @ `49d2368`, draft).
   - platform-sw #70 (merged, main `d619012`) supersedes #68 and #69. It brings the 2.0 sensor frames, simplified collision and the Gazebo range and IMU sensors into the base this model includes. The contract lists its frames by name only, so the new `imu_link` pose needs no change here; T07 now records the consumed sensor frames (`ff8f9ad`).
+  - platform-sw #71 (open, `8531089`) raises the chassis collision box bottom to 0.055 m, clear of the caster-wheel spheres by 2.6 mm. The results on top of Tests are on it.
   - platform-sw #53 (draft, Gemini RGB-D), and the planned base-description PR (platform-sw #49).
 - **Reused:**
   - The upstream OpenArm v2.0 description and `openarm_ros2` MoveIt config at the pins, with Apache-2.0 headers kept on the derived files.
@@ -264,7 +288,7 @@ No safety path is touched. No file matches the `safety_paths` globs of `openAMRo
 ## AI disclosure
 
 - **Tushar's commits** (`f57e54c..49d2368`): developed with Claude Code (Anthropic), as Tushar states below ("AI assistance"). Each commit carries `Assisted-by: Claude Code`.
-- **Follow-up commits** (`49d2368..ff8f9ad`) and this file: produced by Claude Code at Alex Reznichenko's request, and signed off by him (DCO). That covers the verification runs, the code, test and configuration changes, the regenerated collision matrix, the `decision-allow` markers, the SPDX headers, issue #16 and this description.
+- **Follow-up commits** (`49d2368..703fce9`) and this file: produced by Claude Code at Alex Reznichenko's request, and signed off by him (DCO). That covers the verification runs, the code, test and configuration changes, the regenerated collision matrix, the `decision-allow` markers, the SPDX headers, issue #16 and this description.
 - No upstream file is modified.
 
 ## Follow-up commits on this branch
@@ -279,6 +303,7 @@ No safety path is touched. No file matches the `safety_paths` globs of `openAMRo
 | `ed8c56d` | Duplicate `moveit_msgs` removed; the frame reference points at `frame_contract.yaml`; SPDX MIT headers on 116 source files without a header. |
 | `8e1aba1` | Every skip names #16. |
 | `ff8f9ad` | T07 records platform-sw's consumed sensor frames (#70) instead of failing them. |
+| `703fce9` | M01 waits for the controllers before its first pose (it raced the mock controllers' start-up). |
 
 ## Description at 49d2368 (Tushar Goel, unchanged)
 
