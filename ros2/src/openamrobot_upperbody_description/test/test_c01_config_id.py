@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """C01: the configuration id (ARCHITECTURE.md s7) has the format the openamrobot-interfaces C9 contract requires, and
 changes when, and only when, one of its inputs changes.
 

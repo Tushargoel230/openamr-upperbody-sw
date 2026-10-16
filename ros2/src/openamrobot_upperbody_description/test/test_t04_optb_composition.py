@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T-optB: the combined robot IS option B's upper body, plus what composition adds. Alex's model is consumed, not rewritten.
 
 Three things are asserted, because a model can expand cleanly and be wrong (the rev19.0 lesson: a column that was not on the drive

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Assemble the A6 evidence report. Called by verify_a6.sh after `colcon test` and check_urdf_matrix.py have run.
 
     build_evidence.py --since EPOCH [--profile dev|gazebo] [--step name=returncode ...] [--repo PATH]

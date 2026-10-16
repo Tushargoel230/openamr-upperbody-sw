@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """C02: every pin in config/upstream_pins.yaml agrees with its upstream checkout when there is one.
 
 The openarm_description pin is the fallback that lets a reviewer with no `src/upstream/` compute the same `config_id` as

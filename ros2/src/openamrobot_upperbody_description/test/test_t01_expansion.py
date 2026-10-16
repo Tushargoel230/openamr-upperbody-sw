@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T01: the expansion matrix expands (14 expansions, one factor at a time around option B's baseline), and what it does not expand.
 
 The matrix is evidence_common.expansion_matrix: every base_plate x arm_package on `mock`, every other head_pitch and base_tilt on

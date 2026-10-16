@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """M04: a goal that puts the left gripper inside the nearest REACHABLE structure volume is REJECTED by planning, and the test says which of the three
 things that could happen did: the pipeline refused it, the planner searched and failed, or the planner ran out of time. They are different
 claims: "rejected" is the pipeline looking at the goal and refusing it at once; "failed" is a search that gave up; "timed_out" is a search that

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """View the combined OpenAMRobot description in RViz.
 
 Starts robot_state_publisher, joint_state_publisher_gui and RViz2 for combined_robot.xacro.

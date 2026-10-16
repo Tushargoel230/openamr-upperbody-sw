@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The simulated start state's float noise, clamped to the joint limit, counted, and nothing else.
 
 Why it exists. MoveIt 2.12.4 refuses a request whose start state is any amount outside a joint's limits (the reply is the generic FAILURE; the reason, "outside bounds by", is only in move_group's log): the

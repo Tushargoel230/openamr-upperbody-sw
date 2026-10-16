@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
 # Gazebo verification. Runs the launch tests of openamrobot_upperbody_gazebo (G01, G02: a headless Gazebo server each), then
 # writes <workspace>/evidence/<UTC timestamp>_gazebo.json (openamr.evidence.v1, evidence_class simulation).
 # Exit status: 1 if any check is FAIL, 3 if every check passed but the tree is dirty (the results print, and no evidence file is

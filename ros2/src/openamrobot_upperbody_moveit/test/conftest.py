@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Shared helpers for this package's tests: the installed package's files, and expansions of the combined model (xacro Python API)."""
 import functools
 import os

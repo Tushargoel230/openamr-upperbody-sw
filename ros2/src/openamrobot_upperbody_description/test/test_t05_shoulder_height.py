@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T05: shoulder height per lift stop. The floor-relative height of openarm_{left,right}_base_link equals the stop's shoulder height.
 
 The shoulder height is the position of lift_joint, not an argument (P15; it was `mast_id` in A6). Option B's three calibration  # decision-allow: CONFIG-IDS historical: the shoulder height was mast_id in A6

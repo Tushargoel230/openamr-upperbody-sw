@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # OpenAMRobot joint limits for MoveIt (A7, ADR-009).
 #
 # Upstream OpenArm v2.0 declares NO acceleration limits: enactic/openarm_ros2

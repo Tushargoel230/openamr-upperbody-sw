@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T02: `check_urdf` exits 0 for every T01 expansion (the `openarm` gazebo and real expansions at the baseline
 included), plus the planar-flag expansions (extra, labelled). The matrix and the runner are scripts/check_urdf_matrix.py,
 which verify_a6.sh runs too; here the same runner is checked, and shown to be able to fail.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """W02 (WARN): with enable_planar_base:=true, KDL has no planar joint, so robot_state_publisher converts base_planar_joint
 into a fixed joint and KDL consumers see world -> base_link as static.
 

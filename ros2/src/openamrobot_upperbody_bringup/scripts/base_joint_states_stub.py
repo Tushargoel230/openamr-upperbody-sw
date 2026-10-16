@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Publish the joints no ros2_control owns at their operating point on /joint_states, for the MOCK stack only: the base's wheels
 at rest and the lift at `lift_position`.
 

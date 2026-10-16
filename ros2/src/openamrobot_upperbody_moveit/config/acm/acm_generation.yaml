@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 schema_version: 2
 method: 'derived: scripts/derive_acm.py over the model''s kinematic tree and upstream''s own SRDF; no sampling, no seed (P12A)'
 date: '2026-10-16'

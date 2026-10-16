@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T06: a bad value for any arg fails expansion with a message listing the accepted values."""
 import pytest
 import xacro

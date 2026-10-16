@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Print the configuration id of one expansion of combined_robot.xacro (ARCHITECTURE.md s7, ADR-010 as corrected by rev19.0).
 
     print_config_id.py column:=dold_v4_350 base_plate:=bp000 head_pitch:=hp25 base_tilt:=bt10 arm_package:=openarm

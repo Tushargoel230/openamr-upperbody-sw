@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """M02: every named pose of both arms (and both grippers) plans and executes in Gazebo at option B's baseline configuration, through
 move_group, with a final joint error below 0.01 rad. The lift is at L1000 (lift_joint at its zero, which is where joint_state_publisher
 reports it and where the unactuated carriage rests on its limit): the simulator is not asked to move it (we have no authority to).

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T11: the planar base joint is present in source, disabled by default, and correct when enabled."""
 import os
 import re

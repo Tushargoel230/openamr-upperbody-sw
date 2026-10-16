@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # frame_contract.yaml - machine-readable twin of 10_architecture/FRAMES.md (names/parents), as of P15 (13 Oct 2026): the base is
 # platform-sw's REP 105 base (base_footprint root), the upper body is option B's lift model, and there is no mast.
 # Tests read this file; FRAMES.md explains it. Values (poses, masses) are NOT part of the contract: see datums.yaml.

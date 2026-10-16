@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
 # PROPOSE the collision matrix for config/openamrobot.srdf: derive it from the model (scripts/derive_acm.py) and print what differs from the contract.
 #
 #   source /opt/ros/jazzy/setup.bash && source <workspace>/install/setup.bash

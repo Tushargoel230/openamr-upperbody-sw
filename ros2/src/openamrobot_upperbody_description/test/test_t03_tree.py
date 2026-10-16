@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T03: one root `base_footprint`, no duplicate link or joint names (and no `world`, no dangling joint ends).
 
 The root is platform-sw's base_footprint since 935efc7 (REP 105): base_link is its child, 0.098 m up.

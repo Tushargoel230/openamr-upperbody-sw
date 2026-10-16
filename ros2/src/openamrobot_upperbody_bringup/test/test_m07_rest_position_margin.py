@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """M07: at rest in Gazebo, no joint sits within a margin of either of its limits (P17 task 2).
 
 Why this is a check of its own. In option B's body the right finger rests ON its open limit (-4.7e-6 .. +2.7e-8 rad); the old body rested 6.0e-5

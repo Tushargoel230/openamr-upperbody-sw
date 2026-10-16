@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Sensor frames and the SO-101 stub: where they attach, what they carry, and when they exist.
 
 The head camera is option B's (head_camera_mount_link -> head_camera_link -> head_camera_optical_frame on the lift carriage, with

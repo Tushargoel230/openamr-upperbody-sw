@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Assemble the A7 evidence report. Called by run_a7_regression.sh after the tests ran.
 
     build_a7_evidence.py --since EPOCH [--step name=returncode ...] [--repo PATH]

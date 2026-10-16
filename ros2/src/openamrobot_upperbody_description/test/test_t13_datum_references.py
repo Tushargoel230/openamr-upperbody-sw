@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T13: datums.yaml and the xacro agree, in both directions, with no hand-maintained list of references.
 
 Every datum is in exactly one of three states, anything else FAILs:

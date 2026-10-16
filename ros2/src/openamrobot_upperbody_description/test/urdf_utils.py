@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Fixed-joint forward kinematics on an expanded URDF (numpy only, no KDL, no ROS runtime).
 
 Reusable by later steps: pass the ElementTree root of an expanded URDF and two link names.

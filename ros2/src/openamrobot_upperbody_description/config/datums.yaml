@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # datums.yaml - every number the combined description uses that is not upstream-owned (ADR-002).
 # Schema v1, see 10_architecture/DATUMS.md. Values may change; names and the frame structure may not.
 # Computed values (e.g. the lift's inertia tensor) are NOT stored here; upstream-owned values (option B's geometry, the arm) are read from upstream YAML.

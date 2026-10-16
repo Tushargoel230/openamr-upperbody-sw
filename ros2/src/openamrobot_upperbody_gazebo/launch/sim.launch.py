@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The combined OpenAMRobot 2.0 robot in Gazebo Harmonic: the base on its DiffDrive plugin, both arms on gz_ros2_control.
 
     ros2 launch openamrobot_upperbody_gazebo sim.launch.py [base_plate:=bp000] [headless:=true] [world:=/path/x.sdf]

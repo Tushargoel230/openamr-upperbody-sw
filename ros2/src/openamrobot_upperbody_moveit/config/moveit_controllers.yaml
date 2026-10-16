@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # MoveIt's controller mapping for the OpenAMRobot upper body (A7). Written for OUR controllers, the ones in
 # openamrobot_upperbody_control/config/arm_controllers.yaml, not upstream's names (upstream's moveit_controllers.yaml names
 # left_joint_trajectory_controller; ours are left_arm_controller, ... because that is what bring-up and the sim spawn).

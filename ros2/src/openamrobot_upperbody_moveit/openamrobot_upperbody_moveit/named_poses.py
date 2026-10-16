@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Named poses read from the SRDF, and the per-hand gripper sign rule (ADR-009 point 5).
 
 The two grippers take opposite-signed GripperCommand positions: left finger_joint1 range [0, 0.7854], right [-0.7854, 0] (upstream's

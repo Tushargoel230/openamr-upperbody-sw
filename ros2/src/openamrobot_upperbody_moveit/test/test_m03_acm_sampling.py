@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """M03: the SRDF's collision matrix disables only what can be justified (scripts/validate_acm.py, acm_derive.py, moveit_py).
 
 A pair may be disabled for exactly three reasons: declared by upstream (section 1 of the SRDF, the 20 pairs upstream states), `Adjacent` (a structural

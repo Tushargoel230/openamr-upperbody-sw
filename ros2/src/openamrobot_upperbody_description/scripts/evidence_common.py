@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Shared by the A6 evidence scripts and tests: where evidence goes, what the checkout is, which expansions are checked.
 
 Not a command. Imported by print_config_id.py, check_urdf_matrix.py, build_evidence.py and the tests.

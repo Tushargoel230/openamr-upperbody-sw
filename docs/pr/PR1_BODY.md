@@ -68,4 +68,4 @@ Per the OpenAMRobot AI Contribution Policy.
 - [ ] DCO sign-off on every commit
 - [ ] Contributor agreement accepted
 - [ ] No upstream files modified
-- [ ] No frame names outside design/FRAMES.md
+- [ ] No frame names outside ros2/src/openamrobot_upperbody_description/config/frame_contract.yaml

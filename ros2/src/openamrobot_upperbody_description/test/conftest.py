@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Shared helpers for the description tests (xacro Python API; no ROS runtime, only the ament index for $(find)).
 
 The expansion runs on the *installed* package so that what is tested is what a user gets from `ros2`.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """W01: the root link carries no inertial, so KDL consumers lose nothing. RETIRED AS A WARN in P15 (P12A's WARN, A6's since S3).
 
 Until P15 the root was base_link, which carries platform-sw's 4.175 kg inertial, and KDL does not support a root link with an

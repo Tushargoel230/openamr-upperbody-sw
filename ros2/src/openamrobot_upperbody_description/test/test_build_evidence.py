@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """scripts/build_evidence.py: the report only combines what the tests recorded. Its mapping and combining rules are
 tested here, on synthetic results, including that a FAIL cannot be hidden by a PASS and that a missing result is not a pass.
 """

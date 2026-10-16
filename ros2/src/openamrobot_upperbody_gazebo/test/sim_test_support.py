@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Shared by the Gazebo launch tests: where a check's sidecar goes (the same evidence directory the A6 checks use)."""
 import os
 import sys

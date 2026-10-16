@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The MoveIt configuration files: names agree with the SRDF and with the controllers the stack really spawns, the limits carry their
 provenance tags (ADR-009), and the gripper controller type is still option 1 (the fork is not decided here)."""
 import os

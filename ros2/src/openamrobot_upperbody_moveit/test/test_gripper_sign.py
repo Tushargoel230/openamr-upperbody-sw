@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """M05 (adopted 7 Oct, VERIFICATION.md): the two grippers take opposite-signed GripperCommand positions, and no named pose may close both
 hands from one number (ADR-009 point 5), and the check fails the single-number version in both directions (the two `fails` tests below).
 

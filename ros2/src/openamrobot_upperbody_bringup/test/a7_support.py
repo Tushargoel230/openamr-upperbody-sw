@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Shared by the M01 and M02 launch tests: the named-pose sequence, the settle-and-measure step, and the per-run sidecar."""
 import os
 import sys

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T04: every expansion honours config/frame_contract.yaml.
 
   R   present, with the contract's parent and type            -> FAIL if not

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T15: the `gazebo` profile drives the arms with gz_ros2_control/GazeboSimSystem, same joints and interfaces as `mock`.
 
 Expansion only: nothing launches Gazebo here (G01, in openamrobot_upperbody_gazebo, does). The block must not need a

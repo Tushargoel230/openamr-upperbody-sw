@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """move_group (and, optionally, RViz's MotionPlanning display) for the combined OpenAMRobot model. A building block: it assumes the robot
 is already running (robot_state_publisher, the controller manager, joint states) and starts nothing of that. The user-facing launch is
 openamrobot_upperbody_bringup's moveit.launch.py, which starts the stack too.

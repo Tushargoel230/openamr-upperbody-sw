@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """T02: run `check_urdf` on every T01 expansion, `openarm` on `gazebo` and `real` at the baseline included.
 
     check_urdf_matrix.py

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # The one bridge this package adds to platform-sw's openamrobot_gazebo/config/gz_bridge.yaml (used by reference).
 #
 # Platform-sw's file has the base's joint states commented out, so with it alone the two wheel joints never reach ROS (its own

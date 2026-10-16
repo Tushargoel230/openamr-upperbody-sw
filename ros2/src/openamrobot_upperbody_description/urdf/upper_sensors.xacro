@@ -1,4 +1,5 @@
 <?xml version="1.0"?>
+<!-- SPDX-License-Identifier: MIT -->
 <!--
   Upper-body sensor frames (FRAMES.md, DESIGN_LOG 2026-09-21: plain frames).
   Emitted by combined_robot.xacro when arm_package == 'openarm'.

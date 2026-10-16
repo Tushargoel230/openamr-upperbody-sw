@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """M02 waits for its controllers to be active, and FAILs if they never are (P17 task 4), against a fake controller manager. No simulator.
 
 The wait is `a7_support.wait_for_controllers_active`. What is pinned: it returns as soon as every named controller is `active`; it does NOT

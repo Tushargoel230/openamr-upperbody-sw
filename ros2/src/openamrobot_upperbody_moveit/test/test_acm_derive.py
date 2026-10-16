@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The collision matrix, derived: a pair is disabled only for a reason that can be shown (acm_derive.py), and every reason is recomputed here from the
 model. No ROS runtime and no simulator: the xacro Python API, the SRDF as a file, and a small forward-kinematics of the URDF's own joints.
 

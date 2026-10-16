@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
 # A6 verification. Runs colcon test for this package, the T02 check_urdf matrix, datums_report.py and the config ids,
 # then writes <workspace>/evidence/<UTC timestamp>_dev.json (openamr.evidence.v1, evidence_class static+mock).
 # Exit status: 1 if any check is FAIL, 3 if every check passed but the tree is dirty (the results print, and no evidence file

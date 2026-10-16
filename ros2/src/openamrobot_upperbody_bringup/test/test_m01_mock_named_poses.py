@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """M01: every named pose of both arms (and both grippers) plans and executes on `mock`, through move_group, with a final joint error
 below 0.01 rad. One lift calibration stop per run (the argument `lift_stop:=L1000|L1175|L1350`, default L1000, which the test turns into the stub's
 `lift_position`; the stops are CALIBRATION IDs of option B's lift, joint positions and not configuration IDs); CMake registers it once per stop.

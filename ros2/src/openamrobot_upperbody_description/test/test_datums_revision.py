@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Revision guard: datums.yaml content must not change without `revision` changing (ADR-002: revision feeds config_id).
 
 Compares the working-tree file with the same path at HEAD~. Skips cleanly (with the reason) outside a git checkout, in

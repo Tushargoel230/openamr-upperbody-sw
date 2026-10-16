@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Mock bringup: the arms on mock_components/GenericSystem, all five controllers active, nothing else.
 
     ros2 launch openamrobot_upperbody_bringup mock.launch.py [base_plate:=bp000] [head_pitch:=hp25] [rviz:=true]

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T15: the finger-mimic multiplier is read from upstream's joint_mimics.yaml, never written into ros2_control.xacro.
 
 P06 disclosed one mutation its tests did not catch: replacing the multiplier with a hard-coded number. It was harmless

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T07 / T08: collision geometry.
 
 T07 (FAIL): every link that has an <inertial> or a <visual> has a <collision>, or is marked `collision_free: true` in

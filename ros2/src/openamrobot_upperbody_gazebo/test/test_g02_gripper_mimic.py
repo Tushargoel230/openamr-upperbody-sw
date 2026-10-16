@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """G02: in Gazebo both grippers close, and finger_joint2 follows finger_joint1 in the physics (the P06 mimic question).
 
 Why this test passes `physics_engine` explicitly (P10 task 0, 6 Oct): sim.launch.py defaults to DART, the engine platform-sw

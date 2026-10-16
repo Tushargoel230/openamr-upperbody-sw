@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The clamp in the loop, with a real move_group: it reproduces the defect deterministically instead of waiting for Gazebo to produce it.
 
 A joint state publisher holds `openarm_left_joint4` (home's joint, on its lower limit 0) at -2.5e-7 rad, the value Gazebo read back. Without the

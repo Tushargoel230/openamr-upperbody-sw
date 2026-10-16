@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """How sim.launch.py stops the simulator (P17 task 1), on decoy processes and on the launch description itself. No Gazebo, no ROS graph.
 
 What is pinned, each against a failure that was observed:
