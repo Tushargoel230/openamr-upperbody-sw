@@ -17,6 +17,10 @@ if(BUILD_TESTING)
   ament_add_pytest_test(a7_clamp_gate test/test_a7_clamp_gate.py TIMEOUT 120)
   # M02's wait for the controllers to be active, and its FAIL when they never are, against a fake controller manager (P17)
   ament_add_pytest_test(a7_controller_wait test/test_a7_controller_wait.py TIMEOUT 180)
+  # the controller wait honours one absolute deadline (PR #14 review); fake clock and client, no ROS graph
+  ament_add_pytest_test(a7_controller_deadline test/test_a7_controller_deadline.py TIMEOUT 60)
+  # M07 fails on incomplete joint-state coverage (PR #14 review); the model and synthetic samples, no ROS graph
+  ament_add_pytest_test(m07_coverage test/test_m07_coverage.py TIMEOUT 60)
   # L01 starts a real controller_manager: it picks its own ROS_DOMAIN_ID (see the test), so it cannot see or be seen by
   # another stack on the machine.
   add_launch_test(test/test_l01_mock_controllers.py TIMEOUT 60)

@@ -38,14 +38,14 @@ import pytest  # noqa: E402
 import rclpy  # noqa: E402
 import yaml  # noqa: E402
 from ament_index_python.packages import get_package_share_directory  # noqa: E402
-from controller_manager_msgs.srv import ListControllers  # noqa: E402
 from launch.launch_description_sources import PythonLaunchDescriptionSource  # noqa: E402
 from rclpy.parameter import Parameter  # noqa: E402
 from rclpy.qos import QoSProfile, ReliabilityPolicy  # noqa: E402
 from sensor_msgs.msg import JointState  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from a7_support import A7_ENABLED, SKIP_REASON, stack_alive, stack_healthy, write_run_sidecar  # noqa: E402
+from a7_support import (A7_ENABLED, SKIP_REASON, coverage_problems, expected_rest_joints, stack_alive, stack_healthy,  # noqa: E402
+                        wait_for_controllers_active, write_run_sidecar)
 
 from openamrobot_upperbody_moveit.named_poses import urdf_joint_limits  # noqa: E402
 
@@ -55,6 +55,7 @@ ACTIVE_WITHIN_S = 120.0       # wall s for the controllers (startup of a headles
 SETTLE_SIM_S = 6.0            # simulated s between "controllers active" and the first reading: the spawn drop and the controllers' first hold
 WINDOW_SIM_S = 6.0            # simulated s of readings the extremes are taken over
 MIN_MESSAGES = 50             # fewer readings than this is not a measurement of a rest (the window did not run)
+MIN_SAMPLES_PER_JOINT = 50    # the same, per expected joint: a joint read fewer times than this in the window was not measured (PR #14 review)
 DATUM = "joint_rest_margin_rad"
 EXPECTED_PROCESSES = ["gazebo", "robot_state_publisher", "parameter_bridge", "create", "joint_state_publisher", "spawner"]
 # Joints whose rest pose is one of their upstream URDF limits (the zero and open poses are limits by construction, evidence/m02_bisect/RESULTS.md).
@@ -82,10 +83,14 @@ def margin_datum():
     return float(value), {k: record.get(k) for k in ("value", "source", "status", "ref", "owner")}, doc["revision"]
 
 
-def joint_limits_with_names():
+def model_xml():
     import xacro
     path = os.path.join(get_package_share_directory("openamrobot_upperbody_description"), "urdf", "combined_robot.xacro")
-    return urdf_joint_limits(xacro.process_file(path, mappings={"hardware_profile": "gazebo"}).toxml())
+    return xacro.process_file(path, mappings={"hardware_profile": "gazebo"}).toxml()
+
+
+def joint_limits_with_names(xml=None):
+    return urdf_joint_limits(xml if xml is not None else model_xml())
 
 
 def rest_rows(readings, limits, margin):
@@ -146,7 +151,9 @@ class TestRestPositionMargin(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         rows = cls.record.get("joints", [])
-        measured = bool(rows) and not cls.record.get("error")
+        coverage = cls.record.get("coverage") or {}
+        incomplete = bool(coverage.get("missing") or coverage.get("too_few_samples")) or "coverage" not in cls.record
+        measured = bool(rows) and not cls.record.get("error") and not incomplete
         failing_rows, warned_rows = classify(rows, cls.record.get("margin_rad", 0.0))
         failing = [r["joint"] for r in failing_rows]
         warned = {r["joint"]: AT_UPSTREAM_LIMIT[r["joint"]] for r in warned_rows}
@@ -154,7 +161,10 @@ class TestRestPositionMargin(unittest.TestCase):
         details = {"physics_engine_used": ENGINE, "physics_engine_passed_explicitly": True, "reading_topic": "/arm/joint_states",
                    "window_sim_s": WINDOW_SIM_S, "settle_sim_s": SETTLE_SIM_S, "failing_joints": failing, "warned_joints": warned,
                    "not_measured": NOT_MEASURED, **cls.record}
-        if warned and not failing and measured:
+        if incomplete and rows:
+            details["problems"] = ["incomplete joint-state coverage (FAIL): missing " + ", ".join(coverage.get("missing", [])) +
+                                   "; too few samples " + ", ".join(f"{j} ({n})" for j, n in coverage.get("too_few_samples", {}).items())]
+        elif warned and not failing and measured:
             details["problems"] = ["joints at an upstream limit at rest (WARN): " + ", ".join(sorted(warned))]
         write_run_sidecar("M07", "rest_position_margin", "no joint rests within the margin of either of its limits", result, details)
         cls.node.destroy_node()
@@ -169,23 +179,19 @@ class TestRestPositionMargin(unittest.TestCase):
         return predicate()
 
     def _wait_for_controllers(self):
-        """FAIL (not hang, not skip) if the five controllers are not all active within ACTIVE_WITHIN_S."""
-        client = self.node.create_client(ListControllers, "/controller_manager/list_controllers")
-        self.assertTrue(client.wait_for_service(timeout_sec=ACTIVE_WITHIN_S), "no controller_manager within the budget")
-        states = {}
-        while time.monotonic() < self.started + ACTIVE_WITHIN_S:
-            future = client.call_async(ListControllers.Request())
-            self._spin_until(future.done, 2.0)
-            states = {c.name: c.state for c in future.result().controller} if future.done() and future.result() else {}
-            if all(states.get(name) == "active" for name in CONTROLLERS):
-                return states
-            time.sleep(0.25)
-        self.fail(f"controllers not all active within {ACTIVE_WITHIN_S:.0f} s: {states}")
+        """FAIL (not hang, not skip) if the five controllers are not all active within ACTIVE_WITHIN_S: the shared wait, one absolute deadline."""
+        ok, states, waited = wait_for_controllers_active(self.node, timeout_s=ACTIVE_WITHIN_S, names=CONTROLLERS)
+        if not ok:
+            self.fail(f"controllers not all active within {ACTIVE_WITHIN_S:.0f} s (waited {waited} s): {states}")
+        return states
 
     def test_m07_1_no_joint_rests_within_the_margin_of_a_limit(self):
         margin, record, revision = margin_datum()
-        limits = joint_limits_with_names()
-        self.record.update({"margin_rad": margin, "margin_datum": record, "datums_revision": revision})
+        xml = model_xml()
+        limits = joint_limits_with_names(xml)
+        expected, also_not_measured = expected_rest_joints(xml, NOT_MEASURED)
+        self.record.update({"margin_rad": margin, "margin_datum": record, "datums_revision": revision, "expected_joints": expected,
+                            "not_measured_from_the_model": also_not_measured, "min_samples_per_joint": MIN_SAMPLES_PER_JOINT})
         try:
             self.record["controllers"] = self._wait_for_controllers()
         except AssertionError as error:
@@ -216,8 +222,12 @@ class TestRestPositionMargin(unittest.TestCase):
         self.record["joints"] = rows
         self.record["joints_read"] = sorted(readings)
         self.record["joints_with_limits_read"] = len(rows)
+        self.record["samples_per_joint"] = {j: len(readings.get(j, [])) for j in expected}
+        self.record["coverage"] = coverage_problems(readings, expected, MIN_SAMPLES_PER_JOINT)
         self.assertGreaterEqual(count[0], MIN_MESSAGES, f"only {count[0]} joint-state messages in a {WINDOW_SIM_S} s window: not a measurement of a rest")
         self.assertTrue(rows, f"no joint of /arm/joint_states has limits in the URDF (read: {sorted(readings)})")
+        self.assertFalse(self.record["coverage"]["missing"] or self.record["coverage"]["too_few_samples"],
+                         f"incomplete coverage of the expected joints: {self.record['coverage']}")
         failing, _ = classify(rows, margin)
         self.assertFalse(failing, "joints resting within %.3g rad of a limit: %s" % (margin, "; ".join(
             f"{r['joint']} min {r['min_rad']:+.3e} max {r['max_rad']:+.3e} vs [{r['lower_limit_rad']:+.4f}, {r['upper_limit_rad']:+.4f}] "

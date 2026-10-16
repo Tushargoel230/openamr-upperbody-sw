@@ -21,6 +21,13 @@ All notable changes to this repository. Evidence for the description is static a
   when it exits 0.** On a 4-core machine with CPU-only rendering the broadcaster's first switch timed out after the
   spawner's default 5 s, the spawner exited 1, and the other four spawners still started (G01, G02, M02 and M07 then saw four of five controllers
   active). `test_sim_launch_spawners.py` pins both.
+- **The A7 controller wait honours one absolute deadline** (PR #14 review): `a7_support.wait_for_controllers_active` caps the service wait,
+  each request, each spin and each sleep by the time that is left, and accepts an all-active answer only if it arrived before the deadline (before,
+  an answer at 1.5 s of a 1.0 s budget returned ok). M07 uses the shared wait instead of its own copy. `test_a7_controller_deadline.py` (fake clock
+  and client) pins it.
+- **M07 fails on incomplete joint-state coverage** (PR #14 review): the expected joints come from the model (the 16 limited joints under
+  `ros2_control`; `lift_joint` and the mimic `finger_joint2`s are recorded as not measured, with the reason), and every expected joint needs 50
+  samples in the window; a missing or under-sampled joint is a FAIL recorded as incomplete coverage. `test_m07_coverage.py` pins it.
 
 ### Added / Changed / Fixed (P17)
 
