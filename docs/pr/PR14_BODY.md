@@ -35,6 +35,16 @@ The evidence reports are `20261016T150136Z_dev.json` (A6) and `20261016T151057Z_
 
 ## Tests
 
+Summary:
+- **On `ff8f9ad` with platform-sw `d619012` (main, with #70):**
+  - A6: 25 PASS / 3 WARN / 0 FAIL / 0 NOT_RUN.
+  - A7: 10 PASS / 2 WARN / 3 FAIL / 0 NOT_RUN. M03 and AUX fail on #70's chassis/caster-wheel collision overlap; M01 fails on a harness start-up race.
+  - Test counts behind those two runs: 636 passed (description), 8 passed (control), 28 passed (gazebo), 78 passed / 5 failed / 3 skipped (moveit), 65 passed / 3 failed (bringup, A7 run).
+- **On `8e1aba1` with platform-sw `15d0eb5`:**
+  - `colcon test`: 825 tests, 806 passed, 0 failed, 19 skipped.
+  - A6: 24 PASS / 4 WARN / 0 FAIL, twice.
+  - A7: 13 PASS / 2 WARN / 0 FAIL, twice.
+
 ### On `ff8f9ad`, platform-sw `d619012` (main, with #70)
 
 Run once each, sequentially, after a rebuild.
