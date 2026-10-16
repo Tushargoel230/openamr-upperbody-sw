@@ -57,8 +57,8 @@ A7_CHECKS = [
     ("M04", "a goal inside the nearest reachable structure volume (arm_profile_link) is rejected by planning (the base body is out of the arms' reach)"),
     ("M05", "per-hand gripper values: closed is each hand's own far limit, opposite signs (ADR-009 point 5); the single-number version fails both ways"),
     ("M06", "named-pose plans need some acceleration limit and are insensitive to its value across three orders of magnitude (the limits stay placeholders)"),
-    ("M07", "at rest in Gazebo no joint sits within the joint_rest_margin_rad datum of either of its limits (FAIL, not WARN; lift_joint is not measured, "
-            "and says why)"),
+    ("M07", "at rest in Gazebo no joint sits within the joint_rest_margin_rad datum of either of its limits (FAIL; WARN for the joints whose rest pose is an "
+            "upstream limit; lift_joint is not measured, and says why)"),
     ("L01", "launch test: five controllers active on mock, one trajectory followed"),
     ("H01", "every test file is registered and every launch test checks that its processes started and exited cleanly"),
     ("H02", "every test CMake registered left a result file (nothing registered but not run)"),

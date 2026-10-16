@@ -3,8 +3,9 @@
 Why this is a check of its own. In option B's body the right finger rests ON its open limit (-4.7e-6 .. +2.7e-8 rad); the old body rested 6.0e-5
 rad inside it. A joint that rests on a limit straddles it: solver noise carries it across, the joint-state clamp fires thousands of times a run
 (the count scatters 2-3x on an unchanged tree, which is why that count no longer gates anything), and every downstream number moves with it.
-That is a modelling defect whether or not anything notices, so it is FAIL, not WARN. A version of this check that passes on the right finger
-is wrong.
+That is a modelling defect whether or not anything notices. A version of this check that passes on the right finger is wrong: the joints in
+AT_UPSTREAM_LIMIT, whose rest pose is an upstream limit by construction, are WARN (recorded with the reason), never PASS; any other joint
+within the margin, or one of those read further past its limit than the margin, is FAIL.
 
 What it measures. Nothing is commanded: the simulator is started (headless, Bullet-Featherstone like G02 and M02, so the fingers behave), the
 five controllers are waited for until active, the model settles, and the RAW joint states the physics produced (`/arm/joint_states`, the
@@ -56,6 +57,14 @@ WINDOW_SIM_S = 6.0            # simulated s of readings the extremes are taken o
 MIN_MESSAGES = 50             # fewer readings than this is not a measurement of a rest (the window did not run)
 DATUM = "joint_rest_margin_rad"
 EXPECTED_PROCESSES = ["gazebo", "robot_state_publisher", "parameter_bridge", "create", "joint_state_publisher", "spawner"]
+# Joints whose rest pose is one of their upstream URDF limits (the zero and open poses are limits by construction, evidence/m02_bisect/RESULTS.md).
+# Within the margin of that limit, on either side, they are WARN with this reason; read further past it than the margin, they FAIL.
+AT_UPSTREAM_LIMIT = {
+    "openarm_left_finger_joint1": "rest pose at an upstream limit",
+    "openarm_right_finger_joint1": "rest pose at an upstream limit",
+    "openarm_left_joint4": "rest pose at an upstream limit",
+    "openarm_right_joint4": "rest pose at an upstream limit",
+}
 NOT_MEASURED = {
     "lift_joint": "not under ros2_control: its state is joint_state_publisher's default zero (= its lower stop L1000 by construction), "
                           "not a physics reading, so there is no rest position of the simulator to compare with its limits",
@@ -98,6 +107,20 @@ def rest_rows(readings, limits, margin):
     return rows
 
 
+def classify(rows, margin):
+    """(failing, warned): failing rows are within the margin and not excused; warned rows are AT_UPSTREAM_LIMIT joints within the margin of
+    their limit on either side (distance > -margin). A listed joint read further past its limit than the margin is failing."""
+    failing, warned = [], []
+    for r in rows:
+        if not r["within_margin"]:
+            continue
+        if r["joint"] in AT_UPSTREAM_LIMIT and r["distance_to_nearest_limit_rad"] > -margin:
+            warned.append(r)
+        else:
+            failing.append(r)
+    return failing, warned
+
+
 @pytest.mark.launch_test
 def generate_test_description():
     if not A7_ENABLED:
@@ -124,12 +147,16 @@ class TestRestPositionMargin(unittest.TestCase):
     def tearDownClass(cls):
         rows = cls.record.get("joints", [])
         measured = bool(rows) and not cls.record.get("error")
-        failing = [r["joint"] for r in rows if r["within_margin"]]
-        result = "PASS" if measured and not failing else "FAIL"
-        write_run_sidecar("M07", "rest_position_margin", "no joint rests within the margin of either of its limits", result,
-                          {"physics_engine_used": ENGINE, "physics_engine_passed_explicitly": True, "reading_topic": "/arm/joint_states",
-                           "window_sim_s": WINDOW_SIM_S, "settle_sim_s": SETTLE_SIM_S, "failing_joints": failing,
-                           "not_measured": NOT_MEASURED, **cls.record})
+        failing_rows, warned_rows = classify(rows, cls.record.get("margin_rad", 0.0))
+        failing = [r["joint"] for r in failing_rows]
+        warned = {r["joint"]: AT_UPSTREAM_LIMIT[r["joint"]] for r in warned_rows}
+        result = "FAIL" if not measured or failing else ("WARN" if warned else "PASS")
+        details = {"physics_engine_used": ENGINE, "physics_engine_passed_explicitly": True, "reading_topic": "/arm/joint_states",
+                   "window_sim_s": WINDOW_SIM_S, "settle_sim_s": SETTLE_SIM_S, "failing_joints": failing, "warned_joints": warned,
+                   "not_measured": NOT_MEASURED, **cls.record}
+        if warned and not failing and measured:
+            details["problems"] = ["joints at an upstream limit at rest (WARN): " + ", ".join(sorted(warned))]
+        write_run_sidecar("M07", "rest_position_margin", "no joint rests within the margin of either of its limits", result, details)
         cls.node.destroy_node()
         rclpy.shutdown()
 
@@ -191,7 +218,7 @@ class TestRestPositionMargin(unittest.TestCase):
         self.record["joints_with_limits_read"] = len(rows)
         self.assertGreaterEqual(count[0], MIN_MESSAGES, f"only {count[0]} joint-state messages in a {WINDOW_SIM_S} s window: not a measurement of a rest")
         self.assertTrue(rows, f"no joint of /arm/joint_states has limits in the URDF (read: {sorted(readings)})")
-        failing = [r for r in rows if r["within_margin"]]
+        failing, _ = classify(rows, margin)
         self.assertFalse(failing, "joints resting within %.3g rad of a limit: %s" % (margin, "; ".join(
             f"{r['joint']} min {r['min_rad']:+.3e} max {r['max_rad']:+.3e} vs [{r['lower_limit_rad']:+.4f}, {r['upper_limit_rad']:+.4f}] "
             f"(nearest {r['nearest_limit']}, {r['distance_to_nearest_limit_rad']:+.3e})" for r in failing)))

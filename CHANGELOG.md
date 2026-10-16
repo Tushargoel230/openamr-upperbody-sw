@@ -5,6 +5,18 @@ All notable changes to this repository. Evidence for the description is static a
 
 ## [Unreleased]
 
+### Changed (follow-ups to 49d2368, accepted by Alex on 16 Oct)
+
+- **The lift column has placeholder geometry.** Both stages carry a 240 x 240 mm box (datum `lift_column_section`, placeholder), visual and
+  collision, named `placeholder_lift_column_*`: the fixed stage on `lift_column_base_link` (retracted length), the moving stage on
+  `lift_carriage_link` (stroke, below the carriage). Opt-in parameter `column_geometry` on option B's macro (default: none, as on `main`); the
+  combined robot passes the section. `frame_contract.yaml` no longer calls `lift_column_base_link` collision-free. **The collision matrix is
+  re-derived: 95 pairs (20 upstream + 17 `Adjacent` + 58 `ConstantTransform`), was 83; 535 of 630 pairs are enabled, was 478** (the two stages
+  are geometry links now). The arms can no longer plan through the column body; the box is not the supplier's shape.
+- **M07 reports WARN, not FAIL, for the four joints whose rest pose is an upstream limit** (`openarm_{left,right}_finger_joint1`,
+  `openarm_{left,right}_joint4`, reason "rest pose at an upstream limit"), within the margin on either side of that limit. Any other joint within the
+  margin, or one of those read further past its limit than the margin, is still a FAIL; WARN is not PASS.
+
 ### Added / Changed / Fixed (P17)
 
 - **The simulator is stopped once per launch, by a detached helper, and a server that has to be forced is a FAIL.** `sim.launch.py`'s `OnShutdown`

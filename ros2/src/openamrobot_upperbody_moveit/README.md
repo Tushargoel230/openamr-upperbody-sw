@@ -66,11 +66,12 @@ ros2 run openamrobot_upperbody_moveit regenerate_acm.sh [--base-plate bp000]    
 ros2 run openamrobot_upperbody_moveit regenerate_acm.sh --write                        # replaces the contract (and the fingerprint): a decision, read the diff
 ```
 
-The contract (`contract:` in `acm_generation.yaml`): **83 pairs (38 `Adjacent`, 45 `ConstantTransform`), 20 of them declared by upstream**, fingerprint
-`sha256:2246faab583a0fc5984ca7a4d3a82eca3c9fb5c8a1b18217231a3b0c4f344681`. It was 113 pairs (36 + 77) with the fixed mast; P15 re-derived it (the model
+The contract (`contract:` in `acm_generation.yaml`): **95 pairs (37 `Adjacent`, 58 `ConstantTransform`), 20 of them declared by upstream**, fingerprint
+`sha256:50ba49b527af824a4cbb588046a5b8ea5da21d561ccd99e54bd4398e42f0c8d0`, re-derived on 16 Oct when the lift column's two stages got placeholder
+boxes (follow-up (a)); it was 83 pairs (38 + 45) in P15 and 113 pairs (36 + 77) with the fixed mast; P15 re-derived it (the model
 changed and the contract is the file, so this is a contract change, in the diff). **The by-construction set shrank from 77 to 45 on purpose:** a
 prismatic joint between two links removes them from what a fixed transform certifies, and `lift_joint` now lies between the base and the arms
-(`test_acm_derive.py` asserts that the shrink is exactly that: no constant pair spans the lift). 478 pairs are enabled (448).
+(`test_acm_derive.py` asserts that the shrink is exactly that: no constant pair spans the lift). 535 of 630 pairs are enabled (478 in P15, 448 with the mast).
 
 ## Named poses
 

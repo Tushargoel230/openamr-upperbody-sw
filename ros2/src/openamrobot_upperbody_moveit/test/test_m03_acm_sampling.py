@@ -108,7 +108,7 @@ def test_m03_1_every_disabled_pair_has_a_reason_that_can_be_shown_at_every_lift_
     })
     assert summary["result"] == "PASS", "\n" + done.stdout[-3500:]
     assert [r["lift_stop"] for r in results] == list(STOPS)
-    assert all(len(r["constant_transform"]["pairs"]) == 45 for r in results)     # 77 in P12A: the lift is a movable joint between base and arms
+    assert all(len(r["constant_transform"]["pairs"]) == 58 for r in results)     # 77 in P12A, 45 in P15; 58 with the column's placeholder boxes
     assert all(not r["constant_transform"]["cross_check_with_sampled_states"]["disagreements"] for r in results)
 
 
