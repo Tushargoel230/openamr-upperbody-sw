@@ -140,5 +140,5 @@ entries:
 # (tof_front_left_link ... ultrasonic_rear_link, req W) were declared-but-absent and are DELETED, not renamed.
 consumed_from:
   - owner: platform-sw
-    contract: "openamr-platform-sw 935efc7: robo_urdf.urdf.xacro, near_field_frame macro (parent base_link); P-03 rev19.0, register NEAR-FIELD-FRAMES"
-    frames: [us_front_left, us_front_right, us_rear_left, us_rear_right, tof_front, tof_rear]
+    contract: "openamr-platform-sw 935efc7: robo_urdf.urdf.xacro, near_field_frame macro (parent base_link); P-03 rev19.0, register NEAR-FIELD-FRAMES; imu_link (register FRAMES-REP105) and base_camera_link (register CAMERAS), parent base_link, same file. Names only: their poses are platform-sw's"
+    frames: [us_front_left, us_front_right, us_rear_left, us_rear_right, tof_front, tof_rear, imu_link, base_camera_link]
