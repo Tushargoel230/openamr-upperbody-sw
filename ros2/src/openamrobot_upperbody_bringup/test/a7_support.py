@@ -12,7 +12,8 @@ from openamrobot_upperbody_moveit.named_poses import ARM_GROUP, GRIPPER_GROUP, G
 # OPENAMR_A7=1, which run_a7_regression.sh sets. Otherwise they SKIP with this reason, and the A6 verification neither starts Gazebo nor
 # depends on an A7 check. A skipped M01/M02 is never a result: the A7 report treats a missing sidecar as a FAIL.
 A7_ENABLED = os.environ.get("OPENAMR_A7") == "1"
-SKIP_REASON = "A7 simulation check: set OPENAMR_A7=1 (scripts/run_a7_regression.sh does) so verify_a6.sh does not start it"
+SKIP_REASON = ("A7 simulation check: set OPENAMR_A7=1 (scripts/run_a7_regression.sh does) so verify_a6.sh does not start it; "
+               "tracking: openAMRobot/openamr-upperbody-sw#16")  # skip tracked in openAMRobot/openamr-upperbody-sw#16
 TOLERANCE = 0.01            # rad: the final joint error every named pose must stay under (A7)
 VELOCITY_SCALING = 0.5      # explicit in every request: the SRDF-side default (0.1) would only make the tests slower
 ACCELERATION_SCALING = 0.5

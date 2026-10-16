@@ -139,7 +139,7 @@ def generate_test_description():
     ]), {}
 
 
-@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)  # tracking: openAMRobot/openamr-upperbody-sw#16
 class TestRestPositionMargin(unittest.TestCase):
     record = {}
 
@@ -235,14 +235,14 @@ class TestRestPositionMargin(unittest.TestCase):
             f"(nearest {r['nearest_limit']}, {r['distance_to_nearest_limit_rad']:+.3e})" for r in failing)))
 
 
-@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)  # tracking: openAMRobot/openamr-upperbody-sw#16
 class TestProcessesAlive(unittest.TestCase):
     def test_no_process_of_the_launch_died_while_the_tests_were_running(self, proc_info):
         stack_alive(proc_info)
 
 
 @launch_testing.post_shutdown_test()
-@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)  # tracking: openAMRobot/openamr-upperbody-sw#16
 class TestShutdown(unittest.TestCase):
     def test_m07_processes_started_and_exited_cleanly(self, proc_info):
         stack_healthy(proc_info, expected=EXPECTED_PROCESSES, simulator=True, sidecar=("M07", "rest_position_margin"))

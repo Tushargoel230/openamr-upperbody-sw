@@ -68,7 +68,7 @@ def generate_test_description():
     ]), {}
 
 
-@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)  # tracking: openAMRobot/openamr-upperbody-sw#16
 class TestNamedPosesOnMock(unittest.TestCase):
     record = {}
 
@@ -109,14 +109,14 @@ class TestNamedPosesOnMock(unittest.TestCase):
 EXPECTED_PROCESSES = ["robot_state_publisher", "ros2_control_node", "spawner", "base_joint_states_stub", "move_group", "joint_state_clamp"]
 
 
-@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)  # tracking: openAMRobot/openamr-upperbody-sw#16
 class TestProcessesAlive(unittest.TestCase):
     def test_no_process_of_the_launch_died_while_the_tests_were_running(self, proc_info):
         stack_alive(proc_info)
 
 
 @launch_testing.post_shutdown_test()
-@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)  # tracking: openAMRobot/openamr-upperbody-sw#16
 class TestShutdown(unittest.TestCase):
     def test_m01_processes_started_and_exited_cleanly(self, proc_info):
         stack_healthy(proc_info, expected=EXPECTED_PROCESSES)
