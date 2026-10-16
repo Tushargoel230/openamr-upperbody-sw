@@ -43,7 +43,7 @@ def main(argv=None):
     ap.add_argument("--commit", required=True, help="full commit hash of the tree being frozen")
     ap.add_argument("--branch", required=True)
     ap.add_argument("--platform-sw", required=True, help="full commit hash of the openamr-platform-sw checkout the base came from")
-    ap.add_argument("--only", nargs="*", help="labels (mast_id/arm_package/hardware_profile) to produce; default: the whole matrix")
+    ap.add_argument("--only", nargs="*", help="labels (mast_id/arm_package/hardware_profile) to produce; default: the whole matrix")  # decision-allow: CONFIG-IDS historical: regenerates the frozen mast-model set
     ns = ap.parse_args(argv)
 
     sys.path.insert(0, os.path.abspath(ns.scripts_dir))
@@ -60,22 +60,22 @@ def main(argv=None):
     os.makedirs(ns.out, exist_ok=True)
 
     entries = []
-    for mast_id, arm_package, hardware_profile in ev.expansion_matrix(mast_ids):
-        label = ev.expansion_label(mast_id, arm_package, hardware_profile)
+    for mast_id, arm_package, hardware_profile in ev.expansion_matrix(mast_ids):  # decision-allow: CONFIG-IDS historical: regenerates the frozen mast-model set
+        label = ev.expansion_label(mast_id, arm_package, hardware_profile)  # decision-allow: CONFIG-IDS historical: regenerates the frozen mast-model set
         if ns.only and label not in ns.only:
             continue
-        urdf = ev.expand_urdf(share, mast_id, arm_package, hardware_profile, "false", None)
-        config_id = pc.config_id(urdf, mast_id, arm_package, hardware_profile, revision, commit)
+        urdf = ev.expand_urdf(share, mast_id, arm_package, hardware_profile, "false", None)  # decision-allow: CONFIG-IDS historical: regenerates the frozen mast-model set
+        config_id = pc.config_id(urdf, mast_id, arm_package, hardware_profile, revision, commit)  # decision-allow: CONFIG-IDS historical: regenerates the frozen mast-model set
         header = HEADER.format(label=label, config_id=config_id, commit=ns.commit, branch=ns.branch, datums_revision=revision,
                                openarm_description=commit, platform_sw=ns.platform_sw)
         assert "--" not in header[len("<!--"):-len("-->")], "a double hyphen is not allowed inside an XML comment"
         text, n = BANNER_RE.subn(lambda m: m.group(1) + header, urdf, count=1)
         if n != 1:
             raise SystemExit(f"{label}: the xacro banner was not where expected, so nothing was rewritten; not guessing")
-        filename = f"{mast_id}__{arm_package}__{hardware_profile}.urdf"
+        filename = f"{mast_id}__{arm_package}__{hardware_profile}.urdf"  # decision-allow: CONFIG-IDS historical: regenerates the frozen mast-model set
         with open(os.path.join(ns.out, filename), "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
-        entries.append({"label": label, "mast_id": mast_id, "arm_package": arm_package, "hardware_profile": hardware_profile,
+        entries.append({"label": label, "mast_id": mast_id, "arm_package": arm_package, "hardware_profile": hardware_profile,  # decision-allow: CONFIG-IDS historical: regenerates the frozen mast-model set
                         "file": filename, "config_id": config_id, "bytes": len(text.encode("utf-8")), **summary(text)})
     doc = {"schema": "openamr.frozen_expansions.v1", "source_commit": ns.commit, "source_branch": ns.branch,
            "datums_revision": revision, "openarm_description_commit": commit, "openarm_description_source": source,

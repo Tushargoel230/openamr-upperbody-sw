@@ -68,7 +68,7 @@ ros2 run openamrobot_upperbody_moveit regenerate_acm.sh --write                 
 
 The contract (`contract:` in `acm_generation.yaml`): **95 pairs (37 `Adjacent`, 58 `ConstantTransform`), 20 of them declared by upstream**, fingerprint
 `sha256:50ba49b527af824a4cbb588046a5b8ea5da21d561ccd99e54bd4398e42f0c8d0`, re-derived on 16 Oct when the lift column's two stages got placeholder
-boxes (follow-up (a)); it was 83 pairs (38 + 45) in P15 and 113 pairs (36 + 77) with the fixed mast; P15 re-derived it (the model
+boxes (follow-up (a)); it was 83 pairs (38 + 45) in P15 and 113 pairs (36 + 77) with the fixed mast; P15 re-derived it (the model <!-- decision-allow: LIFT historical: the matrix count with the superseded fixed mast -->
 changed and the contract is the file, so this is a contract change, in the diff). **The by-construction set shrank from 77 to 45 on purpose:** a
 prismatic joint between two links removes them from what a fixed transform certifies, and `lift_joint` now lies between the base and the arms
 (`test_acm_derive.py` asserts that the shrink is exactly that: no constant pair spans the lift). 535 of 630 pairs are enabled (478 in P15, 448 with the mast).

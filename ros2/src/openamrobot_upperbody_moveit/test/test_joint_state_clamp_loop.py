@@ -58,7 +58,7 @@ def generate_test_description():
     return launch.LaunchDescription([
         launch.actions.IncludeLaunchDescription(
             PythonLaunchDescriptionSource(move_group),
-            launch_arguments={"mast_id": "mast_1350", "hardware_profile": "mock", "rviz": "false", "clamp_joint_states": CLAMP}.items()),
+            launch_arguments={"hardware_profile": "mock", "rviz": "false", "clamp_joint_states": CLAMP}.items()),
         launch_testing.actions.ReadyToTest(),
     ]), {}
 

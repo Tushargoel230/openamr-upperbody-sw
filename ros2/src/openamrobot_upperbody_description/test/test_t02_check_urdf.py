@@ -25,7 +25,7 @@ def test_t02_every_t01_expansion_is_accepted():
     base = "/".join(BASELINE.values())
     assert {r["id"] for r in required} >= {f"{base}/openarm/gazebo", f"{base}/openarm/real"}
     assert {r["args"]["base_plate"] for r in required} == set(UPPERBODY["configuration_axes"]["base_plate"])
-    assert all("mast_id" not in r["args"] for r in rows)
+    assert all("mast_id" not in r["args"] for r in rows)  # decision-allow: CONFIG-IDS negative test: mast_id must be absent or rejected
     rejected = [(r["id"], r["returncode"], r["summary"]) for r in rows if r["returncode"] != 0]
     assert not rejected, rejected
 

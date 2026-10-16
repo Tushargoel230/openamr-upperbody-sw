@@ -158,7 +158,7 @@ def test_c01_the_lift_stop_is_a_calibration_id_and_not_an_input():
     joint position with a calibration, not a build variant. Nothing here may take one, and the id must not move with it."""
     import inspect
     assert "stop" not in str(inspect.signature(pci.config_id)) and "stop" not in str(inspect.signature(pci.config_id_of))
-    assert not [k for k in ev.ROW_KEYS if "lift" in k or "stop" in k or k == "mast_id"]
+    assert not [k for k in ev.ROW_KEYS if "lift" in k or "stop" in k or k == "mast_id"]  # decision-allow: CONFIG-IDS negative test: mast_id must be absent or rejected
     out = _run("column:=dold_v4_350", "base_plate:=bp000", "head_pitch:=hp25", "base_tilt:=bt10", "arm_package:=openarm",
                "hardware_profile:=mock", "lift_stop:=L1350")
     assert out.returncode != 0 and "unrecognised argument" in out.stderr
@@ -172,17 +172,17 @@ def test_c01_the_input_set_is_the_one_the_prompt_names_and_mast_id_is_gone():
     members = {"canonical_urdf": pci.canonical_urdf(urdf), **_row(), "datums_revision": "r", "upstream_pins": dict(sorted(_pins_with().items()))}
     assert sorted(members) == sorted(["canonical_urdf", "column", "base_plate", "head_pitch", "base_tilt", "arm_package",
                                       "hardware_profile", "datums_revision", "upstream_pins"])
-    assert "mast_id" not in members and "openarm_description_commit" not in members
+    assert "mast_id" not in members and "openarm_description_commit" not in members  # decision-allow: CONFIG-IDS negative test: mast_id must be absent or rejected
     payload = json.dumps(members, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     assert pci.config_id(urdf, _row(), "r", _pins_with()) == "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
 def test_c01_an_id_recorded_before_p15_is_not_comparable_with_one_computed_now():
     """The format is unchanged and still valid against C9, so no validator can tell. This test is where the break is stated:
-    the old inputs (mast_id, openarm_description_commit) hash to a different value from the new ones for the same sources."""
+    the old inputs (mast_id, openarm_description_commit) hash to a different value from the new ones for the same sources."""  # decision-allow: CONFIG-IDS negative test: mast_id must be absent or rejected
     import hashlib
     urdf = expand_xml()
-    old = {"canonical_urdf": pci.canonical_urdf(urdf), "mast_id": "mast_1350", "arm_package": "openarm", "hardware_profile": "mock",
+    old = {"canonical_urdf": pci.canonical_urdf(urdf), "mast_id": "mast_1350", "arm_package": "openarm", "hardware_profile": "mock",  # decision-allow: CONFIG-IDS negative test: mast_id must be absent or rejected
            "datums_revision": "r", "openarm_description_commit": COMMIT}
     old_id = "sha256:" + hashlib.sha256(json.dumps(old, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()).hexdigest()
     new_id = pci.config_id(urdf, _row(), "r", _pins_with())
@@ -263,7 +263,7 @@ def test_c01_command_labels_the_short_form_as_a_prefix():
       "hardware_profile:=mock"], "Accepted values"),
     (["column:=dold_v4_350", "base_plate:=bp000", "head_pitch:=hp25", "base_tilt:=bt10", "arm_package:=openarm",
       "hardware_profile:=mock", "bogus:=1"], "unrecognised argument"),
-    (["mast_id:=mast_1350", "base_plate:=bp000", "head_pitch:=hp25", "base_tilt:=bt10", "arm_package:=openarm",
+    (["mast_id:=mast_1350", "base_plate:=bp000", "head_pitch:=hp25", "base_tilt:=bt10", "arm_package:=openarm",  # decision-allow: CONFIG-IDS negative test: mast_id must be absent or rejected
       "hardware_profile:=mock", "column:=dold_v4_350"], "unrecognised argument"),
 ])
 def test_c01_command_fails_loudly_on_bad_input(args, needle):
@@ -360,8 +360,8 @@ def test_c01_records_its_inputs_and_where_the_c9_pattern_came_from():
         "inputs": ["canonical expanded URDF (C14N, no comments, whitespace-stripped)", "column", "base_plate", "head_pitch",
                    "base_tilt", "arm_package", "hardware_profile", "datums.revision",
                    "upstream pins (every entry of config/upstream_pins.yaml, full hashes)"],
-        "not_inputs": ["lift stop L1000/L1175/L1350: a calibration ID", "mast_id: deleted with the mast"],
-        "before_p15": ["canonical expanded URDF", "mast_id", "arm_package", "hardware_profile", "datums.revision",
+        "not_inputs": ["lift stop L1000/L1175/L1350: a calibration ID", "mast_id: deleted with the mast"],  # decision-allow: CONFIG-IDS negative test: mast_id must be absent or rejected
+        "before_p15": ["canonical expanded URDF", "mast_id", "arm_package", "hardware_profile", "datums.revision",  # decision-allow: CONFIG-IDS negative test: mast_id must be absent or rejected
                        "openarm_description commit (full hash)"],
         "meaning_changed": "the format is unchanged and still valid against C9; an id recorded before P15 is not comparable",
         "enable_planar_base": "not a separate input: it changes the expanded URDF",
