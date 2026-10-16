@@ -58,7 +58,7 @@ def validate_mutated(tmp, lift_stop="L1000", samples=20, **defect):
 
 
 # Pairs measured to behave as the mutation says, with nothing ignored (the P10 mutation never worked because it assumed instead of measuring):
-CONSTANT_AND_COLLIDING = ("base_link", "bl_caster_link")                     # no joint between them, collides in the default state, so in every state
+CONSTANT_AND_COLLIDING = ("base_link", "lidar_link")                         # fixed joint, the lidar cylinder sits inside the chassis box, so it collides in every state (base_link/bl_caster_link stopped colliding with platform-sw #71)
 COLLIDES_SOMETIMES = ("arm_profile_link", "openarm_left_ee_base_link")       # arm joints between them; collides in about 2 of 100 random states (9 of 400)
 UNJUSTIFIED = ("openarm_left_link1", "openarm_left_link3")                   # the old sampled `Never` pair: arm joints between, no neighbour, not upstream's
 
