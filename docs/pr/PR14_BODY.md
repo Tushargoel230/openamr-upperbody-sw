@@ -3,7 +3,7 @@
 
 ## Work package
 
-**A6 + A7**: the canonical combined OpenAMRobot 2.0 description (A6: platform base, option B lift column and upper body, both OpenArm v2.0 arms) and its simulation and MoveIt integration (A7: `ros2_control`, Gazebo Harmonic, MoveIt 2, bringup). Issue #10 tracks it. Author: Tushar Goel. Follow-up commits (`49d2368..8e1aba1`) were prepared for Tushar to adopt, at Alex's decision of 16 Oct.
+**A6 + A7**: the canonical combined OpenAMRobot 2.0 description (A6: platform base, option B lift column and upper body, both OpenArm v2.0 arms) and its simulation and MoveIt integration (A7: `ros2_control`, Gazebo Harmonic, MoveIt 2, bringup). Issue #10 tracks it. Author: Tushar Goel. Follow-up commits (`49d2368..8e1aba1`) were prepared for Tushar to adopt, at Alex's decision of 16 Oct. They are merged into `feat/a7-gazebo-moveit` (P19) as a merge commit with Alex's commits unchanged, together with Tushar's P18 commits (W04, evidence, the gz-sim issue draft). M07 is as Alex wrote it.
 
 ## Evidence
 
@@ -34,6 +34,26 @@ timeout 3600 bash src/openamr-upperbody-sw/ros2/src/openamrobot_upperbody_bringu
 The evidence reports are `20261016T185914Z_dev.json` (A6), and `20261016T190708Z_a7.json` and `20261016T191444Z_a7.json` (A7), written by the harness from the clean tree at `703fce9`. The earlier runs are `20261016T150136Z_dev.json` and `20261016T151057Z_a7.json` (`ff8f9ad` on platform-sw `d619012`), and `20261016T140434Z_dev.json`, `20261016T140930Z_dev.json`, `20261016T142206Z_a7.json` and `20261016T143422Z_a7.json` (`8e1aba1` on `15d0eb5`). None of them is committed in this change.
 
 ## Tests
+
+### This step: the merge head, platform-sw pinned at `d619012` (#70)
+
+Tested code `538a32a` (the merge `ce76607` plus the RViz evidence; the pushed head adds only the reports and this file). platform-sw is pinned at `d619012d15ee8fbbd6a52e3c945ade9bf4752644`, the merge of #70, whose `imu_link` is `(0.0544, 0, 0.1210)` yaw -90 degrees. Reports: `evidence/reports/README.md`, section P19.
+
+| Run | Result |
+|---|---|
+| `verify_a6.sh`, three runs | **25 PASS, 3 WARN (E01, W02, V01), 0 FAIL, 0 NOT_RUN**, each |
+| `run_a7_regression.sh`, three runs | **12 PASS, 2 WARN (M07, V01), 2 FAIL (M03, AUX), 0 NOT_RUN**, each |
+
+**A7 is not green on `d619012`, for the reason already given for it below:** #70's chassis box and caster-wheel spheres overlap, so the four `base_link` / caster-wheel pairs collide in every state, the derivation finds 91 pairs against the 95 of the contract (M03), and the two ACM regeneration tests fail (AUX). #71 (now merged on platform-sw `main` as `dfd44a5`) removes the overlap. **This branch has not been pushed on that basis.**
+
+Supplementary, not part of the pin: the same protocol on `dfd44a5` (#70 plus #71). A6 three times 25 PASS / 3 WARN / 0 FAIL. A7: run 1 **14 PASS / 2 WARN / 0 FAIL**; runs 2 and 3 **12 PASS / 2 WARN / 2 FAIL (G02, AUX)**: G02's physics passed, and the process guard failed because `parameter_bridge` (`base_joint_states_bridge`) exited with -11 (SIGSEGV) while the launch was stopping. The guard allows only SIGABRT for that process; **nothing was added to the allow list**, the cause is not investigated, and it did not occur in the three runs on `d619012` or in P18's three.
+
+- **M02, both pins, six runs: 0 excursions in all six; largest overshoot 1.59 / 1.66 / 2.44e-6 rad (`d619012`) and 2.23 / 1.71 / 3.23e-6 rad (`dfd44a5`)** against the 1e-5 epsilon.
+- **M07 is WARN in all six runs** (the four upstream-limit joints; no joint missing from the coverage).
+- **W04: no force-stop in 24 launches** (6 A7 runs of G01, G02, M02 and M07), against 2 in about 61 before. At that rate about 0.8 were expected, so this does not show that the spawner-timeout change helped.
+- RViz2 screenshots at L1000 / L1175 / L1350 x bp000 / bp050: `evidence/renders/rviz_*.png` (real RViz on the real display; `evidence/renders/rviz/README.md`). V01 stays WARN: no person has looked at the running simulator.
+
+### Earlier results (Alex's, on `703fce9` and before)
 
 Summary:
 - **On `703fce9` with platform-sw `8531089` (#71, on main with #70):**
@@ -154,7 +174,7 @@ The 19 skips are listed in #16, and each reason names it. `config_id`: 14 of the
 - No human visual review in RViz or Gazebo: V01 is WARN; L1000/L1175/L1350 × bp000/bp050 are still to be looked at.
 - Not run on a hosted CI runner or on a machine with a GPU. All runs are from one VM.
 - The gz-sim teardown hang (the server ignores the stop request) is not fixed; see "Findings that are not resolved" below. The detached stop helper forces such a server; since P18 that is a **WARN (W04)**, not a FAIL, and a server still running after the force-stop is still the launch test's FAIL.
-- A7 on platform-sw `8531089` is not green: M03 and AUX fail on the outdated negative-test example pair (see Tests; one-line fix proposed). On `d619012` it also failed on #70's caster overlap and on the M01 race, both fixed since. #71 is not merged.
+- A7 on platform-sw `8531089` is not green: M03 and AUX fail on the outdated negative-test example pair (see Tests; one-line fix proposed). On `d619012` it also failed on #70's caster overlap and on the M01 race, both fixed since. #71 is not merged. (P19: #71 has since merged on platform-sw `main` as `dfd44a5`; this step's results on both pins are under "Tests".)
 - On `d619012`, `colcon test` of the five packages was not run as a separate step; its counts come from the A6 and A7 runs. On `8531089` it was run.
 - The #70 sensor values are checked against #70's own table, not against the CAD.
 - `license/cla` on PR #14 is still pending.
@@ -299,6 +319,7 @@ No safety path is touched. No file matches the `safety_paths` globs of `openAMRo
 
 - **Tushar's commits** (`f57e54c..49d2368`): developed with Claude Code (Anthropic), as Tushar states below ("AI assistance"). Each commit carries `Assisted-by: Claude Code`.
 - **Follow-up commits** (`49d2368..703fce9`) and this file: produced by Claude Code at Alex Reznichenko's request, and signed off by him (DCO). That covers the verification runs, the code, test and configuration changes, the regenerated collision matrix, the `decision-allow` markers, the SPDX headers, issue #16 and this description.
+- **P18 and P19 commits** (`bb39c83`, `9406af6`, the merge and the commits after it): produced by Claude Code for Tushar Goel and signed off by him; each carries `Assisted-by: Claude Code`.
 - No upstream file is modified.
 
 ## Follow-up commits on this branch

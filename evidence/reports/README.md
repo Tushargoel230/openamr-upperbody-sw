@@ -141,7 +141,7 @@ in 4 launches of those 18 it did not (two server segfaults in libgz-sim8 during 
 
 ## P18
 
-M07 was withdrawn and W03 and W04 added (`CHANGELOG.md`, P18). The P17 reports above are **unchanged, byte for byte**; this is how to read them now.
+**(P19: M07 was restored, W03 is evidence only; this section describes the state of `bb39c83`.)** M07 was withdrawn and W03 and W04 added (`CHANGELOG.md`, P18). The P17 reports above are **unchanged, byte for byte**; this is how to read them now.
 
 - **Every P17 A7 report carries an M07 FAIL (and AUX with it) that no longer exists as a check.** It was withdrawn because its premise was refuted. They are
   kept as recorded, not rewritten.
@@ -167,3 +167,47 @@ Passes on `bb39c83` (the code of this step; the pushed head adds these reports a
   about 61 launches (36 of the orphan count, 12 + 12 here, a P17 M07 run, and the 12 of the P17 passes).
 - **M02's two numbers**: 0 excursions beyond epsilon in all three runs; largest overshoot 1.42e-06, 2.37e-06 and 1.76e-06 rad (epsilon 1e-5: margins about
   7.1x, 4.2x and 5.7x). Activations and episodes are `diagnostic_only` and gate nothing.
+
+## P19
+
+Alex Reznichenko's `followups/a6-a7-49d2368` merged into this branch (merge `ce76607`; his 14 commits are unchanged); M07 restored as he wrote it (WARN on the
+four upstream-limit joints); W03 is evidence files only; W04 stays and now reads M07's launch as well. Every report below is on the tested code `538a32a`
+(the merge head plus the RViz evidence; the pushed head adds only these reports and documents), clean tree. `WARN` is not `PASS`.
+
+**platform-sw pinned at `d619012` (#70), as instructed.** Its `imu_link` is `(0.0544, 0, 0.1210)`, yaw -90 degrees.
+
+| file | what | platform-sw | result |
+|---|---|---|---|
+| `20261018T191032Z_dev.json`, `...T191402Z_dev.json`, `...T191732Z_dev.json` | A6 suite, runs 1 to 3 | `d619012` | 25 PASS, 3 WARN (E01, W02, V01), 0 FAIL, 0 NOT_RUN, each |
+| `20261018T192527Z_a7.json`, `...T193323Z_a7.json`, `...T194118Z_a7.json` | A7, runs 1 to 3 | `d619012` | **12 PASS, 2 WARN (M07, V01), 2 FAIL (M03, AUX), 0 NOT_RUN, each** |
+
+**Why A7 is red on `d619012`, three times alike.** #70's chassis box and the four caster-wheel spheres overlap by 2.4 mm, so `base_link` collides with each
+`{fl,fr,bl,br}_wheel_link` in every state: the derivation finds 91 pairs against the 95 in the contract (M03: 3 of 6 tests fail), and the two ACM
+regeneration tests fail (AUX). It is the cause `docs/pr/PR14_BODY.md` records for `d619012`, and it is not the merge. The committed matrix is correct for the
+base it was derived on; nothing was regenerated or disabled.
+
+**Supplementary, not asked for: the same protocol on `dfd44a5`** (platform-sw `main` after #71, the chassis box clears the caster wheels by 2.6 mm; it contains #70):
+
+| file | what | platform-sw | result |
+|---|---|---|---|
+| `20261018T194538Z_dev.json`, `...T194915Z_dev.json`, `...T195250Z_dev.json` | A6 suite, runs 1 to 3 | `dfd44a5` | 25 PASS, 3 WARN (E01, W02, V01), 0 FAIL, 0 NOT_RUN, each |
+| `20261018T200040Z_a7.json` | A7, run 1 | `dfd44a5` | **14 PASS, 2 WARN (M07, V01), 0 FAIL, 0 NOT_RUN** |
+| `20261018T200829Z_a7.json`, `...T201608Z_a7.json` | A7, runs 2 and 3: **FAILED** | `dfd44a5` | 12 PASS, 2 WARN (M07, V01), **2 FAIL (G02, AUX)**, 0 NOT_RUN, each |
+
+G02's physics passed in both failed runs (both grippers reached their goal and the mimic joint followed); its server stopped on the first step in 1.4 s and
+nothing survived. What failed is the process guard: `parameter_bridge` (`base_joint_states_bridge`) **died with exit code -11 (SIGSEGV) while the launch was
+stopping** (`Proc parameter_bridge-4 exited with code -11`). The guard allows only SIGABRT (-6) for that process, which is a known once-in-a-while
+shutdown exit; a SIGSEGV is not allowed and **nothing was added to the allow list**. It did not occur in the 3 A7 runs on `d619012`, the 3 of P18, or run 1 on
+`dfd44a5`: 2 of 6 runs of this step, both on `dfd44a5`, and the one difference between the two platform-sw pins is the chassis collision box, which cannot reach a
+bridge. The cause was not investigated; I do not know that it is new, rare or related to the gz-sim hang. One bridge also exited -6 (allowed) in run 2.
+
+**W04 in this step: 0 force-stops in 24 launches** (6 A7 runs x G01, G02, M02, M07; all `stopped` on the first step, 1.3 to 1.5 s). The prior rate is 2 in about
+61. At that rate 24 launches expect about 0.8; zero is the likelier outcome (about 45%), so **this does not show that the spawner-timeout change (Alex's `1637743`)
+helped**, only that no force-stop was seen. The survivor check is unchanged and found nothing in any run. No leftover `gz sim` after any run.
+
+**M02's two numbers, 0 excursions in all six runs.** Largest overshoot, `d619012`: 1.59e-6, 1.66e-6, 2.44e-6 rad; `dfd44a5`: 2.23e-6, 1.71e-6, 3.23e-6 rad; epsilon 1e-5
+(not widened).
+
+**M07 is WARN in all six runs** on the four joints `openarm_{left,right}_finger_joint1` and `openarm_{left,right}_joint4`, with all expected joints covered.
+
+**RViz screenshots**: `../renders/rviz_L1000_bp000.png` ... `../renders/rviz_L1350_bp050.png`, real RViz2 on the WSLg display (`../renders/rviz/README.md`).
