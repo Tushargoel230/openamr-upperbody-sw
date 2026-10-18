@@ -211,3 +211,23 @@ helped**, only that no force-stop was seen. The survivor check is unchanged and 
 **M07 is WARN in all six runs** on the four joints `openarm_{left,right}_finger_joint1` and `openarm_{left,right}_joint4`, with all expected joints covered.
 
 **RViz screenshots**: `../renders/rviz_L1000_bp000.png` ... `../renders/rviz_L1350_bp050.png`, real RViz2 on the WSLg display (`../renders/rviz/README.md`).
+
+## P20
+
+**platform-sw pinned at `dfd44a5`** (#70 + #71), by the architecture chat's decision: `d619012` fails M03 deterministically for a defect (#70's chassis box overlaps the
+casters) that #71 fixes. Tested code `24c66f5` (the pushed head adds only these reports and documents), clean tree.
+
+| file | what | platform-sw | result |
+|---|---|---|---|
+| `20261018T213907Z_dev.json`, `...T214244Z_dev.json`, `...T214621Z_dev.json` | A6 suite, runs 1 to 3 | `dfd44a5` | 25 PASS, 3 WARN (E01, W02, V01), 0 FAIL, 0 NOT_RUN, each |
+| `20261018T215411Z_a7.json`, `...T220156Z_a7.json`, `...T220947Z_a7.json` | A7, runs 1 to 3 | `dfd44a5` | **14 PASS, 2 WARN (M07, V01), 0 FAIL, 0 NOT_RUN, each** |
+
+- **Which A6 WARN cleared (24/4 to 25/3): T08.** In P18's report (`20261018T172411Z_dev.json`, platform-sw `174731c`) T08 listed six platform-sw links whose collision mesh is their visual STL
+  (`base_link`, the four caster links, `lidar_link`); in every report since P19 it lists none. platform-sw #70 (`d619012`, Cuma Ali Karaaslan) replaced those collision meshes with boxes and
+  cylinders. Nothing in this repository changed T08. It is the only check whose result differs between the two A6 reports.
+- **The `parameter_bridge` SIGSEGV did not occur in these three runs.** Over the 9 A7 runs on `dfd44a5` it occurred in 2 (P19), both G02, both `base_joint_states_bridge`. One bridge exited -6 (allowed) in
+  run 1 here. `move_group` exit -11 (allowed, at every stop) appears 7 times in every run, as before. Nothing was added to the allow list.
+- **W04: no force-stop in the 12 launches of these runs** (all `stopped` on the first step, 1.33 to 1.43 s); 36 of 36 launches of P19 and P20 together, 1.32 to 1.53 s.
+  P17's 36 of 36 before the spawner change were 1.32 to 1.44 s: the timing is the stop helper's and does not distinguish the spawner change.
+- **M02**: 0 excursions in all three; largest overshoot 1.61e-6, 1.33e-6, 1.71e-6 rad against 1e-5 (not widened). **M07** WARN on the four joints in all three.
+

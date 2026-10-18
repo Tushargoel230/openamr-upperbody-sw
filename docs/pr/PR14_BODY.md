@@ -35,23 +35,34 @@ The evidence reports are `20261016T185914Z_dev.json` (A6), and `20261016T190708Z
 
 ## Tests
 
-### This step: the merge head, platform-sw pinned at `d619012` (#70)
+### This step: the merge head, platform-sw pinned at `dfd44a5` (#70 and #71)
 
-Tested code `538a32a` (the merge `ce76607` plus the RViz evidence; the pushed head adds only the reports and this file). platform-sw is pinned at `d619012d15ee8fbbd6a52e3c945ade9bf4752644`, the merge of #70, whose `imu_link` is `(0.0544, 0, 0.1210)` yaw -90 degrees. Reports: `evidence/reports/README.md`, section P19.
+**Pinned base: platform-sw `dfd44a55457bf5c2d4f81966b862a0865fd52aca`** (#71 on top of #70 `d619012`). Its `imu_link` is `(0.0544, 0, 0.1210)`, yaw -90 degrees (set by #70). Reports and per-run detail: `evidence/reports/README.md`, sections P19 and P20.
 
-| Run | Result |
-|---|---|
-| `verify_a6.sh`, three runs | **25 PASS, 3 WARN (E01, W02, V01), 0 FAIL, 0 NOT_RUN**, each |
-| `run_a7_regression.sh`, three runs | **12 PASS, 2 WARN (M07, V01), 2 FAIL (M03, AUX), 0 NOT_RUN**, each |
+| base | tested code | A6 (`verify_a6.sh`), 3 runs | A7 (`run_a7_regression.sh`) |
+|---|---|---|---|
+| `d619012` (#70 only) | `538a32a` | 25 PASS / 3 WARN / 0 FAIL, each | **12 PASS / 2 WARN / 2 FAIL (M03, AUX), 3 of 3 runs** |
+| `dfd44a5` (#70 + #71) | `538a32a` | 25 / 3 / 0, each | 14 / 2 / 0, then **12 / 2 / 2 (G02, AUX) twice** |
+| `dfd44a5` (the pin) | `24c66f5` | 25 / 3 / 0, each | **14 / 2 / 0, 3 of 3 runs** |
 
-**A7 is not green on `d619012`, for the reason already given for it below:** #70's chassis box and caster-wheel spheres overlap, so the four `base_link` / caster-wheel pairs collide in every state, the derivation finds 91 pairs against the 95 of the contract (M03), and the two ACM regeneration tests fail (AUX). #71 (now merged on platform-sw `main` as `dfd44a5`) removes the overlap. **This branch has not been pushed on that basis.**
+WARNs are E01, W02, V01 (A6) and M07, V01 (A7). `WARN` is not `PASS`.
 
-Supplementary, not part of the pin: the same protocol on `dfd44a5` (#70 plus #71). A6 three times 25 PASS / 3 WARN / 0 FAIL. A7: run 1 **14 PASS / 2 WARN / 0 FAIL**; runs 2 and 3 **12 PASS / 2 WARN / 2 FAIL (G02, AUX)**: G02's physics passed, and the process guard failed because `parameter_bridge` (`base_joint_states_bridge`) exited with -11 (SIGSEGV) while the launch was stopping. The guard allows only SIGABRT for that process; **nothing was added to the allow list**, the cause is not investigated, and it did not occur in the three runs on `d619012` or in P18's three.
+**Why two pins.** On `d619012` M03 FAILs in 3 of 3 runs and AUX with it: #70's chassis box (bottom 0.050 m) overlaps the four caster-wheel spheres (top 0.0524 m) by 2.4 mm, so `base_link` collides with each `{fl,fr,bl,br}_wheel_link` in every state, the derivation finds 91 of the 95 pairs of the contract, and the two ACM regeneration tests fail. platform-sw's own commit for #71 records the same overlap, the same 2.4 mm and the M03 failure. On `dfd44a5` #71 raises the box bottom to 0.055 m (2.6 mm clear) and M03 passes in all six runs. The matrix was neither regenerated nor changed for either base. The pin is `dfd44a5` by the architecture chat's decision, because the `d619012` failure is a defect already fixed upstream of it.
 
-- **M02, both pins, six runs: 0 excursions in all six; largest overshoot 1.59 / 1.66 / 2.44e-6 rad (`d619012`) and 2.23 / 1.71 / 3.23e-6 rad (`dfd44a5`)** against the 1e-5 epsilon.
-- **M07 is WARN in all six runs** (the four upstream-limit joints; no joint missing from the coverage).
-- **W04: no force-stop in 24 launches** (6 A7 runs of G01, G02, M02 and M07), against 2 in about 61 before. At that rate about 0.8 were expected, so this does not show that the spawner-timeout change helped.
-- RViz2 screenshots at L1000 / L1175 / L1350 x bp000 / bp050: `evidence/renders/rviz_*.png` (real RViz on the real display; `evidence/renders/rviz/README.md`). V01 stays WARN: no person has looked at the running simulator.
+**A6: 24 PASS / 4 WARN became 25 / 3 because T08 cleared, and the cause is in platform-sw, not in this repository.** T08 ("collision mesh is the same file as the visual mesh") WARNed on six platform-sw links (`base_link`, the four caster links and `lidar_link`, each reusing its visual STL). platform-sw #70 (`d619012`) replaced those collision meshes with boxes and cylinders ("chassis, castors and LiDAR are boxes/cylinders instead of STL meshes"), so T08 finds none. No commit of this branch changed T08 or its inputs. (Alex's section below already says T08 is PASS after #70.)
+
+**The `parameter_bridge` SIGSEGV at shutdown: A7 on the pinned base is not reliably green.** In 2 of the 6 A7 runs on `dfd44a5` (runs 2 and 3 of the P19 set), check G02 FAILed, and AUX with it, because a `parameter_bridge` process died with exit code -11 while the launch was stopping. G02's physics had passed and its server stopped in 1.4 s. Facts:
+- It is the stock `ros_gz_bridge` executable crashing in its own teardown. The instance that crashed both times is `base_joint_states_bridge`, the bridge this branch's `sim.launch.py` adds for the base's joint states (not platform-sw's `platform_bridge`), in the Bullet-Featherstone gripper launch, within 0.1 s of the SIGINT that stops the launch.
+- 2 of 24 launches on `dfd44a5` and 2 of 48 in all A7 runs since P18; none on `d619012` or in P18; the three runs of this step on the same pin and code were clean. I did not investigate the cause and cannot say it is unrelated to this branch's launch (the P17 stop helper, the spawner gating): it is not attributable to a change here, but that is an absence of evidence, not a test.
+- **It is not allow-listed.** The process guard allows SIGABRT (-6) for `parameter_bridge`, a known once-in-a-while heap-corruption abort, and does not allow SIGSEGV; nothing was widened. The test fails when it happens, which is the intended behaviour.
+- An earlier figure of about 1 in 7 launches for this crash in P16 was given to me; the repository has no record of it (the bridge exits recorded in P16 are SIGABRT), so it is not used here.
+- Drafted, **not filed** (no credential): `docs/issues/ros_gz-bridge_teardown_segfault.md` for gazebosim/ros_gz. Issue URL: `<TO BE FILLED IN WHEN FILED>`.
+
+**Alex's spawner change (`1637743`), and what the timing does and does not show.** Across the 36 simulator launches of this step's nine A7 runs (G01, G02, M02, M07 in each): no force-stop (W04 PASS in all nine), and **all 36 stopped on the first step, in 1.32 to 1.53 s**, with no SIGINT-to-SIGTERM escalation (the force-stop path took about 9 s when it fired). That is the timing to cite, and what it shows must be stated: **the same stop helper stopped 36 of 36 launches in 1.32 to 1.44 s before the spawner change** (P17), so these timings are the stop helper's, not an effect of the spawner change. Zero force-stops in 36 launches is also uninformative at the prior rate (2 in about 61: about 1.2 expected). What does bear on the spawner change: `test_sim_launch_spawners.py` fails 3 of 4 on the old `sim.launch.py`; and on `49d2368` the old launch left `joint_state_broadcaster` inactive in two A7 runs (G01 NOT_RUN, G02 and M02 FAIL), where none of the 36 launches of this step failed to start its controllers.
+
+**M02 and M07, nine A7 runs.** M02: 0 excursions in all nine; largest overshoot 1.33e-6 to 3.23e-6 rad against the 1e-5 epsilon (not widened). M07 is WARN in all nine (the four upstream-limit joints, no joint missing from the coverage).
+
+**RViz.** Six real RViz2 screenshots at L1000 / L1175 / L1350 x bp000 / bp050: `evidence/renders/rviz_*.png` (`evidence/renders/rviz/README.md`). **The two lift-column boxes render solid red.** The URDF gives them no material and I did not investigate why they are red (I did not check whether it is RViz's default for a visual without a material, or something else). V01 stays WARN: no person has looked at the running simulator.
 
 ### Earlier results (Alex's, on `703fce9` and before)
 
@@ -188,9 +199,9 @@ Stated as they are. None of the three gates anything.
 
 - **The rise of the M02 clamp activation count, from about 200 to about 1800 per run, is unexplained.** It gates nothing. The count scatters 646 to 1054 inside one unchanged configuration (1795 / 957 / 1832 on three runs of a tests-only diff), so it is retired as a criterion and reported as `diagnostic_only`. Why the new body's right finger rests within 1e-5 rad of its open limit while the left one rests 2e-4 to 5e-4 inside is not explained (cause unknown; the effort at rest was measured in both trees, `evidence/m02_bisect/RESULTS.md`). The M02 bisect is closed.
 - **The rest-position hypothesis was tested and refuted.** The hypothesis was that the lift body puts the right finger on its open limit where the old mast body (`7daa2ab`) did not. The old body rests within 2.5e-5 rad of the same four limits (both `joint4`, both `finger_joint1`), and the finger effort at rest has the same sign in both bodies: a gripper's `open` and the arm's `home` are limits in upstream's joint definitions. The named poses that sit on a limit are listed for both bodies in `evidence/w03/` as evidence files; W03 is not a registered check. This does not settle M07: M07 stays as Alex decided it (WARN on those four joints), and removing it is his call.
-- **The gz-sim issue is drafted and UNFILED.** A `gz sim` server that is asked to stop sometimes never begins its teardown and survives SIGINT, the stop request and SIGTERM (a segfault in a libgz-sim8 thread, and a hang). The draft, with the counts and a reproduction, is `docs/issues/gz-sim_server_teardown_segfault_and_hang.md`. **It has not been filed: the workspace has no GitHub credential. Issue URL: `<TO BE FILLED IN WHEN FILED>`.** A bare server (empty world, no ROS) did not reproduce it: 30 of 30 clean in each of two stop modes.
+- **The gz-sim issue is drafted and UNFILED.** A `gz sim` server that is asked to stop sometimes never begins its teardown and survives SIGINT, the stop request and SIGTERM (a segfault in a libgz-sim8 thread, and a hang). The draft, with the counts and a reproduction, is `docs/issues/gz-sim_server_teardown_segfault_and_hang.md`. **It has not been filed: the workspace has no GitHub credential. Issue URL (gazebosim/gz-sim): `<TO BE FILLED IN WHEN FILED>`.** A second draft, for the `parameter_bridge` SIGSEGV at shutdown (gazebosim/ros_gz), is `docs/issues/ros_gz-bridge_teardown_segfault.md`, **also not filed**. Issue URL (gazebosim/ros_gz): `<TO BE FILLED IN WHEN FILED>`. A bare server (empty world, no ROS) did not reproduce it: 30 of 30 clean in each of two stop modes.
 
-**What M02 gates on, and what it read.** Two numbers: readings beyond the epsilon (must be 0) and the largest overshoot magnitude (must be below the epsilon, 1e-5 rad). In the three A7 runs of P18 (`bb39c83`): **0 excursions in all three; largest overshoot 1.42e-6 / 2.37e-6 / 1.76e-6 rad**, against the 1e-5 epsilon. The epsilon has not been widened. This step's three runs are under "Tests".
+**What M02 gates on, and what it read.** Two numbers: readings beyond the epsilon (must be 0) and the largest overshoot magnitude (must be below the epsilon, 1e-5 rad). In the three A7 runs of P18 (`bb39c83`): **0 excursions in all three; largest overshoot 1.42e-6 / 2.37e-6 / 1.76e-6 rad**, against the 1e-5 epsilon. The epsilon has not been widened. This step's nine runs are under "Tests".
 
 ## Dependencies
 

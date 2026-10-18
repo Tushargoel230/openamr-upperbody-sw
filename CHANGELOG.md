@@ -41,6 +41,8 @@ All notable changes to this repository. Evidence for the description is static a
 - **W04** (A7 report, WARN): a `gz sim` server that the launch's stop helper had to force. It was a FAIL in P17. It reads the sidecars of G01, G02, M02
   and M07. **The survivor check is unchanged and runs after the force-stop**: any `gz sim` of the run still alive when it looks (it waits up to 10 s,
   the helper needs at most about 9 s) is a survivor and a FAIL, including one that survived its own force-stop; a test pins both.
+- **platform-sw is pinned at `dfd44a5`** (#70 + #71; P20). A second upstream issue is drafted, `docs/issues/ros_gz-bridge_teardown_segfault.md` (`parameter_bridge` SIGSEGV at
+  shutdown, 2 of 24 launches on that pin); **not filed**. The process guard still does not allow SIGSEGV for `parameter_bridge`.
 - **RViz screenshots** at the three lift stops x two base plates, from real RViz2 (`evidence/renders/rviz_*.png`, `evidence/renders/rviz/` for the launch, config and window grab that made them).
 - `docs/pr/PR1_BODY.md` is deleted; `docs/pr/PR14_BODY.md` is the body of #14 and carries the open findings.
 - The gz-sim issue (segfault in a libgz-sim8 thread during teardown; the hang that ignores SIGTERM) is drafted in `docs/issues/` with the counts and a
