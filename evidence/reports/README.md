@@ -138,3 +138,32 @@ G02 FAILED once (`gz_link_poses` parsed two JSON messages as one; fixed in `aa0a
 reparented server "gone" (d1 is that case: the driver found the server alive 40 s later); `timing_e.jsonl` and `timing_f.jsonl` twelve launches
 each with SIGINT sent to the server, all stopped in 1.32 to 1.54 s. The service request in `c` and `d` stopped in 1.64 to 1.79 s when it worked;
 in 4 launches of those 18 it did not (two server segfaults in libgz-sim8 during teardown, two servers that never began it).
+
+## P18
+
+M07 was withdrawn and W03 and W04 added (`CHANGELOG.md`, P18). The P17 reports above are **unchanged, byte for byte**; this is how to read them now.
+
+- **Every P17 A7 report carries an M07 FAIL (and AUX with it) that no longer exists as a check.** It was withdrawn because its premise was refuted. They are
+  kept as recorded, not rewritten.
+- **`20261015T120152Z_a7.json`, the P17 run that failed G01.** Recorded as FAIL because the stop helper's force-stop was then a FAIL. Under the P18 rule it
+  is a **W04 WARN**: G01's server ignored SIGINT, the service request and SIGTERM, was ended by SIGKILL at 9.2 s, and nothing was left running. Its other
+  checks are as recorded; with M07 gone it would read 13 PASS (G01 would be PASS) / V01 and W04 WARN / 0 FAIL. That reading is derived here, not written
+  into the file: the sidecars it came from no longer exist and a rebuilt report would be a different document.
+
+Passes on `bb39c83` (the code of this step; the pushed head adds these reports and documents only):
+
+| file | what | commit | result |
+|---|---|---|---|
+| `20261018T172411Z_dev.json`, `...T172646Z_dev.json`, `...T172922Z_dev.json` | A6 suite, runs 1 to 3 | `bb39c83` | 24 PASS, 4 WARN (T08, E01, W02, V01), 0 FAIL, 0 NOT_RUN, each; the `config_id`s are those of before P17 again |
+| `20261018T173643Z_a7.json` | A7, run 1 | `bb39c83` | 13 PASS, 3 WARN (W03, W04, V01), 0 FAIL, 0 NOT_RUN; AUX clear |
+| `20261018T174401Z_a7.json`, `...T175119Z_a7.json` | A7, runs 2 and 3 | `bb39c83` | 14 PASS, 2 WARN (W03, V01), 0 FAIL, 0 NOT_RUN, each; AUX clear |
+
+- **W03** lists `openarm_left_joint4`, `openarm_right_joint4`, `openarm_left_finger_joint1` and `openarm_right_finger_joint1` in all three runs (eight
+  poses: `home` and `park` for the joint4s, `open` and `closed` for the fingers), and the same four, eight poses, for the old mast body `7daa2ab`
+  (`../w03/old_body_7daa2ab.json` and `new_body_HEAD.json`, byte-identical reports).
+- **W04 WARN in run 1: the force-stop path fired live for the second time.** M02's server accepted nothing and went nowhere: SIGINT, the service request
+  (after 3 s) and SIGTERM did not end it; SIGKILL at 9.02 s did. The M02 run PASSED its own checks and its survivor check found nothing running. G01 and G02
+  of the same run stopped in 1.31 and 1.32 s. In runs 2 and 3 all three launches stopped on the first step. Since the helper existed: 2 force-stops in
+  about 61 launches (36 of the orphan count, 12 + 12 here, a P17 M07 run, and the 12 of the P17 passes).
+- **M02's two numbers**: 0 excursions beyond epsilon in all three runs; largest overshoot 1.42e-06, 2.37e-06 and 1.76e-06 rad (epsilon 1e-5: margins about
+  7.1x, 4.2x and 5.7x). Activations and episodes are `diagnostic_only` and gate nothing.
