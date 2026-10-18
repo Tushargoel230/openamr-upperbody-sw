@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """L01: mock.launch.py brings all five controllers to `active`, and a trajectory on left_arm_controller moves the left arm.
 
 Runs headless: robot_state_publisher, ros2_control_node (mock_components/GenericSystem) and the spawners. Within 30 s of

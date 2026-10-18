@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Plant deliberately failing tests ("canaries") in the packages that contribute checks, so that the evidence harness can be shown to report them.
 
     harness_canary.py inject  [--modes assert,collect,timeout,signal,nostart] [--kinds pytest,launch] PACKAGE_DIR...

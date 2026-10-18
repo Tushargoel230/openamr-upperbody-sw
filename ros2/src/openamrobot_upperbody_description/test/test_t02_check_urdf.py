@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T02: `check_urdf` exits 0 for every T01 expansion (the `openarm` gazebo and real expansions at the baseline
 included), plus the planar-flag expansions (extra, labelled). The matrix and the runner are scripts/check_urdf_matrix.py,
 which verify_a6.sh runs too; here the same runner is checked, and shown to be able to fail.
@@ -25,7 +26,7 @@ def test_t02_every_t01_expansion_is_accepted():
     base = "/".join(BASELINE.values())
     assert {r["id"] for r in required} >= {f"{base}/openarm/gazebo", f"{base}/openarm/real"}
     assert {r["args"]["base_plate"] for r in required} == set(UPPERBODY["configuration_axes"]["base_plate"])
-    assert all("mast_id" not in r["args"] for r in rows)
+    assert all("mast_id" not in r["args"] for r in rows)  # decision-allow: CONFIG-IDS negative test: mast_id must be absent or rejected
     rejected = [(r["id"], r["returncode"], r["summary"]) for r in rows if r["returncode"] != 0]
     assert not rejected, rejected
 

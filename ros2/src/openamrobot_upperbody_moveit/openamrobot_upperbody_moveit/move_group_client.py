@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """A small client for move_group's `/move_action` (moveit_msgs/action/MoveGroup): plan to a joint goal, optionally execute it, and read the
 joint states back. What M01, M02 and M04 use, so each of them goes through the real move_group node and, for execution, through MoveIt's
 trajectory execution manager, the moveit_simple_controller_manager and the controllers' own action servers: the whole chain a user's

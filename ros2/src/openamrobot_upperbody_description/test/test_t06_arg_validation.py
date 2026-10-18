@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T06: a bad value for any arg fails expansion with a message listing the accepted values."""
 import pytest
 import xacro
@@ -37,8 +38,8 @@ def test_t06_missing_datums_file_errors_naming_the_path():
 
 
 def test_t06_the_retired_mast_id_argument_is_not_declared_and_changes_nothing():
-    assert 'name="mast_id"' not in read_text(COMBINED)
-    assert expand_xml(mast_id="mast_1450") == expand_xml()
+    assert 'name="mast_id"' not in read_text(COMBINED)  # decision-allow: CONFIG-IDS negative test: mast_id must be absent or rejected
+    assert expand_xml(mast_id="mast_1450") == expand_xml()  # decision-allow: CONFIG-IDS negative test: mast_id must be absent or rejected
 
 
 def test_t06_a_null_datum_that_is_read_stops_the_expansion_and_names_it(tmp_path):

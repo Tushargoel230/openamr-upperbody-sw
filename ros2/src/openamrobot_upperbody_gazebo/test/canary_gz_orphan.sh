@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
 # Canary for G02's "no gz server of this run survives the teardown" (P16 task 2): proves the check FAILS on an orphaned simulator.
 #
 # It runs the real G02 launch test against a COPY of the installed package whose sim.launch.py has the stop handler (`stop_server`, the

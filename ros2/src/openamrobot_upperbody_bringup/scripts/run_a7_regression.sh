@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
 # A7 regression, headless: G01, G02 (Gazebo), M01 (mock, every lift stop), M02 (Gazebo, baseline, lift at L1000), M03 (ACM sampling), M04 (refused collision goal),
 # the M05 gripper-sign and M06 limit-sensitivity checks this step proposes, and the static tests of the SRDF and the MoveIt configuration.
 # Writes <workspace>/evidence/<UTC timestamp>_a7.json (openamr.evidence.v1, profile a7, evidence_class simulation).

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """M06 (adopted 7 Oct, VERIFICATION.md): the named-pose plans NEED some acceleration limit and do not DEPEND on the values we invented (ADR-009).
 
 Runs scripts/limits_sensitivity.py: all twelve named-pose plans (both arms, both grippers) under the configured limits scaled by 1, 0.1, 0.01

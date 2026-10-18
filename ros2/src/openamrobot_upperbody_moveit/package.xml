@@ -37,7 +37,6 @@
   <test_depend>moveit_msgs</test_depend>
   <test_depend>python3-numpy</test_depend>
   <test_depend>joint_state_publisher</test_depend>
-  <test_depend>moveit_msgs</test_depend>
   <test_depend>shape_msgs</test_depend>
   <test_depend>geometry_msgs</test_depend>
   <test_depend>std_msgs</test_depend>

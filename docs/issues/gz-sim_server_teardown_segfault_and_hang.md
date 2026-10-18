@@ -1,5 +1,5 @@
 <!-- Draft of the issue for https://github.com/gazebosim/gz-sim/issues/new . NOT FILED: the workspace has no GitHub credential (no gh, no token),
-     so it is written to be pasted by someone who has one. When it exists, put its URL in docs/pr/PR1_BODY.md ("Known gaps") and here. -->
+     so it is written to be pasted by someone who has one. When it exists, put its URL in docs/pr/PR14_BODY.md ("Known gaps") and here. -->
 
 # Server stop: segfault in a libgz-sim8 thread during teardown, and a hang that ignores SIGTERM (gz-sim 8.15.0, gz_ros2_control, Bullet-Featherstone / DART)
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The detector of a simulator that outlives its launch (launch_guard.gz_server_shutdown_report), on decoy processes. No ROS graph, no Gazebo.
 
 P16 task 2. The decoys are `sleep` processes whose argv[0] is `gz sim -r -s ...`, which is what the forked server's command line looks like

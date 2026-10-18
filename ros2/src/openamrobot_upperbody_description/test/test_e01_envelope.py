@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """E01: assembled envelope (height, width, depth) against the P-00 envelope datums. WARN only, never PASS.
 
 The three extents of the robot at each calibration stop of the lift (L1000, L1175, L1350: lift_joint at 0, 0.175, 0.350 m, every

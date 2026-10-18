@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Where evidence goes. S4 defaulted to the system temp directory, and evidence a reviewer or CI cannot find is not
 evidence. The default is now `<workspace>/evidence`, found from the package share path; `OPENAMR_EVIDENCE_DIR` overrides;
 when neither can be determined it is an error, never a temp directory.

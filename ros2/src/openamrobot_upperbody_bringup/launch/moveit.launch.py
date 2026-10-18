@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """MoveIt on the combined OpenAMRobot model: the stack (mock or Gazebo), then move_group, optionally RViz's MotionPlanning display.
 
     ros2 launch openamrobot_upperbody_bringup moveit.launch.py [base_plate:=bp000] [sim:=mock|gazebo] [rviz:=false]

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T12: datums.yaml validates against datums.schema.json, and the schema rejects what it must reject."""
 import os
 

@@ -1,9 +1,9 @@
 schema_version: 1
 mast_ids:
-  mast_1300: {shoulder_height: 1.300, class: analysis}
+  mast_1300: {shoulder_height: 1.300, class: analysis}  # decision-allow: MAST-POSITIONS historical: frozen input of the superseded mast model
   mast_1350: {shoulder_height: 1.350, class: release}     # installed configuration
-  mast_1400: {shoulder_height: 1.400, class: analysis}
-  mast_1450: {shoulder_height: 1.450, class: analysis}
+  mast_1400: {shoulder_height: 1.400, class: analysis}  # decision-allow: MAST-POSITIONS historical: frozen input of the superseded mast model
+  mast_1450: {shoulder_height: 1.450, class: analysis}  # decision-allow: MAST-POSITIONS historical: frozen input of the superseded mast model
 default: mast_1350
 mast_top_height: 1.500        # mast top above floor
 max_assembled_height: 1.700   # whole robot incl. head camera; NOT a shoulder height

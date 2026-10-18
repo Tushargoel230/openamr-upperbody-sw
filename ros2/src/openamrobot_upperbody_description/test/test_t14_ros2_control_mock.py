@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T14: the `mock` profile drives the arms with mock_components/GenericSystem, and the base has no ros2_control.
 
 The two arm blocks must also equal, whitespace aside, what upstream's own top-level v2.0 file expands to with

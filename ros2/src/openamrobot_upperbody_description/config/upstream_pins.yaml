@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # The upstream commits this description is built against (ADR-001). Every pin is a FULL 40-hex commit hash in quotes:
 # unquoted, YAML reads an all-digit hash as a number (and drops leading zeros), and a prefix cannot be compared exactly.
 # C02 checks the format of every entry, and for each entry whose checkout exists under src/upstream/ and is clean its HEAD

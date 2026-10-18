@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T13 (DATUMS.md, "Visualization constants are not datums"): the numeric literals the xacro keeps outside datums.yaml.
 
 A number the xacro holds as a literal `xacro:property` is either a datum (then it lives in datums.yaml, and T13's other

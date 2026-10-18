@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Assemble the A6 evidence report. Called by verify_a6.sh after `colcon test` and check_urdf_matrix.py have run.
 
     build_evidence.py --since EPOCH [--profile dev|gazebo] [--step name=returncode ...] [--repo PATH]
@@ -404,7 +405,7 @@ CONFIG_ID_INPUTS = {
     "members": ["canonical_urdf", "column", "base_plate", "head_pitch", "base_tilt", "arm_package", "hardware_profile",
                 "datums_revision", "upstream_pins"],
     "not_inputs": ["lift stop (L1000/L1175/L1350): a calibration ID", "enable_planar_base (already in canonical_urdf)"],
-    "before_p15": ["canonical_urdf", "mast_id", "arm_package", "hardware_profile", "datums_revision", "openarm_description_commit"],
+    "before_p15": ["canonical_urdf", "mast_id", "arm_package", "hardware_profile", "datums_revision", "openarm_description_commit"],  # decision-allow: CONFIG-IDS historical: config_id inputs before P15
     "note": "the format is unchanged (sha256:<64 hex>) and so is validity against the C9 schema; the meaning is not, so an id "
             "recorded before P15 is not comparable with one in this report",
 }

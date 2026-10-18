@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Print datums.yaml grouped by status and by source, plus the placeholder list. Always exits 0 when the file reads.
 
     ros2 run openamrobot_upperbody_description datums_report.py [--datums PATH]

@@ -1,24 +1,18 @@
-"""W03 (P18, WARN only, gating nothing): which named poses of the SRDF put a joint exactly on one of its URDF limits, and how far.
+# SPDX-License-Identifier: MIT
+"""Named poses of the SRDF that put a joint exactly on one of its URDF limits, and how far (P18's W03 helper; P19 made it plain evidence, not a check).
 
-It replaced M07. M07 measured a simulated rest position against a margin nobody could source, and its premise (the new body put the finger on
-a limit, the old body did not) was refuted by measurement (evidence/m02_bisect/RESULTS.md). The thing that is true is simpler and is a fact
-about the pose definitions: upstream's `home` is joint 4 at its lower limit 0, and a gripper's `open` is the end of its range. So this check
-lists them and says nothing about any body being wrong. It must list the same joints for the old mast body as for the lift body (it is a
-function of the SRDF and URDF it is given, with no knowledge of either), which `test_w03_*_both_bodies` pins on a synthetic second body, and
-the real old and new reports are in evidence/w03/.
-
-Result: WARN when at least one is listed (it is never a FAIL), PASS when none is."""
-from conftest import srdf_text, urdf_text, write_sidecar
+`python -m openamrobot_upperbody_moveit.named_poses <srdf> <urdf>` prints the report; evidence/w03/ holds it for the old mast body (7daa2ab) and
+the lift body. It is NOT an entry of the A7 report and writes no sidecar: while M07 exists W03 is not registered as a check. The helper is a
+function of the SRDF and URDF it is given, with no knowledge of either body, which `*_any_body` pins on a synthetic second body."""
+from conftest import srdf_text, urdf_text
 from openamrobot_upperbody_moveit.named_poses import ON_LIMIT_TOLERANCE, on_limit_report, poses_on_limits, read_group_states, urdf_joint_limits
 
 FOUR = ["openarm_left_finger_joint1", "openarm_left_joint4", "openarm_right_finger_joint1", "openarm_right_joint4"]
 
 
-def test_w03_named_poses_on_a_joint_limit_are_listed_with_their_distance():
+def test_named_poses_on_a_joint_limit_are_listed_with_their_distance():
     report = on_limit_report(srdf_text(), urdf_text())
     rows = report["poses_on_a_limit"]
-    write_sidecar("W03", "named_poses_on_limits", "named poses that coincide with a joint limit (information; gates nothing)",
-                  "WARN" if rows else "PASS", report)
     assert report["joints_on_a_limit"] == FOUR, report["joints_on_a_limit"]
     assert all(abs(r["distance_rad"]) <= ON_LIMIT_TOLERANCE for r in rows)
     by = {(r["group"], r["pose"], r["joint"]): r for r in rows}
@@ -41,7 +35,7 @@ URDF_OTHER_BODY = """<robot name="x">
 </robot>"""
 
 
-def test_w03_lists_the_same_kind_of_thing_for_any_body_and_does_not_invent_or_skip():
+def test_lists_the_same_kind_of_thing_for_any_body_and_does_not_invent_or_skip():
     """A second, different body: a pose on a lower limit, one on an upper limit, one comfortably inside, and one named joint with no URDF limit,
     which is reported as such and not dropped."""
     report = on_limit_report(SRDF_OTHER_BODY, URDF_OTHER_BODY)
@@ -50,7 +44,7 @@ def test_w03_lists_the_same_kind_of_thing_for_any_body_and_does_not_invent_or_sk
     assert [u["joint"] for u in report["named_pose_joints_without_a_urdf_limit"]] == ["mystery"]
 
 
-def test_w03_a_value_past_a_limit_is_listed_with_a_negative_distance_and_one_just_inside_is_not():
+def test_a_value_past_a_limit_is_listed_with_a_negative_distance_and_one_just_inside_is_not():
     states = {("g", "past"): {"j": -0.0000005}, ("g", "near"): {"j": 0.0001}}
     rows, _ = poses_on_limits(states, {"j": (0.0, 1.0)})
     assert [(r["pose"], r["distance_rad"] < 0) for r in rows] == [("past", True)]
@@ -58,7 +52,7 @@ def test_w03_a_value_past_a_limit_is_listed_with_a_negative_distance_and_one_jus
     assert ON_LIMIT_TOLERANCE <= 1e-6
 
 
-def test_w03_it_is_not_a_property_of_the_body_the_real_srdf_and_a_second_urdf_agree():
+def test_it_is_not_a_property_of_the_body_the_real_srdf_and_a_second_urdf_agree():
     """The same SRDF against the real URDF and against a URDF whose joint4 limits differ: the report follows the limits, not the body."""
     states, limits = read_group_states(srdf_text()), dict(urdf_joint_limits(urdf_text()))
     moved = dict(limits, openarm_left_joint4=(-0.5, 2.4435))

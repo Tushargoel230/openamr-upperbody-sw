@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """M01: every named pose of both arms (and both grippers) plans and executes on `mock`, through move_group, with a final joint error
 below 0.01 rad. One lift calibration stop per run (the argument `lift_stop:=L1000|L1175|L1350`, default L1000, which the test turns into the stub's
 `lift_position`; the stops are CALIBRATION IDs of option B's lift, joint positions and not configuration IDs); CMake registers it once per stop.
@@ -43,8 +44,8 @@ from openamrobot_upperbody_moveit.move_group_client import MoveGroupClient  # no
 from openamrobot_upperbody_moveit.named_poses import ARM_GROUP, GRIPPER_JOINT, SIDES  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from a7_support import (A7_ENABLED, ACCELERATION_SCALING, SKIP_REASON, TOLERANCE, VELOCITY_SCALING, clamp_record, named_pose_plan, stack_alive, stack_healthy, run_sequence,  # noqa: E402
-                        write_run_sidecar)
+from a7_support import (A7_ENABLED, ACCELERATION_SCALING, ARM_CONTROLLERS, CONTROLLERS_ACTIVE_WITHIN_S, SKIP_REASON, TOLERANCE, VELOCITY_SCALING,  # noqa: E402
+                        clamp_record, named_pose_plan, stack_alive, stack_healthy, run_sequence, wait_for_controllers_active, write_run_sidecar)
 
 LIFT_STOP = _lift_stop_from_arguments()
 READY_WITHIN_S = 90.0
@@ -67,7 +68,7 @@ def generate_test_description():
     ]), {}
 
 
-@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)  # tracking: openAMRobot/openamr-upperbody-sw#16
 class TestNamedPosesOnMock(unittest.TestCase):
     record = {}
 
@@ -97,6 +98,14 @@ class TestNamedPosesOnMock(unittest.TestCase):
 
     def test_m01_1_every_named_pose_plans_and_executes_with_a_final_error_under_tolerance(self):
         self.assertTrue(self.client.wait_for_server(READY_WITHIN_S), f"move_group's /move_action did not appear within {READY_WITHIN_S:.0f} s")
+        # Before the first pose, as in M02 and M07: every arm and gripper controller must be ACTIVE. On a slow machine the first left_arm goal
+        # was sent before the mock controllers were up ("Action client not connected") and read as a robot failure. If they never activate
+        # this FAILs here, with their states, and no pose is sent.
+        ok, states, waited = wait_for_controllers_active(self.node, CONTROLLERS_ACTIVE_WITHIN_S)
+        self.record["controllers"] = {"required": list(ARM_CONTROLLERS), "states": states, "waited_s": waited, "timeout_s": CONTROLLERS_ACTIVE_WITHIN_S}
+        self.record["controllers_active"] = ok
+        self.assertTrue(ok, f"the controllers did not all reach active within {CONTROLLERS_ACTIVE_WITHIN_S:.0f} s (waited {waited} s): {states}; "
+                            "no pose was sent")
         joints = [f"openarm_{side}_joint{i}" for side in SIDES for i in range(1, 8)] + [GRIPPER_JOINT[s] for s in SIDES]
         self.assertTrue(self.client.wait_for_joints(joints, 60.0), "/joint_states never listed all 16 controlled joints")
         plan = named_pose_plan()
@@ -108,14 +117,14 @@ class TestNamedPosesOnMock(unittest.TestCase):
 EXPECTED_PROCESSES = ["robot_state_publisher", "ros2_control_node", "spawner", "base_joint_states_stub", "move_group", "joint_state_clamp"]
 
 
-@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)  # tracking: openAMRobot/openamr-upperbody-sw#16
 class TestProcessesAlive(unittest.TestCase):
     def test_no_process_of_the_launch_died_while_the_tests_were_running(self, proc_info):
         stack_alive(proc_info)
 
 
 @launch_testing.post_shutdown_test()
-@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)  # tracking: openAMRobot/openamr-upperbody-sw#16
 class TestShutdown(unittest.TestCase):
     def test_m01_processes_started_and_exited_cleanly(self, proc_info):
         stack_healthy(proc_info, expected=EXPECTED_PROCESSES)

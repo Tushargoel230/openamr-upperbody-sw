@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Named poses read from the SRDF, and the per-hand gripper sign rule (ADR-009 point 5).
 
 The two grippers take opposite-signed GripperCommand positions: left finger_joint1 range [0, 0.7854], right [-0.7854, 0] (upstream's
@@ -77,11 +78,11 @@ def gripper_sign_problems(states, limits, tolerance=1e-4):
     return problems
 
 
-# --- W03: named poses that coincide with a joint limit (P18) ------------------------------------------------------------------------------
-# WARN only, gating nothing. A joint commanded to a value that IS one of its limits is a fact about the pose definitions (upstream's `home` is
+# --- named poses that coincide with a joint limit (P18's W03; evidence/w03/, not a registered check since P19) -------------------------
+# Information only, gating nothing. A joint commanded to a value that IS one of its limits is a fact about the pose definitions (upstream's `home` is
 # joint 4 at its lower limit 0, a gripper's `open` is the end of its range), not a defect of any body: it is true of the old mast body and of
-# the lift body alike, and the check reports it for whichever SRDF and URDF it is given. It replaced M07, which measured a simulated rest
-# position against an invented margin and so failed upstream's own design for being itself.
+# the lift body alike, and the report is for whichever SRDF and URDF it is given. It is not M07, which measures a simulated rest position
+# against a margin datum; it registers nothing while M07 exists.
 ON_LIMIT_TOLERANCE = 1e-6      # rad. NOT a margin: the numeric slack within which two numbers written in files are the same number
 
 
@@ -113,7 +114,7 @@ def on_limit_report(srdf_text, urdf_text, tolerance=ON_LIMIT_TOLERANCE):
 if __name__ == "__main__":
     import argparse
     import json
-    parser = argparse.ArgumentParser(description="W03: named poses of an SRDF that coincide with a joint limit of a URDF")
+    parser = argparse.ArgumentParser(description="named poses of an SRDF that coincide with a joint limit of a URDF")
     parser.add_argument("srdf")
     parser.add_argument("urdf")
     args = parser.parse_args()

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The SRDF is consistent with the combined model at every base plate: names exist, poses are inside limits, the virtual joint is the
 fixed one (W02), and `park` is only a placeholder copy of `home`."""
 import re

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """A MoveIt planning scene of the combined model for collision checks that ignore the SRDF: what M03, the matrix derivation and the planning-time
 measurement share. Needs moveit_py, so it runs in a process of its own that leaves with os._exit (a MoveItPy that is torn down segfaults).
 

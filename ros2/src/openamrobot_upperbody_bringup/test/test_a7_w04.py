@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: MIT
 """W04 (P18): a gz server the launch's stop helper had to force is a WARN of the A7 report; a survivor is still the launch test's FAIL. No ROS graph.
 
-The aggregation reads the stop-helper report each simulator launch test (G01, G02, M02) leaves in its sidecar. NOT_RUN, never PASS, when one is
+The aggregation reads the stop-helper report each simulator launch test (G01, G02, M02, M07) leaves in its sidecar. NOT_RUN, never PASS, when one is
 missing: a W04 that cannot see is not a W04 that saw nothing."""
 import importlib.util
 import os
@@ -19,8 +20,8 @@ def sidecar(state, **extra):
     return [{"details": {"gz_server_after_shutdown": {"survivors": [], "stop_helper": {"state": state, "elapsed_s": 1.4, **extra}}}}]
 
 
-def sidecars(g01="stopped", g02="stopped", m02="stopped"):
-    return {"G01": sidecar(g01), "G02": sidecar(g02), "M02": sidecar(m02)}
+def sidecars(g01="stopped", g02="stopped", m02="stopped", m07="stopped"):
+    return {"G01": sidecar(g01), "G02": sidecar(g02), "M02": sidecar(m02), "M07": sidecar(m07)}
 
 
 def test_every_launch_stopped_on_request_is_a_pass():
@@ -41,8 +42,14 @@ def test_a_launch_with_no_helper_report_is_not_run_not_a_pass():
     assert b.gz_force_stop_check({"G01": sidecar("stopped")})[0] == b.be.NOT_RUN
 
 
-def test_w03_and_w04_are_listed_and_w03_has_a_required_sidecar():
+def test_a_forced_server_of_m07_is_counted_too():
+    result, details = builder().gz_force_stop_check(sidecars(m07="force_stopped"))
+    assert result == "WARN" and details["forced"] == ["M07"]
+
+
+def test_w04_is_listed_m07_stays_listed_and_w03_is_not_a_check():
+    """M07 is Alex's and stands (P19); W03 is evidence files and a helper, not an entry of the report."""
     b = builder()
     ids = [i for i, _ in b.A7_CHECKS]
-    assert "W03" in ids and "W04" in ids and "M07" not in ids
-    assert "W03" in b.SIDECAR_REQUIRED and "M07" not in b.SIDECAR_REQUIRED
+    assert "W04" in ids and "M07" in ids and "W03" not in ids
+    assert "M07" in b.SIDECAR_REQUIRED and "W03" not in b.SIDECAR_REQUIRED

@@ -163,8 +163,8 @@ which also writes the `gazebo` evidence report. Each test starts a headless serv
 | G01 | 90 s (about 35 s), default engine (DART) | five controllers `active`; an arm goal completes and tracks while the other arm and the base stay still; platform-sw's bridge topics exist by name and type; `/cmd_vel` moves the base and `/odom` reports it; one publisher of `odom -> base_footprint`; `/joint_states` has one publisher carrying wheels, arms and `lift_joint` once each |
 | G02 | 90 s (about 20 s), Bullet-Featherstone passed explicitly | both grippers close, and `finger_joint2` follows `finger_joint1` in the physics (link poses, not `/joint_states`) |
 
-G02 and G01 also assert, after their launch has been torn down, that **no `gz sim` of their own `GZ_PARTITION` is still alive** (P16; M02, in the
-bringup package, asks the same through `stack_healthy(simulator=True)`): the ruby wrapper is what the launch owns and what the process
+G02 and G01 also assert, after their launch has been torn down, that **no `gz sim` of their own `GZ_PARTITION` is still alive** (P16; M02 and
+M07, in the bringup package, ask the same through `stack_healthy(simulator=True)`): the ruby wrapper is what the launch owns and what the process
 guard reads, and the server it forks was left running after about 2 of 8 A7 runs with nothing noticing (after G02 in P15; after G01 in the
 second evidence pass of P16, where it ran at about three cores until the end of the run and M02 failed a pose). It is a FAIL, never a WARN, and it
 keys on the partition the test put in its environment before the launch (every process of the launch inherits it), so a simulator of another run,

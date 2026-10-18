@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """scripts/build_evidence.py: the report only combines what the tests recorded. Its mapping and combining rules are
 tested here, on synthetic results, including that a FAIL cannot be hidden by a PASS and that a missing result is not a pass.
 """
@@ -280,7 +281,7 @@ def test_summary_and_exit_status_follow_the_checks(tmp_path):
     # the inputs of the id and the calibration IDs are stated beside the ids, apart from them
     assert doc["config_id_inputs"]["members"] == ["canonical_urdf", "column", "base_plate", "head_pitch", "base_tilt", "arm_package",
                                                   "hardware_profile", "datums_revision", "upstream_pins"]
-    assert "mast_id" in doc["config_id_inputs"]["before_p15"] and "mast_id" not in doc["config_id_inputs"]["members"]
+    assert "mast_id" in doc["config_id_inputs"]["before_p15"] and "mast_id" not in doc["config_id_inputs"]["members"]  # decision-allow: CONFIG-IDS negative test: mast_id must be absent or rejected
     assert set(doc["calibration_ids"]) == {"L1000", "L1175", "L1350"} and not set(doc["calibration_ids"]) & set(doc["config_ids"])
     assert [doc["calibration_ids"][s]["lift_joint_position_m"] for s in ("L1000", "L1175", "L1350")] == [0.0, 0.175, 0.35]
     assert doc["limitations"] and all(isinstance(x, str) for x in doc["limitations"])

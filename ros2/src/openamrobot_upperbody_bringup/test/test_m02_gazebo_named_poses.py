@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """M02: every named pose of both arms (and both grippers) plans and executes in Gazebo at option B's baseline configuration, through
 move_group, with a final joint error below 0.01 rad. The lift is at L1000 (lift_joint at its zero, which is where joint_state_publisher
 reports it and where the unactuated carriage rests on its limit): the simulator is not asked to move it (we have no authority to).
@@ -61,7 +62,7 @@ def generate_test_description():
     ]), {}
 
 
-@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)  # tracking: openAMRobot/openamr-upperbody-sw#16
 class TestNamedPosesInGazebo(unittest.TestCase):
     record = {}
 
@@ -124,14 +125,14 @@ class TestNamedPosesInGazebo(unittest.TestCase):
 EXPECTED_PROCESSES = ["gazebo", "robot_state_publisher", "parameter_bridge", "create", "joint_state_publisher", "spawner", "move_group", "joint_state_clamp"]
 
 
-@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)  # tracking: openAMRobot/openamr-upperbody-sw#16
 class TestProcessesAlive(unittest.TestCase):
     def test_no_process_of_the_launch_died_while_the_tests_were_running(self, proc_info):
         stack_alive(proc_info)
 
 
 @launch_testing.post_shutdown_test()
-@unittest.skipUnless(A7_ENABLED, SKIP_REASON)
+@unittest.skipUnless(A7_ENABLED, SKIP_REASON)  # tracking: openAMRobot/openamr-upperbody-sw#16
 class TestShutdown(unittest.TestCase):
     def test_m02_processes_started_and_exited_cleanly(self, proc_info):
         stack_healthy(proc_info, expected=EXPECTED_PROCESSES, simulator=True, sidecar=("M02", f"gazebo_{LIFT_STOP}"))

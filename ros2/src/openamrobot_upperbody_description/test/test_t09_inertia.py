@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T09: every massed link has a physically possible inertial.
 
 For each link with an <inertial>:

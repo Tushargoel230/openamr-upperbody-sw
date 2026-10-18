@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """M03: validate the SRDF's collision matrix. Every disabled pair needs a reason that can be shown; sampling is not one.
 
     ros2 run openamrobot_upperbody_moveit validate_acm.py [--samples 2000] [--seed N] [--lift-stop L1000 ...] [--srdf PATH] [--json OUT]

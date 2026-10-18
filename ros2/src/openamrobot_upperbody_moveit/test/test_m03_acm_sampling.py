@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """M03: the SRDF's collision matrix disables only what can be justified (scripts/validate_acm.py, acm_derive.py, moveit_py).
 
 A pair may be disabled for exactly three reasons: declared by upstream (section 1 of the SRDF, the 20 pairs upstream states), `Adjacent` (a structural
@@ -57,7 +58,7 @@ def validate_mutated(tmp, lift_stop="L1000", samples=20, **defect):
 
 
 # Pairs measured to behave as the mutation says, with nothing ignored (the P10 mutation never worked because it assumed instead of measuring):
-CONSTANT_AND_COLLIDING = ("base_link", "bl_caster_link")                     # no joint between them, collides in the default state, so in every state
+CONSTANT_AND_COLLIDING = ("base_link", "lidar_link")                         # fixed joint, the lidar cylinder sits inside the chassis box, so it collides in every state (base_link/bl_caster_link stopped colliding with platform-sw #71)
 COLLIDES_SOMETIMES = ("arm_profile_link", "openarm_left_ee_base_link")       # arm joints between them; collides in about 2 of 100 random states (9 of 400)
 UNJUSTIFIED = ("openarm_left_link1", "openarm_left_link3")                   # the old sampled `Never` pair: arm joints between, no neighbour, not upstream's
 
@@ -108,7 +109,7 @@ def test_m03_1_every_disabled_pair_has_a_reason_that_can_be_shown_at_every_lift_
     })
     assert summary["result"] == "PASS", "\n" + done.stdout[-3500:]
     assert [r["lift_stop"] for r in results] == list(STOPS)
-    assert all(len(r["constant_transform"]["pairs"]) == 45 for r in results)     # 77 in P12A: the lift is a movable joint between base and arms
+    assert all(len(r["constant_transform"]["pairs"]) == 58 for r in results)     # 77 in P12A, 45 in P15; 58 with the column's placeholder boxes
     assert all(not r["constant_transform"]["cross_check_with_sampled_states"]["disagreements"] for r in results)
 
 

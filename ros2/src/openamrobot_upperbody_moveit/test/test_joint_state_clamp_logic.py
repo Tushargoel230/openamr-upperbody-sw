@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The simulated start state's float noise, clamped (joint_state_clamp.py): the logic, in unit tests with no ROS runtime. The clamp in the loop
 with a real move_group is test_joint_state_clamp_loop.py."""
 import json

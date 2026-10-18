@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """H01: the two ways a test can exist and still tell the evidence nothing, closed statically (P12A task 0).
 
 1. A test file that is not registered in its package's CMakeLists.txt never runs, and nothing reports a test that never ran. Every

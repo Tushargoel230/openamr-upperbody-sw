@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The collision matrix, derived: a pair is disabled only for a reason that can be shown, and sampling is not one.
 
 P12A replaced the matrix the Setup Assistant sampled (458 `Never` pairs that were only ever "no collision seen in N samples") with a matrix

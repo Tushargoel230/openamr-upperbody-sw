@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Print the configuration id of one expansion of combined_robot.xacro (ARCHITECTURE.md s7, ADR-010 as corrected by rev19.0).
 
     print_config_id.py column:=dold_v4_350 base_plate:=bp000 head_pitch:=hp25 base_tilt:=bt10 arm_package:=openarm
@@ -19,9 +20,9 @@ definition (`^sha256:[0-9a-f]{64}$`). A truncated id fails that validator, so th
     enable_planar_base is not a separate member: it changes the expanded URDF, so it is already in canonical_urdf.
 
 What is NOT an input, on purpose: the lift stop (L1000 / L1175 / L1350). A stop is a joint position with a calibration, a
-CALIBRATION ID, not a build variant; option B's own config says so and ADR-010 had it wrong. `mast_id` is gone with the mast.
+CALIBRATION ID, not a build variant; option B's own config says so and ADR-010 had it wrong. `mast_id` is gone with the mast.  # decision-allow: CONFIG-IDS historical/negative: mast_id is gone; the inputs before P15
 The format is unchanged and so is validity against the C9 schema, while the meaning of the hash is not: an id recorded
-before P15 (inputs: canonical_urdf, mast_id, arm_package, hardware_profile, datums_revision, openarm_description_commit)
+before P15 (inputs: canonical_urdf, mast_id, arm_package, hardware_profile, datums_revision, openarm_description_commit)  # decision-allow: CONFIG-IDS historical/negative: mast_id is gone; the inputs before P15
 is not comparable with one computed now, and nothing will fail to say so.
 
 --explain also prints the inputs and a 12-character prefix, labelled as one, for human-facing logs.

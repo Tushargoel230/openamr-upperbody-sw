@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Reading the <ros2_control> blocks of an expanded combined URDF, shared by T14, T15 and T16.
 
 Everything is derived from the expansion itself (the joints that need an interface are the arm's non-mimic movable

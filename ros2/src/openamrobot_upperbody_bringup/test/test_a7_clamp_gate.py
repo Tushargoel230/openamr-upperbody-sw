@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The two numbers M02 gates the clamp on, and nothing else (P17 task 3). No ROS graph, no simulator.
 
 DESIGN_LOG 2026-10-14: activation counts scatter 2-3x on an unchanged tree (646-1054 in one configuration), so a count is not a measurement and

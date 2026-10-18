@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 Panels: []
 Visualization Manager:
   Global Options: {Fixed Frame: base_link, Frame Rate: 30}

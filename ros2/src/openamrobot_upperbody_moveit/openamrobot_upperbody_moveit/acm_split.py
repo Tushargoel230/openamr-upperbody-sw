@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The kinematic tree of the combined model, and the collision matrix as a set of pairs: what the matrix derivation (acm_derive.py), M03 and the
 contract fingerprint are built on.
 

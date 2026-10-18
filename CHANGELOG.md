@@ -5,18 +5,42 @@ All notable changes to this repository. Evidence for the description is static a
 
 ## [Unreleased]
 
-### Changed (P18): M07 withdrawn, W03 and W04 added
+### Changed (follow-ups to 49d2368, accepted by Alex on 16 Oct)
 
-- **M07 is withdrawn**, with its margin datum `joint_rest_margin_rad` and the datums revision bump (the `config_id`s are those of before P17 again). It was
-  built on the hypothesis that the new body puts the right finger on a limit where the old body does not; P17's own measurement refuted that (same effort
-  sign in both bodies, the old body also within 2.5e-5 rad of the same four limits), and the claim was false regardless: a gripper's `open` and the arm's
-  `home` are limits in upstream's joint definitions. The P17 entries below that mention M07 describe what was built and then withdrawn.
-- **W03** (A7 report, WARN only, gates nothing): the named poses of the SRDF that coincide with a joint limit, with the distance. A function of the SRDF and
-  URDF it is given, so it lists the same four joints (both `joint4`, both `finger_joint1`; eight poses) for the old mast body (`7daa2ab`) and the lift body
-  (`evidence/w03/`).
-- **W04** (A7 report, WARN): a `gz sim` server that the launch's stop helper had to force. It was a FAIL in P17. **The survivor check is unchanged and runs
-  after the force-stop**: any `gz sim` of the run still alive when it looks (it waits up to 10 s, the helper needs at most about 9 s) is a survivor and a
-  FAIL, including one that survived its own force-stop; a test pins both.
+- **The lift column has placeholder geometry.** Both stages carry a 240 x 240 mm box (datum `lift_column_section`, placeholder), visual and
+  collision, named `placeholder_lift_column_*`: the fixed stage on `lift_column_base_link` (retracted length), the moving stage on
+  `lift_carriage_link` (stroke, below the carriage). Opt-in parameter `column_geometry` on option B's macro (default: none, as on `main`); the
+  combined robot passes the section. `frame_contract.yaml` no longer calls `lift_column_base_link` collision-free. **The collision matrix is
+  re-derived: 95 pairs (20 upstream + 17 `Adjacent` + 58 `ConstantTransform`), was 83; 535 of 630 pairs are enabled, was 478** (the two stages
+  are geometry links now). The arms can no longer plan through the column body; the box is not the supplier's shape.
+- **M07 reports WARN, not FAIL, for the four joints whose rest pose is an upstream limit** (`openarm_{left,right}_finger_joint1`,
+  `openarm_{left,right}_joint4`, reason "rest pose at an upstream limit"), within the margin on either side of that limit. Any other joint within the
+  margin, or one of those read further past its limit than the margin, is still a FAIL; WARN is not PASS.
+- **Controller start-up in `sim.launch.py`: the joint_state_broadcaster spawner has a 30 s switch timeout (`--switch-timeout`, with
+  `--service-call-timeout 45` so the spawner's 10 s default call timeout does not end the wait first), and the arm and gripper spawners start only
+  when it exits 0.** On a 4-core machine with CPU-only rendering the broadcaster's first switch timed out after the
+  spawner's default 5 s, the spawner exited 1, and the other four spawners still started (G01, G02, M02 and M07 then saw four of five controllers
+  active). `test_sim_launch_spawners.py` pins both.
+- **The A7 controller wait honours one absolute deadline** (PR #14 review): `a7_support.wait_for_controllers_active` caps the service wait,
+  each request, each spin and each sleep by the time that is left, and accepts an all-active answer only if it arrived before the deadline (before,
+  an answer at 1.5 s of a 1.0 s budget returned ok). M07 uses the shared wait instead of its own copy. `test_a7_controller_deadline.py` (fake clock
+  and client) pins it.
+- **M07 fails on incomplete joint-state coverage** (PR #14 review): the expected joints come from the model (the 16 limited joints under
+  `ros2_control`; `lift_joint` and the mimic `finger_joint2`s are recorded as not measured, with the reason), and every expected joint needs 50
+  samples in the window; a missing or under-sampled joint is a FAIL recorded as incomplete coverage. `test_m07_coverage.py` pins it.
+
+### Changed (P18, P19): W04 added; W03 is evidence only; M07 stays
+
+- **M07 stays, as Alex wrote it** (WARN on the four upstream-limit joints, `joint_rest_margin_rad` and its datums revision bump). P18 had withdrawn it;
+  Alex's decision on it stands (P19 merge), so P19 restored it exactly. If Alex accepts the withdrawal, removing M07 again is one commit. The reasons
+  P18 gave stay on the record: P17's own measurement refuted the premise that the new body puts the right finger on a limit where the old body does
+  not (same effort sign in both bodies; the old body also rests within 2.5e-5 rad of the same four limits).
+- **W03 is evidence files, not a check.** The named poses of the SRDF that coincide with a joint limit, with the distance, for the old mast body
+  (`7daa2ab`) and the lift body: the same four joints (both `joint4`, both `finger_joint1`; eight poses) in `evidence/w03/`, produced by
+  `python -m openamrobot_upperbody_moveit.named_poses <srdf> <urdf>`. It is not an entry of the A7 report and writes no sidecar while M07 exists.
+- **W04** (A7 report, WARN): a `gz sim` server that the launch's stop helper had to force. It was a FAIL in P17. It reads the sidecars of G01, G02, M02
+  and M07. **The survivor check is unchanged and runs after the force-stop**: any `gz sim` of the run still alive when it looks (it waits up to 10 s,
+  the helper needs at most about 9 s) is a survivor and a FAIL, including one that survived its own force-stop; a test pins both.
 - The gz-sim issue (segfault in a libgz-sim8 thread during teardown; the hang that ignores SIGTERM) is drafted in `docs/issues/` with the counts and a
   reproduction. **It is not filed: the workspace has no GitHub credential.** A bare server (empty world, no ROS) did not reproduce it: 30 of 30 clean.
 

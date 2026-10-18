@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The checked-in matrix IS the contract, and since P12A it is DERIVED, not sampled: config/acm/acm_generation.yaml records what it was derived by and
 its fingerprint, and these tests read both back. Before P12A the matrix came from the Setup Assistant's sampler, which has no seed and gave a different
 set of `Never` pairs on every run (473 against 468 at 3000 trials, 455, 456 and 458 at 10000); regenerating it was therefore not a verification step.

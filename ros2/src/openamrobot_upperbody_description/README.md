@@ -75,7 +75,7 @@ commit of `config/upstream_pins.yaml` (C02); the preset files keep upstream's ze
 | `controllers_file` | absolute path | empty | The controller parameter file the `gazebo` profile hands to `gz_ros2_control`. Empty: no `<parameters>` element. Supplied by the simulation launch; ignored by `mock` and `real`. See [ros2_control](#ros2_control). |
 
 The defaults of the first four are option B's `baseline:`; T01 asserts they match. An unknown value for any arg stops expansion
-with an error that lists the accepted values. There is no `mast_id`.
+with an error that lists the accepted values. There is no `mast_id`. <!-- decision-allow: CONFIG-IDS historical/negative: mast_id is gone, or the inputs before P15 -->
 
 ```bash
 xacro $(ros2 pkg prefix openamrobot_upperbody_description)/share/openamrobot_upperbody_description/urdf/combined_robot.xacro \
@@ -270,7 +270,7 @@ configuration, not just the geometry.
 
 | | Inputs |
 |---|---|
-| before P15 | canonical URDF, `mast_id`, `arm_package`, `hardware_profile`, datums revision, `openarm_description` commit |
+| before P15 | canonical URDF, `mast_id`, `arm_package`, `hardware_profile`, datums revision, `openarm_description` commit <!-- decision-allow: CONFIG-IDS historical/negative: mast_id is gone, or the inputs before P15 --> |
 | now | canonical URDF, `column`, `base_plate`, `head_pitch`, `base_tilt`, `arm_package`, `hardware_profile`, datums revision, **all** upstream pins |
 
 The format is unchanged and still validates against C9, **so nothing fails to say that the meaning changed: an id recorded before

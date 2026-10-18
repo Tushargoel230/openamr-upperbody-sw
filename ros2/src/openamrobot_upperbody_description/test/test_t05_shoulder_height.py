@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: MIT
 """T05: shoulder height per lift stop. The floor-relative height of openarm_{left,right}_base_link equals the stop's shoulder height.
 
-The shoulder height is the position of lift_joint, not an argument (P15; it was `mast_id` in A6). Option B's three calibration
+The shoulder height is the position of lift_joint, not an argument (P15; it was `mast_id` in A6). Option B's three calibration  # decision-allow: CONFIG-IDS historical: the shoulder height was mast_id in A6
 stops L1000 / L1175 / L1350 are joint positions (0, 0.175, 0.350 m at the DOLD V4 350's 0.350 m stroke), shoulder heights
 1.000 / 1.175 / 1.350 m from the floor = base_footprint. The height is computed by forward kinematics through the lift joint,
 independently of the xacro's own sums, and from the floor frame, so it does not depend on any datum value: the three-way

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The clamp in the loop, with a real move_group: it reproduces the defect deterministically instead of waiting for Gazebo to produce it.
 
 A joint state publisher holds `openarm_left_joint4` (home's joint, on its lower limit 0) at -2.5e-7 rad, the value Gazebo read back. Without the
@@ -58,7 +59,7 @@ def generate_test_description():
     return launch.LaunchDescription([
         launch.actions.IncludeLaunchDescription(
             PythonLaunchDescriptionSource(move_group),
-            launch_arguments={"mast_id": "mast_1350", "hardware_profile": "mock", "rviz": "false", "clamp_joint_states": CLAMP}.items()),
+            launch_arguments={"hardware_profile": "mock", "rviz": "false", "clamp_joint_states": CLAMP}.items()),
         launch_testing.actions.ReadyToTest(),
     ]), {}
 
@@ -110,14 +111,14 @@ class TestClampInTheLoop(unittest.TestCase):
         self.client.spin_until(future.done, 20.0)
         return json.loads(future.result().message)
 
-    @unittest.skipUnless(CLAMP == "false", "baseline: without the clamp")
+    @unittest.skipUnless(CLAMP == "false", "baseline: without the clamp (tracking: openAMRobot/openamr-upperbody-sw#16)")
     def test_without_the_clamp_a_start_state_2p5e_minus_7_past_the_limit_is_refused(self, proc_output):
         outcome = self.plan()
         self.assertFalse(outcome.success, "the defect this clamp exists for no longer reproduces: the request planned")
         # MoveIt 2.12.4 answers the generic FAILURE (99999) here, to the action and to the service alike; the refusal is named only in move_group's log
         self.assertTrue(proc_output.waitFor("from the starting state is outside bounds by", timeout=5), "move_group's log does not name the refusal")
 
-    @unittest.skipUnless(CLAMP == "true", "the clamp is on")
+    @unittest.skipUnless(CLAMP == "true", "the clamp is on (tracking: openAMRobot/openamr-upperbody-sw#16)")
     def test_with_the_clamp_the_same_request_plans_and_the_counters_say_what_happened(self):
         outcome = self.plan()
         self.assertTrue(outcome.success, outcome.name)
@@ -131,7 +132,7 @@ class TestClampInTheLoop(unittest.TestCase):
         self.assertEqual(s["max_magnitude_joint"], JOINT)
         self.assertEqual(s["epsilon_rad"], jsc.EPSILON)
 
-    @unittest.skipUnless(CLAMP == "true", "the clamp is on")
+    @unittest.skipUnless(CLAMP == "true", "the clamp is on (tracking: openAMRobot/openamr-upperbody-sw#16)")
     def test_zz_a_reading_beyond_the_epsilon_is_not_hidden(self, proc_output):
         before = self.stats()["activations"]
         type(self).value = -1e-3

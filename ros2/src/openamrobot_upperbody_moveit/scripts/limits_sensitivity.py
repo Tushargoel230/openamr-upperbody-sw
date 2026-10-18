@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Do the named-pose plans depend on the VALUES of the acceleration limits we invented, or only need SOME values to exist? (ADR-009)
 
     ros2 run openamrobot_upperbody_moveit limits_sensitivity.py [--base-plate bp000] [--json OUT]

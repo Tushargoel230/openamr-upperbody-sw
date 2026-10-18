@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # frame_contract.yaml - machine-readable twin of 10_architecture/FRAMES.md (names/parents), as of P15 (13 Oct 2026): the base is
 # platform-sw's REP 105 base (base_footprint root), the upper body is option B's lift model, and there is no mast.
 # Tests read this file; FRAMES.md explains it. Values (poses, masses) are NOT part of the contract: see datums.yaml.
@@ -68,7 +69,7 @@ entries:
   # Upper body - option B's lift model (Alex, merged on main), consumed unchanged. Frame names and poses are his; he models no
   # masses, so the lift column's inertial is ours (datum lift_mass_<column>, on lift_column_base_link) and is not a frame.
   - {name: lift_column_base_joint, kind: joint, type: fixed, parent: base_footprint, req: R, condition: null, owner: "Alex (option B, openamrobot_upperbody.xacro)"}
-  - {name: lift_column_base_link, kind: link, type: fixed, parent: base_footprint, req: R, condition: null, owner: "Alex (option B, openamrobot_upperbody.xacro)", note: "Column axis on the base-plate top face, 0.304 m above the floor. Carries the lift's placeholder inertial (11.7 kg catalogue) and no geometry.", collision_free: true, collision_free_reason: "The column body's lateral extent is not sourced, so it has no collision geometry; the arms can plan through it. A gap of the model, stated, not a design intent."}
+  - {name: lift_column_base_link, kind: link, type: fixed, parent: base_footprint, req: R, condition: null, owner: "Alex (option B, openamrobot_upperbody.xacro)", note: "Column axis on the base-plate top face, 0.304 m above the floor. Carries the lift's placeholder inertial (11.7 kg catalogue) and the fixed stage's placeholder box (visual and collision, section lift_column_section, retracted length): placeholder until the supplier drawing."}
   - {name: lift_joint, kind: joint, type: prismatic, parent: lift_column_base_link, req: R, condition: null, owner: "Alex (option B, openamrobot_upperbody.xacro)", note: "0 to 0.350 m; effort 0 and velocity 0 on purpose: we have no authority to command the lift."}
   - {name: lift_carriage_link, kind: link, type: prismatic, parent: lift_column_base_link, req: R, condition: null, owner: "Alex (option B, openamrobot_upperbody.xacro)", note: "The shoulder height is its position: calibration stops L1000 / L1175 / L1350 are joint positions, not arguments."}
   - {name: arm_profile_joint, kind: joint, type: fixed, parent: lift_carriage_link, req: R, condition: null, owner: "Alex (option B, openamrobot_upperbody.xacro)"}
@@ -140,5 +141,5 @@ entries:
 # (tof_front_left_link ... ultrasonic_rear_link, req W) were declared-but-absent and are DELETED, not renamed.
 consumed_from:
   - owner: platform-sw
-    contract: "openamr-platform-sw 935efc7: robo_urdf.urdf.xacro, near_field_frame macro (parent base_link); P-03 rev19.0, register NEAR-FIELD-FRAMES"
-    frames: [us_front_left, us_front_right, us_rear_left, us_rear_right, tof_front, tof_rear]
+    contract: "openamr-platform-sw 935efc7: robo_urdf.urdf.xacro, near_field_frame macro (parent base_link); P-03 rev19.0, register NEAR-FIELD-FRAMES; imu_link (register FRAMES-REP105) and base_camera_link (register CAMERAS), parent base_link, same file. Names only: their poses are platform-sw's"
+    frames: [us_front_left, us_front_right, us_rear_left, us_rear_right, tof_front, tof_rear, imu_link, base_camera_link]

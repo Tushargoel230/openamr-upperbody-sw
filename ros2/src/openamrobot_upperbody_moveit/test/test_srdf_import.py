@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """ADR-007: what was imported from upstream's SRDF is still what upstream has at the pinned commit.
 
 The groups, the group states `home` and `hands_up`, the end effectors, the passive joints and the arm-internal disable_collisions are

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The one place the combined robot's MoveIt configuration is assembled, with moveit_configs_utils' MoveItConfigsBuilder.
 
 The builder is handed the combined xacro with its args (option B's four configuration IDs and `hardware_profile`), not a pre-expanded URDF, so the robot_description

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Clamp the simulated joint state that move_group plans from, to the URDF's own limits, by no more than an epsilon, and count it.
 
     ros2 run openamrobot_upperbody_moveit joint_state_clamp.py --ros-args -p robot_description:="$(xacro ...)" [-p epsilon:=1e-5]

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The FK helper itself, checked against hand-computed cases (so that T05 does not rest on an unchecked helper)."""
 import math
 import xml.etree.ElementTree as ET

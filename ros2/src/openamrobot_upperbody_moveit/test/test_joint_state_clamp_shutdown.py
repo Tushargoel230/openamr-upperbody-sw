@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """How joint_state_clamp.py ends: exit 0 on a shutdown, an error still an error.
 
 P14 ran A7 twice on an unchanged commit and got 2 FAIL, then 0 FAIL. The cause was this node, which exited 1 at shutdown: rclpy raised

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """arm_controllers.yaml names only joints the arm <ros2_control> blocks declare, for every hardware profile.
 
 Static check on the expansion (no controller_manager); the launch test L01 in openamrobot_upperbody_bringup is the

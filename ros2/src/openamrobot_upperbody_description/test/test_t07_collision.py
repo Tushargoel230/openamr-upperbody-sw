@@ -1,7 +1,11 @@
+# SPDX-License-Identifier: MIT
 """T07 / T08: collision geometry.
 
 T07 (FAIL): every link that has an <inertial> or a <visual> has a <collision>, or is marked `collision_free: true` in
-frame_contract.yaml with a reason. Frame-only links (no inertial, no visual) need nothing.
+frame_contract.yaml with a reason. Frame-only links (no inertial, no visual) need nothing. A frame the contract lists under
+`consumed_from` is another owner's (it cannot be declared here, T04): whether it carries collision is that owner's decision,
+so a consumed frame with a visual and no collision is recorded in the sidecar under its owner, not failed. Since
+platform-sw #70 (16 Oct) its sensor frames carry simple visuals without collision.
 T08 (WARN only): list the links whose collision mesh is the very same file as their visual mesh. A visual mesh is
 detailed; planning against it is slow and an unnecessarily tight fit. It is a flag for the owner of the link, never a
 failure.
@@ -19,16 +23,18 @@ from conftest import MATRIX, SHARE, expand, load_yaml, write_sidecar
 CONTRACT = load_yaml(os.path.join(SHARE, "config", "frame_contract.yaml"))
 COLLISION_FREE = {e["name"]: e for e in CONTRACT["entries"] if e["kind"] == "link" and e.get("collision_free")}
 OWNERS = {e["name"]: e["owner"] for e in CONTRACT["entries"] if e["kind"] == "link"}
+CONSUMED = {frame: c["owner"] for c in CONTRACT.get("consumed_from", []) for frame in c["frames"]}
 
 
-def collision_problems(root, collision_free):
-    """FAIL strings for T07. `collision_free` maps link name -> contract entry."""
+def collision_problems(root, collision_free, consumed=()):
+    """FAIL strings for T07. `collision_free` maps link name -> contract entry; `consumed` names another owner's frames, whose
+    missing collision is not ours to fail (consumed_without_collision lists them). A <collision> without geometry fails on any link."""
     problems = []
     for link in root.findall("link"):
         name = link.get("name")
         physical = link.find("inertial") is not None or link.find("visual") is not None
         collisions = link.findall("collision")
-        if physical and not collisions:
+        if physical and not collisions and name not in consumed:
             entry = collision_free.get(name)
             if entry is None:
                 problems.append(f"{name}: has an <inertial> or <visual> but no <collision>, and is not marked "
@@ -40,6 +46,13 @@ def collision_problems(root, collision_free):
             if geometry is None or len(geometry) == 0:
                 problems.append(f"{name}: <collision> without a <geometry>")
     return problems
+
+
+def consumed_without_collision(root, consumed):
+    """Names of the consumed frames that have an <inertial> or <visual> and no <collision> (recorded, never a FAIL)."""
+    return sorted(link.get("name") for link in root.findall("link")
+                  if link.get("name") in consumed and not link.findall("collision")
+                  and (link.find("inertial") is not None or link.find("visual") is not None))
 
 
 def _mesh_files(elements):
@@ -73,14 +86,14 @@ def _expansions():
 
 def test_t07_every_physical_link_has_collision_or_is_marked_collision_free():
     roots, _ = _expansions()
-    problems = sorted({p for root in roots for p in collision_problems(root, COLLISION_FREE)})
+    problems = sorted({p for root in roots for p in collision_problems(root, COLLISION_FREE, CONSUMED)})
     assert not problems, "\n" + "\n".join(problems)
 
 
 def test_t07_records_which_links_are_collision_free_and_why():
     roots, all_links = _expansions()
     checked = with_collision = 0
-    used = {}
+    used, consumed = {}, set()
     for root in roots:
         for link in root.findall("link"):
             if link.find("inertial") is None and link.find("visual") is None:
@@ -88,6 +101,8 @@ def test_t07_records_which_links_are_collision_free_and_why():
             checked += 1
             if link.find("collision") is not None:
                 with_collision += 1
+            elif link.get("name") in CONSUMED:
+                consumed.add(link.get("name"))
             else:
                 used[link.get("name")] = COLLISION_FREE[link.get("name")]["collision_free_reason"]
     # every exemption in the contract is for a link that exists somewhere in the matrix
@@ -95,6 +110,9 @@ def test_t07_records_which_links_are_collision_free_and_why():
     write_sidecar("T07", "collision", "every link with an inertial or visual has a collision or is collision_free", "PASS", {
         "expansions": len(roots), "link_instances_checked": checked, "with_collision": with_collision,
         "collision_free": {name: {"reason": reason, "owner": OWNERS[name]} for name, reason in sorted(used.items())},
+        "consumed_without_collision": {name: {"owner": CONSUMED[name],
+                                              "note": "another owner's frame (consumed_from): a visual without collision is that owner's decision"}
+                                       for name in sorted(consumed)},
     })
 
 
@@ -142,6 +160,19 @@ def test_t07_checker_passes_collision_or_a_listed_exemption_or_a_bare_frame():
 def test_t07_checker_fails_a_physical_link_without_collision(link, why):
     problems = collision_problems(_root(link), FREE)
     assert any("a: has an <inertial> or <visual> but no <collision>" in p for p in problems), why
+
+
+def test_t07_a_consumed_frame_without_collision_is_recorded_not_failed_and_ours_still_fails():
+    """platform-sw #70: its sensor frames have visuals and no collision. They are consumed, so T07 records them; a link of ours in the
+    same state still fails, and a consumed frame's collision without geometry still fails."""
+    root = _root(f"<link name='us_front_left'><visual>{BOX}</visual></link>", f"<link name='ours'><visual>{BOX}</visual></link>")
+    consumed = {"us_front_left": "platform-sw"}
+    problems = collision_problems(root, {}, consumed)
+    assert not any(p.startswith("us_front_left:") for p in problems)
+    assert any(p.startswith("ours: has an <inertial> or <visual> but no <collision>") for p in problems)
+    assert consumed_without_collision(root, consumed) == ["us_front_left"]
+    broken = _root("<link name='us_front_left'><visual><geometry><box size='1 1 1'/></geometry></visual><collision><geometry/></collision></link>")
+    assert any("without a <geometry>" in p for p in collision_problems(broken, {}, consumed))
 
 
 def test_t07_checker_fails_an_exemption_without_a_reason_and_a_collision_without_geometry():

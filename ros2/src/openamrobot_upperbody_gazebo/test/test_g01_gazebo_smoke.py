@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """G01: the combined robot in Gazebo, headless. Five arm controllers active, an arm goal completes, and nothing of Nav2's moved.
 
     sim.launch.py headless:=true    ->    gz sim -s, robot_state_publisher, ros_gz bridges, spawners, joint_state_publisher

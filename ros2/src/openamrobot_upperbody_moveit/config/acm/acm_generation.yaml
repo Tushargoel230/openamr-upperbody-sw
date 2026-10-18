@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: MIT
 schema_version: 2
 method: 'derived: scripts/derive_acm.py over the model''s kinematic tree and upstream''s own SRDF; no sampling, no seed (P12A)'
-date: '2026-10-13'
+date: '2026-10-16'
 base_plate: bp000
 lift_joint_position_m: 0.0
 moveit_version: 2.12.4
@@ -11,16 +12,16 @@ rules:
   everything_else: 'enabled: sampling falsifies and never certifies, so it is not a reason to disable a pair'
 counts:
   upstream_declared: 20
-  adjacent_derived: 18
-  constant_transform: 45
-  disabled_total: 83
+  adjacent_derived: 17
+  constant_transform: 58
+  disabled_total: 95
 deterministic: true
 contract:
   file: config/openamrobot.srdf
   what: 'every <disable_collisions> of the SRDF (section 1, upstream''s, and the derived block). This file is the contract: M03 validates it,
     and a change to it is a change to the contract'
-  fingerprint: sha256:2246faab583a0fc5984ca7a4d3a82eca3c9fb5c8a1b18217231a3b0c4f344681
+  fingerprint: sha256:50ba49b527af824a4cbb588046a5b8ea5da21d561ccd99e54bd4398e42f0c8d0
   pairs:
-    total: 83
-    Adjacent: 38
-    ConstantTransform: 45
+    total: 95
+    Adjacent: 37
+    ConstantTransform: 58

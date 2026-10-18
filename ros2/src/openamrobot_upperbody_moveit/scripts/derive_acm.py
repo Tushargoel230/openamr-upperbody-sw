@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Derive the collision matrix of config/openamrobot.srdf from the model, and propose it (or, with --write, replace the contract).
 
     ros2 run openamrobot_upperbody_moveit derive_acm.py [--base-plate bp000] [--srdf PATH] [--write | --proposal PATH] [--json OUT]

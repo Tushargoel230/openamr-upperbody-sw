@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Assemble the A7 evidence report. Called by run_a7_regression.sh after the tests ran.
 
     build_a7_evidence.py --since EPOCH [--step name=returncode ...] [--repo PATH]
@@ -57,7 +58,8 @@ A7_CHECKS = [
     ("M04", "a goal inside the nearest reachable structure volume (arm_profile_link) is rejected by planning (the base body is out of the arms' reach)"),
     ("M05", "per-hand gripper values: closed is each hand's own far limit, opposite signs (ADR-009 point 5); the single-number version fails both ways"),
     ("M06", "named-pose plans need some acceleration limit and are insensitive to its value across three orders of magnitude (the limits stay placeholders)"),
-    ("W03", "named poses that coincide with a joint limit, and how far (information; WARN only, gates nothing; true of the old mast body and the lift body alike)"),
+    ("M07", "at rest in Gazebo no joint sits within the joint_rest_margin_rad datum of either of its limits (FAIL; WARN for the joints whose rest pose is an "
+            "upstream limit; lift_joint is not measured, and says why)"),
     ("W04", "a gz server had to be force-stopped by the launch's stop helper (WARN; a server still running after that is the survivor check's FAIL, in the test that owns it)"),
     ("L01", "launch test: five controllers active on mock, one trajectory followed"),
     ("H01", "every test file is registered and every launch test checks that its processes started and exited cleanly"),
@@ -70,7 +72,7 @@ PACKAGES = {"gazebo": "openamrobot_upperbody_gazebo", "moveit": "openamrobot_upp
 EXPECTED_STEPS = ("colcon_test_gazebo", "colcon_test_moveit", "colcon_test_bringup")
 # A check recorded by one sidecar per run, and the runs it must have. M01 is once per lift stop: the cut order allows fewer (with the reason
 # recorded) through A7_M01_STOPS, and the report then says so.
-SIDECAR_REQUIRED = {"G01", "G02", "M01", "M02", "M03", "M04", "M05", "M06", "W03"}
+SIDECAR_REQUIRED = {"G01", "G02", "M01", "M02", "M03", "M04", "M05", "M06", "M07"}
 REFUSED_DIRTY = be.REFUSED_DIRTY
 
 
@@ -126,7 +128,7 @@ def clamp_totals(runs):
                                 "episodes": sum((c.get("diagnostic_only") or {}).get("episodes") or 0 for _, c in present)}}
 
 
-SIM_LAUNCH_CHECKS = ("G01", "G02", "M02")      # the launch tests that start a gz server and record the stop helper's report in their sidecars
+SIM_LAUNCH_CHECKS = ("G01", "G02", "M02", "M07")      # the launch tests that start a gz server and record the stop helper's report in their sidecars
 
 
 def gz_force_stop_check(sidecars):

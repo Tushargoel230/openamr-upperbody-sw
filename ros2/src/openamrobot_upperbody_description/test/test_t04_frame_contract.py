@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T04: every expansion honours config/frame_contract.yaml.
 
   R   present, with the contract's parent and type            -> FAIL if not
@@ -129,7 +130,7 @@ def test_t04_there_is_no_w_entry_and_the_near_field_frames_are_consumed_not_decl
     consumed = CONTRACT["consumed_from"]
     assert [c["owner"] for c in consumed] == ["platform-sw"]
     frames = consumed[0]["frames"]
-    assert frames == ["us_front_left", "us_front_right", "us_rear_left", "us_rear_right", "tof_front", "tof_rear"]
+    assert frames == ["us_front_left", "us_front_right", "us_rear_left", "us_rear_right", "tof_front", "tof_rear", "imu_link", "base_camera_link"]
     declared = {e["name"] for e in CONTRACT["entries"]}
     assert not declared & set(frames), "a consumed frame is also declared by this contract"
     stale = {"tof_front_left_link", "tof_front_right_link", "tof_rear_left_link", "tof_rear_right_link",

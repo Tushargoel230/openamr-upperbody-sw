@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T10: modelled mass, reported by owner. FAIL only if the modelled total exceeds `gross_mass_limit`.
 
 It REPORTS what the description models; it does not claim the robot weighs that. The battery, hub motors, electronics

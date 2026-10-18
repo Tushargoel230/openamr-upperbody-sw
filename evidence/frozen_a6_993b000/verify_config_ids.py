@@ -7,7 +7,7 @@ For every entry of index.json it recomputes the configuration id the way the pro
 scripts/print_config_id.py in the description package):
 
     id = "sha256:" + sha256(S).hexdigest()
-    S  = UTF-8 of the JSON object {canonical_urdf, mast_id, arm_package, hardware_profile, datums_revision,
+    S  = UTF-8 of the JSON object {canonical_urdf, mast_id, arm_package, hardware_profile, datums_revision,  # decision-allow: CONFIG-IDS historical: verifies the frozen mast-model config ids
          openarm_description_commit} with keys sorted, separators "," and ":", ASCII-escaped
     canonical_urdf = XML C14N 2.0 of the file, comments dropped, whitespace-only text stripped
 
@@ -26,7 +26,7 @@ HEADER_ID = re.compile(r"config_id (sha256:[0-9a-f]{64})")
 
 
 def config_id(text, entry, revision, upstream_commit):
-    members = {"canonical_urdf": ET.canonicalize(text, strip_text=True), "mast_id": entry["mast_id"],
+    members = {"canonical_urdf": ET.canonicalize(text, strip_text=True), "mast_id": entry["mast_id"],  # decision-allow: CONFIG-IDS historical: verifies the frozen mast-model config ids
                "arm_package": entry["arm_package"], "hardware_profile": entry["hardware_profile"],
                "datums_revision": revision, "openarm_description_commit": upstream_commit}
     payload = json.dumps(members, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")

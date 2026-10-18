@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """What every launch test must check after the launch has stopped: that the processes it needed started, and that none of them died.
 
 `launch_testing` runs the test methods while the launch is up and, unless the module says otherwise, never looks at how the processes ended:

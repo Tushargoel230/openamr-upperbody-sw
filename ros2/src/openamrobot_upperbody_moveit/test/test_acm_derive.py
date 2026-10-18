@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The collision matrix, derived: a pair is disabled only for a reason that can be shown (acm_derive.py), and every reason is recomputed here from the
 model. No ROS runtime and no simulator: the xacro Python API, the SRDF as a file, and a small forward-kinematics of the URDF's own joints.
 
@@ -162,23 +163,25 @@ def test_the_counts_the_report_states():
     labelled = {reason: sum(1 for r in pairs.values() if r == reason) for reason in set(pairs.values())}
     # P12A: 113 = 20 + 16 + 77. P15: the arms are above a prismatic joint now, so the pairs between the base and the arms are no longer
     # constant, and the mast's go with the mast: 83 = 20 + 18 + 45. Expected, and explained pair by pair in the next test.
-    assert len(pairs) == 83 and labelled == {"Adjacent": 38, "ConstantTransform": 45}
-    assert len(adjacent) == 36 and len(up) == 20
+    # Follow-up (a), 16 Oct: the lift column's two stages carry placeholder boxes, so lift_column_base_link and lift_carriage_link are
+    # geometry links: 95 = 20 + 17 + 58 (the column base joins the base side's constant set; the carriage becomes the arms' neighbour).
+    assert len(pairs) == 95 and labelled == {"Adjacent": 37, "ConstantTransform": 58}
+    assert len(adjacent) == 35 and len(up) == 20
     assert set(up) - adjacent == {("openarm_left_ee_link1", "openarm_left_ee_link2"), ("openarm_right_ee_link1", "openarm_right_ee_link2")}, \
         "the two finger pairs are siblings through two movable joints: upstream's declaration is their only reason"
-    assert {p for p, r in pairs.items() if r == "ConstantTransform"} == constant - adjacent - set(up) and len(constant - adjacent - set(up)) == 45
+    assert {p for p, r in pairs.items() if r == "ConstantTransform"} == constant - adjacent - set(up) and len(constant - adjacent - set(up)) == 58
 
 
 @pytest.mark.parametrize("base_plate", BASE_PLATES)
-def test_the_by_construction_set_is_45_not_77_because_a_prismatic_joint_now_lies_between_the_base_and_the_arms(base_plate):
+def test_the_by_construction_set_is_58_not_77_because_a_prismatic_joint_now_lies_between_the_base_and_the_arms(base_plate):
     """P12A certified 77 pairs by construction (P11 got 77 by a different route). P15 EXPECTS fewer: a prismatic joint between two links
     removes them from what a fixed transform certifies, and the lift is such a joint. This asserts the shrink is exactly that and
     nothing else: a constant pair has both its links on one side of lift_joint, and every pair that was constant only because the
-    mast was fixed has left the set. 45 is what remains: the base's own links among themselves and, above the lift, the arm
-    profile and the arm base links among themselves."""
+    mast was fixed has left the set. 58 is what remains: the base's own links among themselves (the lift column's fixed stage,
+    lift_column_base_link, among them since follow-up (a)) and, above the lift, the arm profile and the arm base links among themselves."""
     root = urdf_root(base_plate)
     constant = derive_mod.constant_pairs(root) - derive_mod.structural_adjacent(root) - set(upstream_pairs())
-    assert len(constant) == 45
+    assert len(constant) == 58
     t = split.urdf_tree(root)
     def above_the_lift(link):
         return "lift_joint" in [j for j in split.movable_joints_between(t, "base_footprint", link)]

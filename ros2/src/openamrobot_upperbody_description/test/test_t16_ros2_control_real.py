@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """T16: the `real` profile expands with openarm_hardware/OpenArmHW and its CAN parameters. Expansion only.
 
 Nothing here loads the plugin, opens a CAN interface or launches anything: `openarm_hardware` cannot even be built in

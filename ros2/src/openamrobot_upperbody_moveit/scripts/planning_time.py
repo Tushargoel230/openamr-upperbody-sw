@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """How long do the twelve named-pose plans take, with a given SRDF? (P12A: the cost of enabling every pair that has no reason to be disabled.)
 
     ros2 run openamrobot_upperbody_moveit planning_time.py [--srdf PATH] [--repeats 10] [--base-plate bp000] [--json OUT]

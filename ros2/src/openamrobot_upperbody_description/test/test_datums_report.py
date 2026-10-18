@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """scripts/datums_report.py prints the datums by status and source plus the placeholder list, and exits 0."""
 import os
 import subprocess

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # OMPL planning configuration: MoveIt's defaults, nothing tuned (A7). The pipeline plugin and the request/response adapters are the
 # ones moveit_configs_utils ships for the installed MoveIt 2.12 (default_configs/ompl_planning.yaml, copied); the planner
 # configurations come from default_configs/ompl_defaults.yaml, which MoveItConfigsBuilder merges in because this file has no

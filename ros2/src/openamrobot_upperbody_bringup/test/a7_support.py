@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Shared by the M01 and M02 launch tests: the named-pose sequence, the settle-and-measure step, and the per-run sidecar."""
 import os
 import sys
@@ -11,7 +12,8 @@ from openamrobot_upperbody_moveit.named_poses import ARM_GROUP, GRIPPER_GROUP, G
 # OPENAMR_A7=1, which run_a7_regression.sh sets. Otherwise they SKIP with this reason, and the A6 verification neither starts Gazebo nor
 # depends on an A7 check. A skipped M01/M02 is never a result: the A7 report treats a missing sidecar as a FAIL.
 A7_ENABLED = os.environ.get("OPENAMR_A7") == "1"
-SKIP_REASON = "A7 simulation check: set OPENAMR_A7=1 (scripts/run_a7_regression.sh does) so verify_a6.sh does not start it"
+SKIP_REASON = ("A7 simulation check: set OPENAMR_A7=1 (scripts/run_a7_regression.sh does) so verify_a6.sh does not start it; "
+               "tracking: openAMRobot/openamr-upperbody-sw#16")  # skip tracked in openAMRobot/openamr-upperbody-sw#16
 TOLERANCE = 0.01            # rad: the final joint error every named pose must stay under (A7)
 VELOCITY_SCALING = 0.5      # explicit in every request: the SRDF-side default (0.1) would only make the tests slower
 ACCELERATION_SCALING = 0.5
@@ -138,28 +140,67 @@ CONTROLLERS_ACTIVE_WITHIN_S = 120.0     # wall s from the call; the controller m
 def wait_for_controllers_active(node, timeout_s=CONTROLLERS_ACTIVE_WITHIN_S, names=ARM_CONTROLLERS, manager="/controller_manager"):
     """Block until every controller in `names` reports `active`, or `timeout_s` of wall time passes. -> (ok, {name: state}, waited_s).
     A pose sent before this is true is a test of the harness, not of the robot (a controller that is not active refuses or drops the goal),
-    so a caller treats `ok` False as a FAIL of its own with the states in the message, and never sends the pose."""
+    so a caller treats `ok` False as a FAIL of its own with the states in the message, and never sends the pose.
+
+    One absolute deadline (PR #14 review): the service wait, each request, each spin and each sleep are capped by the time that is left, and
+    an all-active answer counts only if it arrived before the deadline. Before, each request had a fresh 2 s and success was not checked
+    against the deadline, so an answer at 1.5 s of a 1.0 s budget returned ok. test_a7_controller_deadline.py pins it."""
     import rclpy
     from controller_manager_msgs.srv import ListControllers
     started = time.monotonic()
+    deadline = started + timeout_s
+
+    def left():
+        return deadline - time.monotonic()
+
+    def waited():
+        return round(time.monotonic() - started, 1)
+
     client = node.create_client(ListControllers, f"{manager}/list_controllers")
     states = {}
     try:
-        if not client.wait_for_service(timeout_sec=timeout_s):
-            return False, states, round(time.monotonic() - started, 1)
-        while time.monotonic() - started < timeout_s:
+        if left() <= 0 or not client.wait_for_service(timeout_sec=max(0.0, left())):
+            return False, states, waited()
+        while left() > 0:
             future = client.call_async(ListControllers.Request())
-            end = time.monotonic() + 2.0
+            end = min(time.monotonic() + 2.0, deadline)
             while not future.done() and time.monotonic() < end:
-                rclpy.spin_once(node, timeout_sec=0.05)
+                rclpy.spin_once(node, timeout_sec=max(0.0, min(0.05, end - time.monotonic())))
             if future.done() and future.result() is not None:
+                answered_in_time = time.monotonic() <= deadline
                 states = {c.name: c.state for c in future.result().controller}
-                if all(states.get(name) == "active" for name in names):
-                    return True, states, round(time.monotonic() - started, 1)
-            time.sleep(0.25)
-        return False, states, round(time.monotonic() - started, 1)
+                if answered_in_time and all(states.get(name) == "active" for name in names):
+                    return True, states, waited()
+            if left() > 0:
+                time.sleep(min(0.25, left()))
+        return False, states, waited()
     finally:
         node.destroy_client(client)
+
+
+def expected_rest_joints(urdf_xml, not_measured):
+    """(expected, also_not_measured) for M07, from the MODEL, not from what happened to be published (PR #14 review): every joint with limits
+    that the model puts under ros2_control (what joint_state_broadcaster publishes on /arm/joint_states), minus the explicit exclusions in
+    `not_measured`. A limited joint outside ros2_control (the mimic finger_joint2s) is returned in `also_not_measured` with its reason, so the
+    report says so instead of the joint silently not appearing."""
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(urdf_xml)
+    limited = {j.get("name") for j in root.iter("joint")
+               if j.get("type") in ("revolute", "prismatic") and j.find("limit") is not None}
+    controlled = {j.get("name") for system in root.iter("ros2_control") for j in system.findall("joint")}
+    expected = sorted((limited & controlled) - set(not_measured))
+    also = {name: "not under ros2_control (a mimic or undriven joint): joint_state_broadcaster does not publish it"
+            for name in sorted(limited - controlled - set(not_measured))}
+    return expected, also
+
+
+def coverage_problems(readings, expected, min_samples):
+    """{"missing": [...], "too_few_samples": {joint: n}} for M07: an expected joint that never appeared, or appeared fewer than `min_samples`
+    times in the window, means the window did not measure it. Empty lists/dicts mean complete coverage; anything else is a FAIL of the
+    measurement (never a PASS, never a WARN)."""
+    missing = [j for j in expected if not readings.get(j)]
+    short = {j: len(readings[j]) for j in expected if readings.get(j) and len(readings[j]) < min_samples}
+    return {"missing": missing, "too_few_samples": short}
 
 
 def stack_alive(proc_info):
