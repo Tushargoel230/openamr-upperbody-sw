@@ -153,7 +153,7 @@ The 19 skips are listed in #16, and each reason names it. `config_id`: 14 of the
 - `tl3_400` is not verified: it is refused until its supplier data exist.
 - No human visual review in RViz or Gazebo: V01 is WARN; L1000/L1175/L1350 × bp000/bp050 are still to be looked at.
 - Not run on a hosted CI runner or on a machine with a GPU. All runs are from one VM.
-- The gz-sim teardown hang (the server ignores the stop request) is not fixed. It did not occur in these runs; the detached stop helper still forces such a server, and the run then FAILs.
+- The gz-sim teardown hang (the server ignores the stop request) is not fixed; see "Findings that are not resolved" below. The detached stop helper forces such a server; since P18 that is a **WARN (W04)**, not a FAIL, and a server still running after the force-stop is still the launch test's FAIL.
 - A7 on platform-sw `8531089` is not green: M03 and AUX fail on the outdated negative-test example pair (see Tests; one-line fix proposed). On `d619012` it also failed on #70's caster overlap and on the M01 race, both fixed since. #71 is not merged.
 - On `d619012`, `colcon test` of the five packages was not run as a separate step; its counts come from the A6 and A7 runs. On `8531089` it was run.
 - The #70 sensor values are checked against #70's own table, not against the CAD.
@@ -161,6 +161,16 @@ The 19 skips are listed in #16, and each reason names it. `config_id`: 14 of the
 - The six conditional skips that did not trigger here (C02, C01, datums revision, W02, SRDF import) are listed in #16 but not changed.
 - V01's recorded measurement text in `build_evidence.py` still says "0 of 478 enabled pairs" (P16). The matrix now enables 535 of 630; V01 has not been re-measured.
 - The message of `ed8c56d` says the header comments change `config_id`. That is not so: the canonical URDF is `ET.canonicalize`d, which drops comments. The changed ids come from `b45d8f6`.
+
+## Findings that are not resolved
+
+Stated as they are. None of the three gates anything.
+
+- **The rise of the M02 clamp activation count, from about 200 to about 1800 per run, is unexplained.** It gates nothing. The count scatters 646 to 1054 inside one unchanged configuration (1795 / 957 / 1832 on three runs of a tests-only diff), so it is retired as a criterion and reported as `diagnostic_only`. Why the new body's right finger rests within 1e-5 rad of its open limit while the left one rests 2e-4 to 5e-4 inside is not explained (cause unknown; the effort at rest was measured in both trees, `evidence/m02_bisect/RESULTS.md`). The M02 bisect is closed.
+- **The rest-position hypothesis was tested and refuted.** The hypothesis was that the lift body puts the right finger on its open limit where the old mast body (`7daa2ab`) did not. The old body rests within 2.5e-5 rad of the same four limits (both `joint4`, both `finger_joint1`), and the finger effort at rest has the same sign in both bodies: a gripper's `open` and the arm's `home` are limits in upstream's joint definitions. The named poses that sit on a limit are listed for both bodies in `evidence/w03/` as evidence files; W03 is not a registered check. This does not settle M07: M07 stays as Alex decided it (WARN on those four joints), and removing it is his call.
+- **The gz-sim issue is drafted and UNFILED.** A `gz sim` server that is asked to stop sometimes never begins its teardown and survives SIGINT, the stop request and SIGTERM (a segfault in a libgz-sim8 thread, and a hang). The draft, with the counts and a reproduction, is `docs/issues/gz-sim_server_teardown_segfault_and_hang.md`. **It has not been filed: the workspace has no GitHub credential. Issue URL: `<TO BE FILLED IN WHEN FILED>`.** A bare server (empty world, no ROS) did not reproduce it: 30 of 30 clean in each of two stop modes.
+
+**What M02 gates on, and what it read.** Two numbers: readings beyond the epsilon (must be 0) and the largest overshoot magnitude (must be below the epsilon, 1e-5 rad). In the three A7 runs of P18 (`bb39c83`): **0 excursions in all three; largest overshoot 1.42e-6 / 2.37e-6 / 1.76e-6 rad**, against the 1e-5 epsilon. The epsilon has not been widened. This step's three runs are under "Tests".
 
 ## Dependencies
 
@@ -311,7 +321,9 @@ Where this text and the sections above disagree, the sections above describe the
 - M07 is now WARN, not FAIL;
 - the column now has placeholder geometry;
 - the collision matrix has 95 disabled pairs;
-- A7 is 13 PASS / 2 WARN / 0 FAIL.
+- a gz server the stop helper had to force is a WARN (W04), not a FAIL; a server still running after that is a FAIL, as before;
+- A7 is 13 PASS / 2 WARN / 0 FAIL;
+- the "cause unknown" sentence on the right finger under "Known gaps" is restated, with what was measured, under "Findings that are not resolved"; and this step's results (the merge head, platform-sw pinned) are under "Tests".
 
 ### Why A6 and A7 are one PR
 
