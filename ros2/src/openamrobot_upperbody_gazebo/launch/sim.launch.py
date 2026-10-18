@@ -68,8 +68,8 @@ import time
 # the launch's state), in this order: SIGINT to the `gz sim` processes; after GZ_STOP_RETRY_AFTER_S, if one is still there, the /server_control
 # request as well; after GZ_STOP_GRACE_S, SIGTERM and then SIGKILL. The servers are followed by pid, because launch's SIGTERM of the shell at 5 s
 # reparents them out of its tree. The helper writes its report to gz_stop_report_path() BEFORE it signals anything harder than SIGINT, and
-# launch_guard.gz_server_shutdown_report reads it (from the evidence directory): a server that had to be forced is a FAIL of the run that did it,
-# never a quiet pass.
+# launch_guard.gz_server_shutdown_report reads it (from the evidence directory): a server that had to be forced is a WARN (A7 check W04), and one that is
+# still running after that is the survivor check's FAIL.
 GZ_STOP_RETRY_AFTER_S = 3.0     # s after the SIGINT before the service request is made as well (a stop takes 1.3-1.8 s when it works)
 GZ_STOP_GRACE_S = 8.0           # s after the first request that a server may take to go on its own; then SIGTERM, then SIGKILL
 GZ_STOP_TERM_WAIT_S = 1.0       # s between the SIGTERM and the SIGKILL

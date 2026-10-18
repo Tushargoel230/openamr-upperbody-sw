@@ -75,3 +75,47 @@ def gripper_sign_problems(states, limits, tolerance=1e-4):
         problems.append(f"closed values {closed['left']:+.4f} (left) and {closed['right']:+.4f} (right) do not have opposite signs: "
                         "one hand's `closed` is another's `open` end")
     return problems
+
+
+# --- W03: named poses that coincide with a joint limit (P18) ------------------------------------------------------------------------------
+# WARN only, gating nothing. A joint commanded to a value that IS one of its limits is a fact about the pose definitions (upstream's `home` is
+# joint 4 at its lower limit 0, a gripper's `open` is the end of its range), not a defect of any body: it is true of the old mast body and of
+# the lift body alike, and the check reports it for whichever SRDF and URDF it is given. It replaced M07, which measured a simulated rest
+# position against an invented margin and so failed upstream's own design for being itself.
+ON_LIMIT_TOLERANCE = 1e-6      # rad. NOT a margin: the numeric slack within which two numbers written in files are the same number
+
+
+def poses_on_limits(states, limits, tolerance=ON_LIMIT_TOLERANCE):
+    """Every (group, named pose, joint) whose value equals one of the joint's URDF limits to within `tolerance`, with the distance.
+    `states` is read_group_states(srdf), `limits` is urdf_joint_limits(urdf). A value past a limit has a negative distance and is listed
+    too. Joints with no URDF limit are not in `limits` and are listed under the second return value, never silently skipped."""
+    rows, unlimited = [], []
+    for (group, pose), joints in sorted(states.items()):
+        for joint, value in sorted(joints.items()):
+            if joint not in limits:
+                unlimited.append({"group": group, "pose": pose, "joint": joint})
+                continue
+            lower, upper = limits[joint]
+            to_lower, to_upper = value - lower, upper - value
+            distance, which = (to_lower, "lower") if to_lower <= to_upper else (to_upper, "upper")
+            if abs(distance) <= tolerance:
+                rows.append({"group": group, "pose": pose, "joint": joint, "value_rad": value, "limit": which,
+                             "limit_rad": lower if which == "lower" else upper, "distance_rad": distance})
+    return rows, unlimited
+
+
+def on_limit_report(srdf_text, urdf_text, tolerance=ON_LIMIT_TOLERANCE):
+    rows, unlimited = poses_on_limits(read_group_states(srdf_text), urdf_joint_limits(urdf_text), tolerance)
+    return {"tolerance_rad": tolerance, "poses_on_a_limit": rows, "joints_on_a_limit": sorted({r["joint"] for r in rows}),
+            "named_pose_joints_without_a_urdf_limit": unlimited}
+
+
+if __name__ == "__main__":
+    import argparse
+    import json
+    parser = argparse.ArgumentParser(description="W03: named poses of an SRDF that coincide with a joint limit of a URDF")
+    parser.add_argument("srdf")
+    parser.add_argument("urdf")
+    args = parser.parse_args()
+    with open(args.srdf) as f_srdf, open(args.urdf) as f_urdf:
+        print(json.dumps(on_limit_report(f_srdf.read(), f_urdf.read()), indent=1))

@@ -114,8 +114,7 @@ effort of similar size (+1.5e-4 against -1.86e-4), sits 2e-4 to 5e-4 inside. Why
 What the `effort` number physically is (the servo's command, or the joint's constraint force: the interface does not say, and no contact force
 or joint wrench was read, which would take a force-torque sensor in the model). **Cause unknown, measured not guessed.** Not bisected further.
 
-**What this changes elsewhere (for the architecture chat, not decided here).** M07 as specified ("no joint's rest position within a margin of
-either limit") FAILS the old body on the same four joints for any margin above about 2.5e-5 rad, so the old body was not "inside" in the sense
-M07 tests; the finding is that the zero pose and the open pose are limits, not that the option-B composition put a finger on one. The
-margin datum was chosen from the scatter measured here (between-run spread of a rest position up to 2.8e-4 rad, left finger), not tuned to a
-verdict; at 1e-3 rad M07 FAILs those four joints in the new tree.
+**What this changed elsewhere (P18).** The check built on the refuted hypothesis, M07, was **withdrawn**, with its margin datum: it failed the old body
+on the same four joints for any margin above about 2.5e-5 rad, and its claim was false independently of that, because a gripper's `open` and
+the arm's `home` are limits in upstream's own joint definitions. W03 (WARN only, gates nothing) replaced it and lists the named poses that coincide
+with a joint limit, with the distance, for the old body and the lift body alike (`evidence/w03/`: the same four joints, eight poses, in both).

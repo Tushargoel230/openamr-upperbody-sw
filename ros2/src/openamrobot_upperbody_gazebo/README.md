@@ -163,8 +163,8 @@ which also writes the `gazebo` evidence report. Each test starts a headless serv
 | G01 | 90 s (about 35 s), default engine (DART) | five controllers `active`; an arm goal completes and tracks while the other arm and the base stay still; platform-sw's bridge topics exist by name and type; `/cmd_vel` moves the base and `/odom` reports it; one publisher of `odom -> base_footprint`; `/joint_states` has one publisher carrying wheels, arms and `lift_joint` once each |
 | G02 | 90 s (about 20 s), Bullet-Featherstone passed explicitly | both grippers close, and `finger_joint2` follows `finger_joint1` in the physics (link poses, not `/joint_states`) |
 
-G02 and G01 also assert, after their launch has been torn down, that **no `gz sim` of their own `GZ_PARTITION` is still alive** (P16; M02 and
-M07, in the bringup package, ask the same through `stack_healthy(simulator=True)`): the ruby wrapper is what the launch owns and what the process
+G02 and G01 also assert, after their launch has been torn down, that **no `gz sim` of their own `GZ_PARTITION` is still alive** (P16; M02, in the
+bringup package, asks the same through `stack_healthy(simulator=True)`): the ruby wrapper is what the launch owns and what the process
 guard reads, and the server it forks was left running after about 2 of 8 A7 runs with nothing noticing (after G02 in P15; after G01 in the
 second evidence pass of P16, where it ran at about three cores until the end of the run and M02 failed a pose). It is a FAIL, never a WARN, and it
 keys on the partition the test put in its environment before the launch (every process of the launch inherits it), so a simulator of another run,
@@ -185,9 +185,11 @@ request was never started at all because launch refuses to start an action once 
 launch and starts a detached helper (`sim.launch.py` run as a script, which imports nothing of ROS): SIGINT to the `gz sim` processes (what Ctrl-C
 does; 24 of 24 launches stopped in 1.3 to 1.5 s), the `/server_control` request as well if one is still there after 3 s, SIGTERM then SIGKILL after
 8 s. The servers are followed by pid, not by their place in the process tree, because launch's SIGTERM of the shell reparents them out of it.
-**A server that had to be forced is a FAIL of the run that did it**: the helper writes its report (`/tmp/oa_gz_stop_<partition>.json`) before it
-sends SIGTERM, and `launch_guard.gz_server_shutdown_report` lists such a server among the survivors (`forced_by_the_stop_helper`) even though it is
-gone by the time the check runs. Nothing is allow-listed and the detector is unchanged for a server that is still running. What was **not** found:
+**A server that had to be forced is a WARN, check ID W04, in the A7 report** (P18; it was a FAIL in P17): the helper writes its report
+(`gz_stop_<partition>.json` in the evidence directory) before it sends SIGTERM, `launch_guard.gz_server_shutdown_report` records it under `forced`,
+and `build_a7_evidence.py` turns the sidecars' reports into W04. **The survivor check is unchanged and runs after the force-stop**: it waits up to
+10 s for the run's `gz sim` processes to go, longer than the helper's 9 s, and any that is still running then is a survivor and a FAIL of the
+launch test that owns it, a server that survived its own force-stop included. Nothing is allow-listed. What was **not** found:
 why a server hangs in its teardown after being asked to stop; that is inside gz-sim and gz_ros2_control, not in this package. `test_sim_launch_shutdown.py`
 pins the helper on decoy processes (including a server that outlives its shell, and a hung server that ignores SIGTERM).
 

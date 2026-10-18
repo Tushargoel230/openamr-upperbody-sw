@@ -5,6 +5,21 @@ All notable changes to this repository. Evidence for the description is static a
 
 ## [Unreleased]
 
+### Changed (P18): M07 withdrawn, W03 and W04 added
+
+- **M07 is withdrawn**, with its margin datum `joint_rest_margin_rad` and the datums revision bump (the `config_id`s are those of before P17 again). It was
+  built on the hypothesis that the new body puts the right finger on a limit where the old body does not; P17's own measurement refuted that (same effort
+  sign in both bodies, the old body also within 2.5e-5 rad of the same four limits), and the claim was false regardless: a gripper's `open` and the arm's
+  `home` are limits in upstream's joint definitions. The P17 entries below that mention M07 describe what was built and then withdrawn.
+- **W03** (A7 report, WARN only, gates nothing): the named poses of the SRDF that coincide with a joint limit, with the distance. A function of the SRDF and
+  URDF it is given, so it lists the same four joints (both `joint4`, both `finger_joint1`; eight poses) for the old mast body (`7daa2ab`) and the lift body
+  (`evidence/w03/`).
+- **W04** (A7 report, WARN): a `gz sim` server that the launch's stop helper had to force. It was a FAIL in P17. **The survivor check is unchanged and runs
+  after the force-stop**: any `gz sim` of the run still alive when it looks (it waits up to 10 s, the helper needs at most about 9 s) is a survivor and a
+  FAIL, including one that survived its own force-stop; a test pins both.
+- The gz-sim issue (segfault in a libgz-sim8 thread during teardown; the hang that ignores SIGTERM) is drafted in `docs/issues/` with the counts and a
+  reproduction. **It is not filed: the workspace has no GitHub credential.** A bare server (empty world, no ROS) did not reproduce it: 30 of 30 clean.
+
 ### Added / Changed / Fixed (P17)
 
 - **The simulator is stopped once per launch, by a detached helper, and a server that has to be forced is a FAIL.** `sim.launch.py`'s `OnShutdown`

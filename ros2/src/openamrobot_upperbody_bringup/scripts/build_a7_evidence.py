@@ -57,8 +57,8 @@ A7_CHECKS = [
     ("M04", "a goal inside the nearest reachable structure volume (arm_profile_link) is rejected by planning (the base body is out of the arms' reach)"),
     ("M05", "per-hand gripper values: closed is each hand's own far limit, opposite signs (ADR-009 point 5); the single-number version fails both ways"),
     ("M06", "named-pose plans need some acceleration limit and are insensitive to its value across three orders of magnitude (the limits stay placeholders)"),
-    ("M07", "at rest in Gazebo no joint sits within the joint_rest_margin_rad datum of either of its limits (FAIL, not WARN; lift_joint is not measured, "
-            "and says why)"),
+    ("W03", "named poses that coincide with a joint limit, and how far (information; WARN only, gates nothing; true of the old mast body and the lift body alike)"),
+    ("W04", "a gz server had to be force-stopped by the launch's stop helper (WARN; a server still running after that is the survivor check's FAIL, in the test that owns it)"),
     ("L01", "launch test: five controllers active on mock, one trajectory followed"),
     ("H01", "every test file is registered and every launch test checks that its processes started and exited cleanly"),
     ("H02", "every test CMake registered left a result file (nothing registered but not run)"),
@@ -70,7 +70,7 @@ PACKAGES = {"gazebo": "openamrobot_upperbody_gazebo", "moveit": "openamrobot_upp
 EXPECTED_STEPS = ("colcon_test_gazebo", "colcon_test_moveit", "colcon_test_bringup")
 # A check recorded by one sidecar per run, and the runs it must have. M01 is once per lift stop: the cut order allows fewer (with the reason
 # recorded) through A7_M01_STOPS, and the report then says so.
-SIDECAR_REQUIRED = {"G01", "G02", "M01", "M02", "M03", "M04", "M05", "M06", "M07"}
+SIDECAR_REQUIRED = {"G01", "G02", "M01", "M02", "M03", "M04", "M05", "M06", "W03"}
 REFUSED_DIRTY = be.REFUSED_DIRTY
 
 
@@ -124,6 +124,36 @@ def clamp_totals(runs):
             "diagnostic_only": {"label": CLAMP_DIAGNOSTIC_LABEL,
                                 "activations": sum((c.get("diagnostic_only") or {}).get("activations") or 0 for _, c in present),
                                 "episodes": sum((c.get("diagnostic_only") or {}).get("episodes") or 0 for _, c in present)}}
+
+
+SIM_LAUNCH_CHECKS = ("G01", "G02", "M02")      # the launch tests that start a gz server and record the stop helper's report in their sidecars
+
+
+def gz_force_stop_check(sidecars):
+    """W04 from the sidecars of the launch tests: WARN if the stop helper had to signal a server in any of them (the server accepted the stop
+    and did not go: a finding, not a failure of the run), PASS if every launch's server stopped on request, NOT_RUN when a launch test left no
+    helper report to read (that is a harness defect, never a pass). A server that survived even its force-stop is not W04's business: the
+    launch test's own survivor check FAILs it."""
+    launches, forced, unread = {}, [], []
+    for check_id in SIM_LAUNCH_CHECKS:
+        docs = sidecars.get(check_id) or []
+        if not docs:
+            unread.append(f"{check_id}: no sidecar")
+            continue
+        helper = ((docs[0].get("details") or {}).get("gz_server_after_shutdown") or {}).get("stop_helper")
+        if not helper:
+            unread.append(f"{check_id}: no stop-helper report in the sidecar")
+            continue
+        launches[check_id] = {k: helper.get(k) for k in ("state", "elapsed_s", "retried_with_service", "interrupt", "signals")}
+        if helper.get("state") == "force_stopped":
+            forced.append(check_id)
+    details = {"launches": launches, "forced": forced}
+    if unread:
+        return be.NOT_RUN, {**details, "reason": "; ".join(unread)}
+    if forced:
+        return "WARN", {**details, "problems": [f"the stop helper had to signal the gz server of {', '.join(forced)} (it accepted the stop request and "
+                                                "did not go; SIGINT, the service request and SIGTERM were ignored or it was SIGKILLed); nothing was left running"]}
+    return "PASS", details
 
 
 def combine_multi(check_id, counts, docs, expected_stops, missing=None):
@@ -274,6 +304,8 @@ def build(args):
             result, details = combine_multi("M01", counts.get("M01"), docs, stops, missing.get("M01"))
         elif check_id == "M02":
             result, details = combine_multi("M02", counts.get("M02"), docs, (SIM_LIFT_STOP,), missing.get("M02"))
+        elif check_id == "W04":
+            result, details = gz_force_stop_check(sidecars)
         elif check_id == "V01":
             result, details = "WARN", be.v01_details(8)
         elif check_id == "I01":
