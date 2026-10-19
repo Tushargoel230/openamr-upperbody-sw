@@ -44,7 +44,7 @@ All notable changes to this repository. Evidence for the description is static a
   exact payload, not merely the raw URDF/Xacro file (Satya's review). The lift stops are calibration IDs, not configuration axes (ADR-010 as corrected by rev19.0).
 - **The 1-in-7 figure was an unbacked claim.** A report to the architecture chat in P16 said `parameter_bridge` exits -11 at shutdown in about 1 of 7 G02 runs. The repository has no
   such record: no -11 bridge exit in any P16 or P17 report or log (the bridge exits recorded before P19 are SIGABRT; one G02 FAIL in P17's 36 runs was a JSON-parsing bug in the test).
-  **The only recorded rate is 2 of 48 launches since P18.** Recorded here so the claim is not quietly dropped.
+  **The only recorded rate is 2 of 60 launches since P18.** Recorded here so the claim is not quietly dropped.
 - `PR14_BODY.md`: states why W03 does not replace M07 (W03 is static, M07 dynamic; "a static named-pose report does not establish dynamic sample coverage"), that M07 is Alex's as
   written, and that **one agreed rest-state rule, including what happens to missing joint-state evidence, is still pending with Alex and Om**.
 
@@ -61,7 +61,7 @@ All notable changes to this repository. Evidence for the description is static a
   and M07. **The survivor check is unchanged and runs after the force-stop**: any `gz sim` of the run still alive when it looks (it waits up to 10 s,
   the helper needs at most about 9 s) is a survivor and a FAIL, including one that survived its own force-stop; a test pins both.
 - **platform-sw is pinned at `dfd44a5`** (#70 + #71; P20). A second upstream issue is drafted, `docs/issues/ros_gz-bridge_teardown_segfault.md` (`parameter_bridge` SIGSEGV at
-  shutdown, 2 of 24 launches on that pin); **not filed**. The process guard still does not allow SIGSEGV for `parameter_bridge`.
+  shutdown, 2 of 36 launches on that pin); **not filed**. The process guard still does not allow SIGSEGV for `parameter_bridge`.
 - **RViz screenshots** at the three lift stops x two base plates, from real RViz2 (`evidence/renders/rviz_*.png`, `evidence/renders/rviz/` for the launch, config and window grab that made them).
 - `docs/pr/PR1_BODY.md` is deleted; `docs/pr/PR14_BODY.md` is the body of #14 and carries the open findings.
 - The gz-sim issue (segfault in a libgz-sim8 thread during teardown; the hang that ignores SIGTERM) is drafted in `docs/issues/` with the counts and a

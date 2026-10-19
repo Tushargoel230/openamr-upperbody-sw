@@ -231,3 +231,21 @@ casters) that #71 fixes. Tested code `24c66f5` (the pushed head adds only these 
   P17's 36 of 36 before the spawner change were 1.32 to 1.44 s: the timing is the stop helper's and does not distinguish the spawner change.
 - **M02**: 0 excursions in all three; largest overshoot 1.61e-6, 1.33e-6, 1.71e-6 rad against 1e-5 (not widened). **M07** WARN on the four joints in all three.
 
+## P21
+
+Tested code `fe2e821`: W04 reads incomplete evidence as NOT_RUN (Mohammad's finding), the M03 caster-clearance regression (platform-sw #71), the `config_id` payload note, the
+PR-body statements on W03 and M07 (`CHANGELOG.md`, P21). platform-sw `dfd44a5`, clean tree; the pushed head adds only these reports and documents.
+
+| file | what | platform-sw | result |
+|---|---|---|---|
+| `20261019T003746Z_dev.json`, `...T004121Z_dev.json`, `...T004454Z_dev.json` | A6 suite, runs 1 to 3 | `dfd44a5` | 25 PASS, 3 WARN (E01, W02, V01), 0 FAIL, 0 NOT_RUN, each |
+| `20261019T005239Z_a7.json`, `...T010031Z_a7.json`, `...T010818Z_a7.json` | A7, runs 1 to 3 | `dfd44a5` | **14 PASS, 2 WARN (M07, V01), 0 FAIL, 0 NOT_RUN, each**; AUX 131 tests, 0 failed; H01 and H02 PASS |
+
+- **`parameter_bridge` SIGSEGV: 0 in these 12 launches** (one bridge exit -6, allowed, in run 3). Cumulative: **2 of 60** launches since P18 (P18 12, P19 on `d619012` 12, P19 on `dfd44a5` 12, P20 12, P21 12);
+  on `dfd44a5` alone **2 of 36**, both in P19, both G02 `base_joint_states_bridge`; A7 runs on `dfd44a5`: 9, of which 2 FAILED (G02, AUX) and 7 passed with 0 FAIL. Not allow-listed.
+- **W04**: PASS in all three (12 launches, all `stopped`, 1.33 to 1.43 s). It now reads only `stopped` and `force_stopped` as results; see `CHANGELOG.md`, P21.
+- **M02**: 0 excursions in all three; largest overshoot 1.28e-6, 1.99e-6, 2.15e-6 rad against 1e-5 (not widened). **M07** WARN on the four joints in all three.
+- **The 1-in-7 search.** No `parameter_bridge` exit -11 in any P16 or P17 report or log: the twelve P16 A7/A6 reports (`20261014T12*` and `T13*`, on `9bc327c` and `aa94fc3`) mention neither -11 nor
+  -6 for the bridge, and the 36-run orphan count, the shutdown timings and the bisect logs have none. The only recorded bridge crash before P19 is one SIGABRT (-6) in a P12A G01 log
+  (`docs/verification.md`). The claim in P16's report to the architecture chat was unbacked and is recorded as such in `CHANGELOG.md`.
+

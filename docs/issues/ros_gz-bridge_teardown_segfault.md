@@ -41,10 +41,11 @@ the gz server's `controller_manager.pal_statistics` teardown lines were being pr
 | 3 runs, platform package at `d619012` | 12 | 0 | 0 |
 | 3 runs, platform package at `dfd44a5` | 12 | **2** (runs 2 and 3, both in the Bullet-Featherstone gripper test) | 1 (the other bridge, run 2) |
 | 3 more runs, platform package at `dfd44a5`, a few hours later, same code | 12 | 0 | 1 |
+| 3 more runs, platform package at `dfd44a5`, a few hours later, with test-only changes | 12 | 0 | 1 |
 
-That is **2 of 48 launches in total, 2 of 24 on the one platform package where it was seen**; the two sets of three on that package ran the same code a few hours apart and gave 2 and 0, so we cannot say the
+That is **2 of 60 launches in total, 2 of 36 on the one platform package where it was seen**; the three sets of three on that package ran within a day of each other and gave 2, 0 and 0, so we cannot say the
 rate depends on anything we changed or on the platform package. Both crashes were in the same launch test (the gripper test, Bullet-Featherstone), in the same bridge instance. We have not
-run a larger sample and have no claim about the true rate. **The only recorded rate is 2 of 48 launches since P18.** (An earlier figure from this project, about 1 in 7 G02 runs, appeared in a report with no evidence behind it and was never recorded; we searched our earlier reports and logs and found no SIGSEGV of this process in them. Please do not rely on it.)
+run a larger sample and have no claim about the true rate. **The only recorded rate is 2 of 60 launches since P18.** (An earlier figure from this project, about 1 in 7 G02 runs, appeared in a report with no evidence behind it and was never recorded; we searched our earlier reports and logs and found no SIGSEGV of this process in them. Please do not rely on it.)
 The exit -6 case, a heap-corruption abort of the same executable at the same moment, was seen before (the project's process guard allows it and says so), which suggests one
 underlying teardown problem with two outcomes, not two problems. That is a guess.
 
