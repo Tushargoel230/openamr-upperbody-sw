@@ -214,8 +214,9 @@ Rules, enforced by tests T12 and T13 (`config/datums.schema.json` holds the sche
    outside the band, placeholders included. The band is per datum and the check is scoped to our own masses: upstream's
    inertials are not ours to judge (arm `link2` implies 297 kg/m3 over its bounding box, which is mostly air).
 
-Current state (revision `2026-10-13.a`): **13 datums: 4 placeholder, 8 provisional, 1 verified.** Four of them are placeholders:
-`lift_mass_tl3_400` (null, hard-fail), `lift_column_section` (the lift's lateral side is in no document we hold), and the two wrist-camera poses.
+Current state (revision `2026-10-15.a`): **14 datums: 5 placeholder, 8 provisional, 1 verified.** Five of them are placeholders:
+`lift_mass_tl3_400` (null, hard-fail), `lift_column_section` (the lift's lateral side is in no document we hold), the two wrist-camera poses, and
+`joint_rest_margin_rad` (M07's margin, report-only; it feeds no model).
 `ros2 run openamrobot_upperbody_description datums_report.py` lists them with their owners.
 
 ## Verify
@@ -296,12 +297,16 @@ Nothing in this package is a measured value or a hardware result. In particular:
 - **Base inertials are platform-sw CAD placeholders.** The base comes from `openamr-platform-sw` unchanged; its masses and
   inertias are CAD-export values. The arm masses are upstream nominal values, and the lift's 11.7 kg is a supplier catalogue
   figure (provisional), not a weighed one.
-- **The lift column is a mass on a placeholder box, with no geometry.** Its section is `lift_column_section`: x = 0.240 is option
-  B's own statement that the column is mounted with its 240 mm side fore-aft, and y (the lateral side) is in no document we hold,
-  so it is set equal to x (placeholder, the one invented number of the lift). It reaches only the inertia tensor. **The column
-  has no collision geometry, so the arms can plan through it**; `arm_profile_link` (his 340 mm box) is the one collision body of
-  the structure. The whole catalogue mass sits on the fixed side at mid-height of the retracted column: the catalogue does not
-  split it between the fixed part and the moving stage.
+- **The lift column is a mass on a placeholder box, and the box is a placeholder.** Its section is `lift_column_section`: x = 0.240 is
+  option B's own statement that the column is mounted with its 240 mm side fore-aft (the register's LIFT says the same, and gives no other
+  side), and y (the lateral side) is in no document we hold, so it is set equal to x (placeholder, the one invented number of the lift).
+  Since `b45d8f6` (Alex's follow-up, accepted 16 Oct) the section sizes a 240 x 240 mm box, visual and collision, on each stage (the fixed stage,
+  0.530 m, on `lift_column_base_link`; the moving stage, 0.350 m, on `lift_carriage_link`; opt-in `column_geometry`, which the combined robot
+  passes), as well as the inertia tensor. **The arms can no longer plan through the column body, but the body is the box and not the supplier's
+  shape, and its lateral side is invented.** (`datums.yaml`'s note on `lift_column_section` still says "no collision, no visual, no joint":
+  it was not edited here because a change to `datums.yaml` bumps the datums revision and every `config_id`.) `arm_profile_link` (his 340 mm box)
+  is the other collision body of the structure. The whole catalogue mass sits on the fixed side at mid-height of the retracted column: the
+  catalogue does not split it between the fixed part and the moving stage.
 - **The base's pose above the floor is a decision record, not a measurement.** `base_link_height_above_floor` = 0.098 and the
   column axis at x +0.060 are P-03 rev19.0 values (provisional); T04 asserts the datum equals platform-sw's joint in the expansion.
 - **The arms are 62 mm apart at their bases** (option B's y = +-0.031). They do not touch at the home pose at any lift stop or

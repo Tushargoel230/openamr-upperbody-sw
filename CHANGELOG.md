@@ -29,6 +29,27 @@ All notable changes to this repository. Evidence for the description is static a
   `ros2_control`; `lift_joint` and the mimic `finger_joint2`s are recorded as not measured, with the reason), and every expected joint needs 50
   samples in the window; a missing or under-sampled joint is a FAIL recorded as incomplete coverage. `test_m07_coverage.py` pins it.
 
+### Added / Changed (P22): audit of the sources of truth; two prototype checks
+
+- **Documents brought into line with the register (`openAMRobot/.github` `decisions.yaml`, P-03 rev19.6) and with what the repository decided in P17 to P21.** Design folder
+  (outside this repository): `DESIGN_LOG.md` (a 19 Oct entry for M07 as Alex's WARN rule, W03 demoted to evidence, W04 and its NOT_RUN fix, the `dfd44a5` pin, the T08
+  attribution, the `parameter_bridge` SIGSEGV, the retracted "1 of 7"), `VERIFICATION.md`, `DATUMS.md`, `FRAMES.md`, `decisions/ADR-010`, `00_INDEX.md`, `ARCHITECTURE.md` section 7.
+  In this repository: the description and MoveIt READMEs (the column has placeholder geometry since `b45d8f6`; 14 datums, 5 placeholder), `docs/verification.md` (M07 row, column
+  row, enabled pairs, the WARN table), `docs/pr/PR14_BODY.md`.
+- **T08 is why A6 went from 24 PASS / 4 WARN to 25 / 3, and the cause is not in this repository.** It had listed six platform-sw links whose collision mesh is their visual STL;
+  platform-sw #70 (`d619012`) replaced them with boxes and cylinders. No commit here changed T08 or its inputs (`evidence/reports/README.md`, P20). Recorded here because the changelog did not say it.
+- **Two prototype checks, run by hand and wired into no CI** (`tools/README.md`): `tools/check_decision_currency.py` fails when one of our documents cites a register decision at a
+  revision other than the one the register records (`docs/decision_citations.yaml`), and `tools/check_evidence_backing.py` requires every count and rate in `docs/pr/PR14_BODY.md`
+  and in the newest generated reports to resolve to a file under `evidence/` or be printed as UNBACKED (`docs/pr/claim_backing.yaml` says which are acknowledged and why). Each has a
+  `--canary` that plants faults in temporary copies and shows they are caught. They are the reaction to the "about 1 of 7" rate (below, P21), which would have been printed as UNBACKED.
+- **The backing check found a wrong count on its first run.** `evidence/reports/README.md` (P17 table) and Tushar's text in `docs/pr/PR14_BODY.md` said 13 PASS for A7 runs 2 and 3 on
+  `013b524`; the two reports (`20261015T121048Z_a7.json`, `20261015T121946Z_a7.json`) have 15 checks, 12 of them PASS. Both places now say so (the second as a bracketed note, because
+  that text is kept as written).
+- **Left as they are on purpose** (each would change a generated report or the datums revision, so every `config_id`): the note of `lift_column_section` in `datums.yaml` ("no collision, no
+  visual, no joint") and the `ref` of `base_link_height_above_floor` (cites FRAMES-REP105 at rev19.0; the register states 0.098 m in CAMERAS at rev19.4); the limitation texts
+  "the lift column has no collision geometry" in `build_evidence.py` and `build_a7_evidence.py`, which every committed A6 and A7 report from P19 on repeats; `docs/v01_visual_check.md`, a record of
+  the P16 measurement on the earlier geometry. The decision-currency check lists the citations it finds stale.
+
 ### Changed (P21): the review items on #14
 
 - **W04 now returns NOT_RUN, never PASS, on evidence that is not there** (Mohammad's inline finding on `9406af6`). The stop helper's report could still be `{"state": "started"}`
@@ -83,7 +104,7 @@ All notable changes to this repository. Evidence for the description is static a
   teardown after being asked to stop (inside gz-sim / gz_ros2_control). The force-stop path is proven on decoy processes only; it was never
   exercised live (36 of 36 runs stopped on the first step).
 - **M07, the rest-position check** (`test_m07_rest_position_margin.py`, A7): no joint's rest position may be within `joint_rest_margin_rad` of
-  either limit; FAIL, not WARN. The margin is a datum (`datums.yaml`, `placeholder`, 1e-3 rad, report-only; revision bumped, so every
+  either limit; FAIL, not WARN. *(Superseded: P18 withdrew it, and P19 restored it as Alex's rule, WARN for the four joints whose rest pose is an upstream limit and FAIL otherwise; see "Changed (P18, P19)" above. The "FAILs today" below is the P17 state.)* The margin is a datum (`datums.yaml`, `placeholder`, 1e-3 rad, report-only; revision bumped, so every
   `config_id` changes), taken from the between-run scatter of a rest position (up to 2.8e-4 rad) and not tuned to a verdict. **It FAILs today** on
   `openarm_right_finger_joint1` (rests at +2.6e-8 rad, past its open limit), and on `openarm_left_finger_joint1` and both `joint4`; `lift_joint`
   is listed as not measured, with the reason.

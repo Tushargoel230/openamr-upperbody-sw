@@ -108,7 +108,7 @@ the passes and run alone). The pushed head differs from it by report copies, mea
 | `20261015T113447Z_dev.json`, `...T113759Z_dev.json`, `...T114111Z_dev.json` | A6 suite, the **first** pass, runs 1 to 3: **FAILED**, all three the same way | `a713533` | 23 PASS, 4 WARN, 1 FAIL (AUX), 0 NOT_RUN: `test_evidence_dir.py` rejected the stop helper's report, which used the system temp directory. Fixed in `013b524` (the report is evidence and lives in the evidence directory) |
 | `20261015T114559Z_dev.json`, `...T114920Z_dev.json`, `...T115241Z_dev.json` | A6 suite, runs 1 to 3 | `013b524` | 24 PASS, 4 WARN (T08, E01, W02, V01), 0 FAIL, 0 NOT_RUN, each |
 | `20261015T120152Z_a7.json` | A7, run 1: **FAILED** | `013b524` | 11 PASS, 1 WARN (V01), 3 FAIL (G01, M07, AUX), 0 NOT_RUN |
-| `20261015T121048Z_a7.json`, `...T121946Z_a7.json` | A7, runs 2 and 3 | `013b524` | 13 PASS, 1 WARN (V01), 2 FAIL (M07, and AUX with it), 0 NOT_RUN, each |
+| `20261015T121048Z_a7.json`, `...T121946Z_a7.json` | A7, runs 2 and 3 | `013b524` | 12 PASS, 1 WARN (V01), 2 FAIL (M07, and AUX with it), 0 NOT_RUN, each (corrected 19 Oct, P22: this row said 13 PASS; the two reports have 15 checks, 12 of them PASS, found by `tools/check_evidence_backing.py`) |
 
 **M07 FAILs by design, so no A7 run is green.** It names `openarm_right_finger_joint1` (rests at +2.6e-8 rad, past its open limit), and
 `openarm_left_finger_joint1`, `openarm_left_joint4` and `openarm_right_joint4`, which rest 2e-4 to 5e-4 and 1.0e-4 rad inside theirs. AUX fails

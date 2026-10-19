@@ -7,11 +7,22 @@
 
 ## Evidence
 
+**Current (the P19 to P21 runs, 16 to 19 Oct).**
+
+- Base SHA: `f57e54cfc9e7f9536e94c52749502cc983fb908e` (openAMRobot/openamr-upperbody-sw `main`, the base of this PR on GitHub).
+- Head SHA: the tested code is `fe2e821da6ef7d9cf11bf6e3e9f6c05b77b6f151` (`git_hash` of the P21 reports, `evidence/reports/20261019T0*Z_*.json`, clean tree). The pushed head, `e5cf6135b04b7c2febfc5dbe9fd4d6d8ef71cdd0`, adds only reports and documents.
+- Workspace: `openamr-platform-sw` `dfd44a55457bf5c2d4f81966b862a0865fd52aca` (#70 and #71, on platform-sw `main` since 16 Oct); `src/upstream/openarm_description` `14ff67b638ff1c738a1b9a6be8aaa5ce5ed2c831` and `openarm_ros2` `4e837e1d0dae692ff67b560b69d8d281d7a8d4ed` (the pins in `config/upstream_pins.yaml`; each report's `upstream` block). Simulator versions are in each A7 report's `simulator` block (Gazebo 8.15.0, `gz_ros2_control` 1.2.20, `ros_gz_sim` 1.0.24, MoveIt 2.12.4).
+- The reports do not record the `openamrobot-manifest` or `openamrobot-manipulation` commits. The checkouts in the author's workspace on 19 Oct are manifest `8111c48e48f93c20f2142534ffc340857234bf7a` and manipulation `795143e55fb98faf60e259f4323c52d374514b38`, which is not the `095e6c7…` of the block below. Which of the two the P19 to P21 runs used is UNVERIFIED.
+- Machine: the author's WSL2 workstation (Ubuntu 24.04, ROS 2 Jazzy binaries). Nothing here ran on a hosted runner: PR #14's `quality/test` job is skipped by configuration (see "Not verified").
+- Reports and per-run detail: `evidence/reports/README.md`, sections P19 to P21.
+
+**Earlier (Alex's runs on `703fce9`, platform-sw `8531089`), kept unchanged apart from the notes in brackets.**
+
 - Base SHA: `f57e54cfc9e7f9536e94c52749502cc983fb908e` (openAMRobot/openamr-upperbody-sw `main`)
 - Head SHA: `703fce9f44c73a67dbfb8799e5dc89920d3bbb8c` (the tested code; the commit after it changes only this file)
 - Workspace: `openamrobot-manifest` `8111c48e48f93c20f2142534ffc340857234bf7a` (`vcs import`). In that workspace:
   - this repository at the head above;
-  - `openamr-platform-sw` `8531089e9eca1fdc56998853f0f67bf3f1e12434`: PR #71, branch `fix/chassis-collision-caster-overlap`, on `main` `d619012` (#70). #71 raises the chassis collision box bottom to 0.055 m. It is not merged at the time of writing;
+  - `openamr-platform-sw` `8531089e9eca1fdc56998853f0f67bf3f1e12434`: PR #71, branch `fix/chassis-collision-caster-overlap`, on `main` `d619012` (#70). #71 raises the chassis collision box bottom to 0.055 m. It was not merged at the time of writing [it merged on 16 Oct as platform-sw `dfd44a5`, which this branch now pins];
   - `openamrobot-manipulation` `095e6c7bbd270db6d21de9664a654bb37919a2eb`;
   - `src/upstream/openarm_description` `14ff67b638ff1c738a1b9a6be8aaa5ce5ed2c831` and `src/upstream/openarm_ros2` `4e837e1d0dae692ff67b560b69d8d281d7a8d4ed` (the pins in `config/upstream_pins.yaml`).
 - Machine: Ubuntu 24.04 container, ROS 2 Jazzy binaries, `/usr/bin/python3` = 3.12, 4 cores, no GPU (ogre2 renders in software; the simulator runs at about 0.4x real time). controller_manager 4.48.1, MoveIt 2.12.4.
@@ -177,6 +188,16 @@ The 19 skips are listed in #16, and each reason names it. `config_id`: 14 of the
 | `20886a6` | T04's pinned list fails until the two frames are listed. |
 | `ff8f9ad` | On platform-sw `d619012`, the old `test_t07_collision.py` fails 2 tests (seven consumed sensor frames with a visual and no collision, then KeyError). The new file passes 9 of 9. |
 
+## Disagreements with the register and platform-sw (audit of 19 Oct)
+
+From comparing `openAMRobot/.github` `decisions.yaml` (commit `9109d3e`, in force P-03 rev19.6), platform-sw `dfd44a5` and this repository. None is ours to settle and none is changed by this PR.
+
+- **Near-field sensor x positions.** The register's NEAR-FIELD-FRAMES (P-03 rev19.0, 12 Oct) gives x ±0.390 for the four ultrasonics and the two ToF sensors (`decisions.yaml:374-376`). platform-sw's merged #70 has 0.3906 and −0.3886 for the ultrasonics and ±0.399 for the ToF sensors, status `measured` from CAD Rev B (`ros2/src/openamrobot_description/config/sensor_frames.yaml:43,61,68,75`). The register was updated for Alex's 16 Oct decisions (`imu_link`, the base camera, the LiDAR) and not for these. Which numbers are the decision is Alex's.
+- **`base_link` at 0.098 m is stated in CAMERAS, not in FRAMES-REP105** (`decisions.yaml:600`, against `:339-343`). Our `datums.yaml:30` cites FRAMES-REP105 at rev19.0 for it; the value is unchanged.
+- **The column's lateral side is unsourced everywhere.** The register gives the 240 mm fore-aft side only (`decisions.yaml:1081`); `datums.yaml:71-78` sets the lateral side equal to it, and since `b45d8f6` that invented number is collision geometry.
+- **platform-sw's `sensor_frames.yaml` cites BOM Issue 7.7 and P-03 rev19.0** (`:6`); the register is at BOM Issue 7.10 and P-03 rev19.6 (`decisions.yaml:55-57`, `:153-159`).
+- **The register has no entry for the rest-state rule (M07) or for the platform-sw pin.**
+
 ## Not verified
 
 - No hardware.
@@ -184,7 +205,7 @@ The 19 skips are listed in #16, and each reason names it. `config_id`: 14 of the
 - No F2S check, no reach acceptance, and no physical lift safety (power loss, E-stop holding).
 - `tl3_400` is not verified: it is refused until its supplier data exist.
 - No human visual review in RViz or Gazebo: V01 is WARN; L1000/L1175/L1350 × bp000/bp050 are still to be looked at.
-- Not run on a hosted CI runner or on a machine with a GPU. All runs are from one VM.
+- Not run on a hosted CI runner or on a machine with a GPU. **The hosted job `quality/test` is skipped by configuration, not by a missing dependency**: `.github/workflows/repository-quality.yml` calls the reusable workflow without `verify: true`, whose default is false (`openAMRobot/.github` `repository-quality-reusable.yml:36-40`, `:244`), and the check run for `e5cf613` is `skipped` with the same start and end time (GitHub API, 19 Oct). Running A6 there needs more than flipping that input (the job would check out this repository alone); the proposal is in the P22 report, and no workflow file was changed.
 - The gz-sim teardown hang (the server ignores the stop request) is not fixed; see "Findings that are not resolved" below. The detached stop helper forces such a server; since P18 that is a **WARN (W04)**, not a FAIL, and a server still running after the force-stop is still the launch test's FAIL.
 - A7 on platform-sw `8531089` is not green: M03 and AUX fail on the outdated negative-test example pair (see Tests; one-line fix proposed). On `d619012` it also failed on #70's caster overlap and on the M01 race, both fixed since. #71 is not merged. (P19: #71 has since merged on platform-sw `main` as `dfd44a5`; this step's results on both pins are under "Tests".)
 - On `d619012`, `colcon test` of the five packages was not run as a separate step; its counts come from the A6 and A7 runs. On `8531089` it was run.
@@ -312,7 +333,7 @@ Tushar's statement about platform-sw is kept under "Description at 49d2368" belo
 - **Overlapping work:**
   - This change sits on PR #14 (Tushar's `feat/a7-gazebo-moveit` @ `49d2368`, draft).
   - platform-sw #70 (merged, main `d619012`) supersedes #68 and #69. It brings the 2.0 sensor frames, simplified collision and the Gazebo range and IMU sensors into the base this model includes. The contract lists its frames by name only, so the new `imu_link` pose needs no change here; T07 now records the consumed sensor frames (`ff8f9ad`).
-  - platform-sw #71 (open, `8531089`) raises the chassis collision box bottom to 0.055 m, clear of the caster-wheel spheres by 2.6 mm. The results on top of Tests are on it.
+  - platform-sw #71 (`8531089`, merged on 16 Oct as `dfd44a5`, which this branch now pins) raises the chassis collision box bottom to 0.055 m, clear of the caster-wheel spheres by 2.6 mm. The results on top of Tests are on it.
   - platform-sw #53 (draft, Gemini RGB-D), and the planned base-description PR (platform-sw #49).
 - **Reused:**
   - The upstream OpenArm v2.0 description and `openarm_ros2` MoveIt config at the pins, with Apache-2.0 headers kept on the derived files.
@@ -341,6 +362,7 @@ No safety path is touched. No file matches the `safety_paths` globs of `openAMRo
 - **Tushar's commits** (`f57e54c..49d2368`): developed with Claude Code (Anthropic), as Tushar states below ("AI assistance"). Each commit carries `Assisted-by: Claude Code`.
 - **Follow-up commits** (`49d2368..703fce9`) and this file: produced by Claude Code at Alex Reznichenko's request, and signed off by him (DCO). That covers the verification runs, the code, test and configuration changes, the regenerated collision matrix, the `decision-allow` markers, the SPDX headers, issue #16 and this description.
 - **P18 and P19 commits** (`bb39c83`, `9406af6`, the merge and the commits after it): produced by Claude Code for Tushar Goel and signed off by him; each carries `Assisted-by: Claude Code`.
+- **P22** (documentation corrections, the CHANGELOG, `tools/check_decision_currency.py`, `tools/check_evidence_backing.py` and their two lists): produced by Claude Code for Tushar Goel and signed off by him; each commit carries `Assisted-by: Claude Code`.
 - No upstream file is modified.
 
 ## Follow-up commits on this branch
@@ -395,7 +417,7 @@ Class: `static+mock` for the A6 suite, `simulation` for A7. **No physical eviden
 | `SKIP` | a stated, reasoned non-comparison (the one legitimate case: no git checkout to compare an upstream pin with) |
 | `NOT_RUN` | a registered check left no result; never a `PASS`, and it fails the exit status |
 
-- **A7 regression** (`run_a7_regression.sh`), on the code of this PR (`013b524`; the pushed head adds report copies, measurement data and documents, and one unit-test file): **no run is green, by design: M07 FAILs** (below). Run 2 and run 3: 13 PASS / 1 WARN (V01) / 2 FAIL (M07, and AUX with it, because the bringup `colcon test` step exits 1) / 0 NOT_RUN. Run 1 additionally failed **G01**: its `gz sim` server ignored SIGINT, the stop request and SIGTERM and was ended by the stop helper's SIGKILL at 9.2 s; nothing was left running, and the run says so (11 PASS / 1 WARN / 3 FAIL). Earlier, on `7daa2ab` (the shutdown-race fix, before the rebase and before option B: these prove that fix) five runs of 13 PASS / 1 WARN / 0 FAIL, plus three on `dada509` and three on `aa94fc3`.
+- **A7 regression** (`run_a7_regression.sh`), on the code of this PR (`013b524`; the pushed head adds report copies, measurement data and documents, and one unit-test file): **no run is green, by design: M07 FAILs** (below). Run 2 and run 3: 13 PASS / 1 WARN (V01) / 2 FAIL (M07, and AUX with it, because the bringup `colcon test` step exits 1) / 0 NOT_RUN [P22: the two reports, `20261015T121048Z_a7.json` and `20261015T121946Z_a7.json`, have 12 PASS; 15 checks]. Run 1 additionally failed **G01**: its `gz sim` server ignored SIGINT, the stop request and SIGTERM and was ended by the stop helper's SIGKILL at 9.2 s; nothing was left running, and the run says so (11 PASS / 1 WARN / 3 FAIL). Earlier, on `7daa2ab` (the shutdown-race fix, before the rebase and before option B: these prove that fix) five runs of 13 PASS / 1 WARN / 0 FAIL, plus three on `dada509` and three on `aa94fc3`.
 - **One A7 run in six failed on this code earlier** (P16, `9bc327c`: 11 PASS / 1 WARN / 2 FAIL, M02 `CONTROL_FAILED`) under a simulator orphaned by G01's launch that nothing detected. Its cause was identified, it is now detected (and, since P17, stopped by the launch), and the report is kept (`evidence/reports/README.md`, P16). The number to quote is "one failure in six on that commit, cause identified", not "three for three"; and P17's run 1 above is a second, different one.
 - **M07 currently FAILs by design**: no joint's rest position may be within `joint_rest_margin_rad` (a datum, 1e-3 rad, `placeholder`) of either limit. It FAILs on `openarm_right_finger_joint1` (rests at +2.6e-8 rad, past its open limit) and on `openarm_left_finger_joint1`, `openarm_left_joint4` and `openarm_right_joint4`. The zero and open poses are limits by construction, in the old body too (`evidence/m02_bisect/RESULTS.md`, last section), so the check is red until the margin, the rest pose, or the claim it makes is decided; that is a question for the reviewers, not something the PR hides.
 - **A6 suite** (`verify_a6.sh`): **24 PASS / 4 WARN (T08, E01, W02, V01) / 0 FAIL / 0 NOT_RUN**, three runs on `013b524` (and on `1168f45` before). The first pass of this step, on `a713533`, failed 3 of 3 (AUX: `test_evidence_dir.py`, the stop helper's report was in the system temp directory); the reports are kept and the fix is `013b524`. `config_id`s changed again (the datums revision, for the new `joint_rest_margin_rad`).

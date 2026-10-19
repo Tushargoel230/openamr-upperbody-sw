@@ -31,8 +31,9 @@
 schema_version: 1
 entries:
 
-  # Base - owned by openamr-platform-sw. Existing names, unchanged (ADR-005). Since platform-sw 935efc7 (Alex decision 2026-10-12,
-  # FRAMES-REP105) the root is base_footprint, on the floor under the drive-axle midpoint, and base_link hangs 0.098 m above it.
+  # Base - owned by openamr-platform-sw. Existing names, unchanged (ADR-005). Since platform-sw 935efc7 (Alex decision 2026-10-12; register
+  # FRAMES-REP105, current at P-03 rev19.4) the root is base_footprint, on the floor under the drive-axle midpoint, and base_link hangs
+  # 0.098 m above it (the figure is stated in the register's CAMERAS, P-03 rev19.4, not in FRAMES-REP105).
   - name: base_footprint
     kind: link
     variants:
@@ -141,5 +142,5 @@ entries:
 # (tof_front_left_link ... ultrasonic_rear_link, req W) were declared-but-absent and are DELETED, not renamed.
 consumed_from:
   - owner: platform-sw
-    contract: "openamr-platform-sw 935efc7: robo_urdf.urdf.xacro, near_field_frame macro (parent base_link); P-03 rev19.0, register NEAR-FIELD-FRAMES; imu_link (register FRAMES-REP105) and base_camera_link (register CAMERAS), parent base_link, same file. Names only: their poses are platform-sw's"
+    contract: "openamr-platform-sw 935efc7: robo_urdf.urdf.xacro, near_field_frame macro (parent base_link); P-03 rev19.0, register NEAR-FIELD-FRAMES; imu_link (register FRAMES-REP105, P-03 rev19.4) and base_camera_link (register CAMERAS, P-03 rev19.4), parent base_link, same file. Names only: their poses are platform-sw's"
     frames: [us_front_left, us_front_right, us_rear_left, us_rear_right, tof_front, tof_rear, imu_link, base_camera_link]

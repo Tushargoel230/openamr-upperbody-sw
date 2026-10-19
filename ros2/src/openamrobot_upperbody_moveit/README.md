@@ -129,7 +129,7 @@ matrix). Each pair was measured to behave so with nothing ignored; the P10 mutat
 
 `test/test_m04_collision_goal_rejected.py` (VERIFICATION.md's M04 row used to say "base collision volume"; it is corrected to *reachable*,
 because the arms cannot reach the base body) plans (plan only) to a left-arm joint state in which a left gripper link collides with
-`arm_profile_link`, the nearest structure volume they can reach (the lift column itself has no collision geometry: its lateral side is not sourced, so the arms can plan through it), through `move_group`'s `/plan_kinematic_path`:
+`arm_profile_link`, the nearest structure volume they can reach (the lift column has placeholder collision boxes since `b45d8f6`, so the arms can no longer plan through it, but the boxes are not the supplier's shape and their lateral side is not sourced; this test's goal sits in `arm_profile_link`, not in the column), through `move_group`'s `/plan_kinematic_path`:
 
 | Request | What happened |
 |---|---|
