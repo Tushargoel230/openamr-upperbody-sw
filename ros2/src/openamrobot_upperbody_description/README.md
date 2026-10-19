@@ -268,6 +268,13 @@ six args, the datum revision and **every** upstream pin (`config/upstream_pins.y
 only and is labelled as a prefix wherever it is shown. `hardware_profile` is part of the id because the id names the
 configuration, not just the geometry.
 
+**What a consumer must keep (C9/C10).** The digest is of a payload, not of a file: the compact, sorted-key JSON object that `config_id()` in
+`print_config_id.py` serialises (`json.dumps(members, sort_keys=True, separators=(",", ":"), ensure_ascii=True)`, UTF-8) and hashes, with the members listed in
+that script's docstring. **To reproduce or verify a digest with C10, retain that exact payload, not merely the raw URDF/Xacro file**: the raw file is only one
+member of it (as C14N 2.0 canonical XML, comments and whitespace-only text dropped), and the same file hashed alone, or inside a differently serialised object,
+gives a different digest that still looks like an id. (Satya's review of #14.) The lift stops (L1000 / L1175 / L1350) are calibration IDs, not configuration
+axes, and are not members of the payload; this matches ADR-010 as corrected by rev19.0 (Satya's review of #14 confirms it).
+
 | | Inputs |
 |---|---|
 | before P15 | canonical URDF, `mast_id`, `arm_package`, `hardware_profile`, datums revision, `openarm_description` commit <!-- decision-allow: CONFIG-IDS historical/negative: mast_id is gone, or the inputs before P15 --> |

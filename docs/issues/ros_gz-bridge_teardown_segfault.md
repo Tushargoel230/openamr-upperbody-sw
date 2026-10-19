@@ -44,7 +44,7 @@ the gz server's `controller_manager.pal_statistics` teardown lines were being pr
 
 That is **2 of 48 launches in total, 2 of 24 on the one platform package where it was seen**; the two sets of three on that package ran the same code a few hours apart and gave 2 and 0, so we cannot say the
 rate depends on anything we changed or on the platform package. Both crashes were in the same launch test (the gripper test, Bullet-Featherstone), in the same bridge instance. We have not
-run a larger sample and have no claim about the true rate.
+run a larger sample and have no claim about the true rate. **The only recorded rate is 2 of 48 launches since P18.** (An earlier figure from this project, about 1 in 7 G02 runs, appeared in a report with no evidence behind it and was never recorded; we searched our earlier reports and logs and found no SIGSEGV of this process in them. Please do not rely on it.)
 The exit -6 case, a heap-corruption abort of the same executable at the same moment, was seen before (the project's process guard allows it and says so), which suggests one
 underlying teardown problem with two outcomes, not two problems. That is a guess.
 

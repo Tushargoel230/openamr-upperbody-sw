@@ -131,11 +131,20 @@ def clamp_totals(runs):
 SIM_LAUNCH_CHECKS = ("G01", "G02", "M02", "M07")      # the launch tests that start a gz server and record the stop helper's report in their sidecars
 
 
+# The states the stop helper's report can end in (sim.launch.py, stop_gz_server). W04 can only say something about the two that describe a server that was
+# asked to stop: "stopped" (it went on request) and "force_stopped" (it did not). "no_server" is declared too, but it says the helper found no server to stop, so
+# it shows nothing about a server stopping on request. Everything else, and above all "started" (the helper's first write: launch_guard.read_gz_stop_report
+# returns it when its wait expires and the helper never recorded a result), is evidence that is not there.
+GZ_STOP_STATE_PASS = "stopped"
+GZ_STOP_STATE_WARN = "force_stopped"
+
+
 def gz_force_stop_check(sidecars):
     """W04 from the sidecars of the launch tests: WARN if the stop helper had to signal a server in any of them (the server accepted the stop
-    and did not go: a finding, not a failure of the run), PASS if every launch's server stopped on request, NOT_RUN when a launch test left no
-    helper report to read (that is a harness defect, never a pass). A server that survived even its force-stop is not W04's business: the
-    launch test's own survivor check FAILs it."""
+    and did not go: a finding, not a failure of the run), PASS if every launch's helper recorded `stopped`, and NOT_RUN for anything less than a
+    completed result: no sidecar, no helper report, a report that is not an object, one still in state `started` (the helper never finished: the
+    wait for it expired), one with no state or an unrecognised one, or `no_server`. Incomplete, malformed or unrecognised evidence is never a PASS
+    (the H01/H02 rule). A server that survived even its force-stop is not W04's business: the launch test's own survivor check FAILs it."""
     launches, forced, unread = {}, [], []
     for check_id in SIM_LAUNCH_CHECKS:
         docs = sidecars.get(check_id) or []
@@ -146,8 +155,18 @@ def gz_force_stop_check(sidecars):
         if not helper:
             unread.append(f"{check_id}: no stop-helper report in the sidecar")
             continue
+        if not isinstance(helper, dict):
+            unread.append(f"{check_id}: the stop-helper report is not an object ({type(helper).__name__})")
+            continue
+        state = helper.get("state")
+        if state == "started":
+            unread.append(f"{check_id}: the stop helper never recorded a result (its report was still in state 'started' when the wait for it expired)")
+            continue
+        if state not in (GZ_STOP_STATE_PASS, GZ_STOP_STATE_WARN):
+            unread.append(f"{check_id}: the stop-helper report has no completed state ({state!r}; W04 reads {GZ_STOP_STATE_PASS!r} and {GZ_STOP_STATE_WARN!r})")
+            continue
         launches[check_id] = {k: helper.get(k) for k in ("state", "elapsed_s", "retried_with_service", "interrupt", "signals")}
-        if helper.get("state") == "force_stopped":
+        if state == GZ_STOP_STATE_WARN:
             forced.append(check_id)
     details = {"launches": launches, "forced": forced}
     if unread:

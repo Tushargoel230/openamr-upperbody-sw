@@ -29,6 +29,25 @@ All notable changes to this repository. Evidence for the description is static a
   `ros2_control`; `lift_joint` and the mimic `finger_joint2`s are recorded as not measured, with the reason), and every expected joint needs 50
   samples in the window; a missing or under-sampled joint is a FAIL recorded as incomplete coverage. `test_m07_coverage.py` pins it.
 
+### Changed (P21): the review items on #14
+
+- **W04 now returns NOT_RUN, never PASS, on evidence that is not there** (Mohammad's inline finding on `9406af6`). The stop helper's report could still be `{"state": "started"}`
+  when `read_gz_stop_report` gave up waiting, and `gz_server_shutdown_report` kept that object in the sidecar; W04 saw a truthy report that was not `force_stopped` and returned PASS,
+  and returned PASS for a report with no state or an unrecognised one as well. It now accepts `stopped` (PASS) and `force_stopped` (WARN) and nothing else: `started`, no state, an
+  unknown or non-string state, a malformed or absent report, and `no_server` (the helper found no server, which shows nothing about one stopping on request) are NOT_RUN. **This is the
+  H01/H02 class of hole, a check passing when its evidence is missing, reintroduced in a check we wrote ourselves**; the absent-helper case was covered and the timed-out one was not.
+  `test_a7_w04.py` drives the timed-out path end to end (a report left in `started` through `read_gz_stop_report` and `gz_server_shutdown_report` into W04) and the malformed forms;
+  six of the new tests fail on the old code. The survivor check is untouched.
+- **M03 regression for platform-sw #71** (`test_m03_caster_clearance.py`, no ROS graph): the old chassis box (bottom 0.050 m) overlaps the caster-wheel spheres (top 0.052421 m) by
+  2.421 mm and `acm_derive.derive` reports four permanent collisions; the pinned box (bottom 0.055 m) clears them by 2.579 mm. Fails on platform-sw `d619012`, passes on `dfd44a5`.
+- **`config_id`: keep the payload.** The description README now says that the digest is of the compact sorted-key JSON payload `print_config_id.py` hashes; to use it with C10, retain that
+  exact payload, not merely the raw URDF/Xacro file (Satya's review). The lift stops are calibration IDs, not configuration axes (ADR-010 as corrected by rev19.0).
+- **The 1-in-7 figure was an unbacked claim.** A report to the architecture chat in P16 said `parameter_bridge` exits -11 at shutdown in about 1 of 7 G02 runs. The repository has no
+  such record: no -11 bridge exit in any P16 or P17 report or log (the bridge exits recorded before P19 are SIGABRT; one G02 FAIL in P17's 36 runs was a JSON-parsing bug in the test).
+  **The only recorded rate is 2 of 48 launches since P18.** Recorded here so the claim is not quietly dropped.
+- `PR14_BODY.md`: states why W03 does not replace M07 (W03 is static, M07 dynamic; "a static named-pose report does not establish dynamic sample coverage"), that M07 is Alex's as
+  written, and that **one agreed rest-state rule, including what happens to missing joint-state evidence, is still pending with Alex and Om**.
+
 ### Changed (P18, P19): W04 added; W03 is evidence only; M07 stays
 
 - **M07 stays, as Alex wrote it** (WARN on the four upstream-limit joints, `joint_rest_margin_rad` and its datums revision bump). P18 had withdrawn it;

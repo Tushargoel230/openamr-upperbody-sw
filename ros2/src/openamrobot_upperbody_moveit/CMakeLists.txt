@@ -29,6 +29,8 @@ if(BUILD_TESTING)
   # named poses that coincide with a joint limit: a helper that produces evidence/w03/, not an A7 check (P19)
   ament_add_pytest_test(named_poses_on_limits test/test_named_poses_on_limits.py TIMEOUT 600)
   ament_add_pytest_test(config_files test/test_config_files.py TIMEOUT 600)
+  # the chassis box clears the caster spheres (platform-sw #71): old box 0.050 m overlaps and the derivation reports four permanent collisions, new box 0.055 m clears; no ROS graph
+  ament_add_pytest_test(m03_caster_clearance test/test_m03_caster_clearance.py TIMEOUT 600)
   # M03 and M04 build a MoveIt planning scene from the combined model (moveit_py) and need no controller and no simulator.
   ament_add_pytest_test(m03_acm_sampling test/test_m03_acm_sampling.py TIMEOUT 3000)
   ament_add_pytest_test(m06_limits_sensitivity test/test_m06_limits_sensitivity.py TIMEOUT 600)
