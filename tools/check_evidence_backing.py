@@ -26,6 +26,9 @@ What a claim can resolve to (ledger: `docs/pr/claim_backing.yaml`; a claim is ma
               equals the claim (a rate: numerator and denominator both)
   RECORDED    a `record` entry: the named file under evidence/ contains the stated text. The file is a written record, not data derived from
               the reports, and the status says so; it is weaker than BACKED on purpose
+  BACKED (launch_exits)
+              a rate of a process exit code derived from the `process_exits` an A7 report carries since P24 (the exit code of every process of every
+              recorded launch): "1 of 12 launches with a parameter_bridge ended in -11". Only recorded launches count; reports before P24 contribute none
   OBSERVED-NOT-RECORDED
               an `observed_not_recorded` entry: someone saw it (a console line, say) and nothing was recorded. Printed as such, does not fail, and
               only while the text on the claim's line says OBSERVED-NOT-RECORDED, so a reader of the document sees the status too
@@ -246,6 +249,25 @@ def count_reports(repo_root, spec):
     return len(names), names
 
 
+def count_launches(repo_root, spec):
+    """(with the process, with the process ending in the code, [report names]) over the `process_exits` of the committed reports matching the
+    globs (P24). `process_exits` is the A7 report's list of launches, each with the exit code of each of its processes; a launch counts when it has a
+    process whose name starts with `spec["process"]`. Reports that have no `process_exits` (everything before P24) contribute nothing, which is the
+    point: only launches whose exit codes were recorded can back a rate."""
+    names, total, hit = [], 0, 0
+    for name, report in load_reports(repo_root, spec.get("globs") or [spec["glob"]]).items():
+        launches = report.get("process_exits")
+        if not isinstance(launches, list):
+            continue
+        names.append(name)
+        for launch in launches:
+            procs = [p for p in (launch.get("processes") or []) if str(p.get("process", "")).startswith(spec["process"])]
+            if procs:
+                total += 1
+                hit += any(p.get("exit_code") == spec["exit_code"] for p in procs)
+    return hit, total, names
+
+
 def under_evidence(repo_root, relative):
     """Absolute path of `relative` if it names a file under evidence/ inside the repository, else None."""
     full = os.path.normpath(os.path.join(repo_root, relative))
@@ -315,6 +337,12 @@ def resolve(claim, entry, repo_root, reports):
         if have != expected or (want and not entry.get("count_not_in_claim") and have != want[0]):
             return "MISMATCH", f"the committed reports give {have}; the claim says {want[0] if want else '?'}", []
         return "BACKED", f"{have} committed report(s)", names[:3]
+    if kind == "launch_exits":
+        hit, total, names = count_launches(repo_root, entry)
+        want = [int(n) for n in numbers(claim["text"])]
+        if want[:2] != [hit, total]:
+            return "MISMATCH", f"the recorded exit codes give {hit} of {total} launches with {entry['process']} ending in {entry['exit_code']}; the claim says {' of '.join(map(str, want[:2]))}", []
+        return "BACKED", f"{hit} of {total} recorded launches (process_exits of {len(names)} reports): {entry['process']} exit code {entry['exit_code']}", names[:3]
     if kind == "json_all":
         have, names = count_reports(repo_root, entry)
         reports_all = load_reports(repo_root, entry.get("globs") or [entry["glob"]])
@@ -509,6 +537,23 @@ def canary(repo_root, ledger_path):
         caught, statuses, _ = attempt("row", base_doc, backed, None)
         ok &= caught
         lines.append(f"{'OK     ' if caught else 'WRONG  '} the same row with the report's own counts is clean: statuses {statuses}")
+        # A synthetic -11 (P24): the rate derives from the recorded exit codes, and from nothing else.
+        def launch(check, code):
+            return {"check": check, "sidecar": f"{check}_x.json",
+                    "processes": [{"process": "parameter_bridge-4", "exit_code": code}, {"process": "gazebo-1", "exit_code": -2}]}
+        syn = dict(report, process_exits=[launch("G01", 0), launch("G02", -11), launch("M02", 0), launch("M07", 0)])
+        tree_root = os.path.join(tmp, "evidence", "reports", "20260103T000000Z_exits.json")
+        with open(tree_root, "w") as f:
+            json.dump(syn, f)
+        spec = {"doc": "docs/pr/BODY.md", "claim": "1 of 4", "kind": "launch_exits", "glob": "evidence/reports/*_exits.json", "process": "parameter_bridge", "exit_code": -11}
+        caught, statuses, result = attempt("derived", base_doc + "A bridge ended in -11 in 1 of 4 launches.\n", backed + [spec], None)
+        derived = any(r["status"] == "BACKED" and "recorded launches" in r["detail"] for r in result["claims"])
+        ok &= caught and derived
+        lines.append(f"{'OK     ' if caught and derived else 'WRONG  '} a synthetic -11 in one of four recorded launches: '1 of 4' is derived from the recorded exit codes: statuses {statuses}")
+        caught, statuses, _ = attempt("derived", base_doc + "A bridge ended in -11 in 2 of 4 launches.\n", backed + [{**spec, "claim": "2 of 4"}], "MISMATCH")
+        ok &= caught
+        lines.append(f"{'CAUGHT ' if caught else 'MISSED '} the same data does not back '2 of 4': statuses {statuses}")
+        os.remove(tree_root)
         # An observation nothing recorded: allowed only while the text says so.
         obs = backed + [{"doc": "docs/pr/BODY.md", "claim": "2 of 9", "kind": "observed_not_recorded", "observed_by": "console"}]
         caught, statuses, result = attempt("observed", base_doc + "The exit was seen in 2 of 9 launches.\n", obs, "MISMATCH")

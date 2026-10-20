@@ -18,6 +18,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(a7_clamp_gate test/test_a7_clamp_gate.py TIMEOUT 120)
   # W04 (a force-stopped gz server is a WARN) from the launch tests' sidecars (P18)
   ament_add_pytest_test(a7_w04 test/test_a7_w04.py TIMEOUT 120)
+  ament_add_pytest_test(a7_process_exits test/test_a7_process_exits.py TIMEOUT 120)
   # M02's wait for the controllers to be active, and its FAIL when they never are, against a fake controller manager (P17)
   ament_add_pytest_test(a7_controller_wait test/test_a7_controller_wait.py TIMEOUT 180)
   # the controller wait honours one absolute deadline (PR #14 review); fake clock and client, no ROS graph

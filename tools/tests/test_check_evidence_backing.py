@@ -172,6 +172,21 @@ def test_an_observed_but_unrecorded_rate_must_say_so_in_the_text(tree):
     assert check(tree, "The exit was seen in 2 of 9 launches.\n")["status"] == "FAIL"
 
 
+def test_launch_exits_derive_a_rate_from_recorded_exit_codes_and_only_from_them(tree):
+    def launch(code):
+        return {"check": "G02", "sidecar": "G02_x.json", "processes": [{"process": "parameter_bridge-4", "exit_code": code}, {"process": "gazebo-1", "exit_code": -2}]}
+    data = report(extra={"process_exits": [launch(0), launch(-11), launch(0), launch(-6)]})
+    (tree / "evidence" / "reports" / "20260105T000000Z_exits.json").write_text(json.dumps(data))
+    entry = {"doc": "docs/pr/BODY.md", "claim": "1 of 4", "kind": "launch_exits", "glob": "evidence/reports/*_exits.json",
+             "process": "parameter_bridge", "exit_code": -11}
+    assert ceb.count_launches(str(tree), entry) == (1, 4, ["evidence/reports/20260105T000000Z_exits.json"])
+    assert statuses(check(tree, "A bridge ended in -11 in 1 of 4 launches.\n", [entry])) == ["BACKED"]
+    assert statuses(check(tree, "A bridge ended in -11 in 2 of 4 launches.\n", [{**entry, "claim": "2 of 4"}])) == ["MISMATCH"]
+    assert statuses(check(tree, "A bridge ended in -6 in 1 of 4 launches.\n", [{**entry, "exit_code": -6}])) == ["BACKED"]
+    # the reports of the other fixtures have no process_exits: they contribute no launch
+    assert ceb.count_launches(str(tree), {"glob": "evidence/reports/2026010[123]*_a7.json", "process": "parameter_bridge", "exit_code": -11})[:2] == (0, 0)
+
+
 def test_the_cli_and_its_exit_codes(tree, capsys):
     (tree / "docs" / "pr" / "BODY.md").write_text("It was 3 of 5.\n")
     (tree / "ledger.yaml").write_text(yaml.safe_dump({"claims": []}))
@@ -189,7 +204,7 @@ def test_the_canary_catches_every_planted_number(tree):
     (tree / "ledger.yaml").write_text(yaml.safe_dump({"claims": []}))
     ok, lines = ceb.canary(str(tree), str(tree / "ledger.yaml"))
     assert ok, "\n".join(lines)
-    assert sum(line.startswith("CAUGHT") for line in lines) == 11 and "PASS" in lines[0]
+    assert sum(line.startswith("CAUGHT") for line in lines) == 12 and "PASS" in lines[0]
 
 
 def test_the_canary_fails_when_the_check_is_blind(tree, monkeypatch):

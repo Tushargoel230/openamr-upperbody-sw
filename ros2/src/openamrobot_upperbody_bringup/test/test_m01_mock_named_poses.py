@@ -127,4 +127,4 @@ class TestProcessesAlive(unittest.TestCase):
 @unittest.skipUnless(A7_ENABLED, SKIP_REASON)  # tracking: openAMRobot/openamr-upperbody-sw#16
 class TestShutdown(unittest.TestCase):
     def test_m01_processes_started_and_exited_cleanly(self, proc_info):
-        stack_healthy(proc_info, expected=EXPECTED_PROCESSES)
+        stack_healthy(proc_info, expected=EXPECTED_PROCESSES, sidecar=("M01", f"mock_{LIFT_STOP}"))

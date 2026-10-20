@@ -177,6 +177,22 @@ def gz_force_stop_check(sidecars):
     return "PASS", details
 
 
+def process_exits_of(sidecars):
+    """[{"check", "sidecar", "processes": [{"process", "exit_code"}]}] for every launch whose sidecar carries `process_exits` (P24): the exit code of each
+    process of each launch, as the launch test saw it after the launch stopped (launch_guard.process_exit_records). One entry per launch, in check-id and
+    file order. A launch whose test did not record them (a sidecar without the key) is simply not here, so a rate computed from this list counts only
+    launches that were recorded, and the report says how many that was by listing them; it is not a result of any check and cannot turn one into a PASS."""
+    out = []
+    for check_id in sorted(sidecars):
+        for doc in sorted(sidecars[check_id] or [], key=lambda d: d.get("file") or ""):
+            records = (doc.get("details") or {}).get("process_exits")
+            if not isinstance(records, list):
+                continue
+            processes = [{"process": r.get("process"), "exit_code": r.get("exit_code")} for r in records if isinstance(r, dict)]
+            out.append({"check": check_id, "sidecar": doc.get("file"), "processes": processes})
+    return out
+
+
 def combine_multi(check_id, counts, docs, expected_stops, missing=None):
     """-> (result, details) for a check recorded once per lift stop (M01) or once (M02, with its stop in the details)."""
     details = {}
@@ -406,6 +422,9 @@ def build(args):
         "limitations": limitations(sidecars),
         # What the joint-state clamp did, summed over M01/M02. Not a result of its own: a reading beyond the epsilon makes M01/M02 WARN.
         "clamp": {c["id"]: c["details"].get("clamp_totals") for c in checks if c["id"] in ("M01", "M02")},
+        # P24: the exit code of every process of every recorded launch. A crash like parameter_bridge -11 at shutdown is data here, and a rate of it
+        # derives from this list (tools/check_evidence_backing.py, kind launch_exits). Reports before P24 have no such key.
+        "process_exits": process_exits_of(sidecars),
     }
     if dirty:
         doc["dirty_files"] = dirty_files

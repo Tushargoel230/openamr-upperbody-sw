@@ -226,8 +226,17 @@ def stack_healthy(proc_info, expected, simulator=False, sidecar=None):
             share = get_package_share_directory("openamrobot_upperbody_description")
             ev.amend_sidecar(sidecar[0], sidecar[1], "gz_server_after_shutdown", report, fail=bool(report["survivors"]),
                              directory=ev.evidence_dir(share))
+    record = None
+    if sidecar:
+        import evidence_common as ev
+        from ament_index_python.packages import get_package_share_directory
+        share = get_package_share_directory("openamrobot_upperbody_description")
+
+        def record(records):        # P24: each process's exit code, in the sidecar of the check whose launch it was; never changes the result
+            ev.amend_sidecar(sidecar[0], sidecar[1], "process_exits", records, directory=ev.evidence_dir(share))
     try:
-        launch_guard.assert_launch_healthy(proc_info, expected=expected, allowed=launch_guard.SIM_ALLOWED if simulator else launch_guard.MOVE_GROUP_ALLOWED)
+        launch_guard.assert_launch_healthy(proc_info, expected=expected, allowed=launch_guard.SIM_ALLOWED if simulator else launch_guard.MOVE_GROUP_ALLOWED,
+                                           record=record)
     finally:
         if report is not None:
             assert not report["survivors"], launch_guard.gz_survivor_message(report)

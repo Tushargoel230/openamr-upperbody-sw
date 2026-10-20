@@ -52,10 +52,27 @@ def assert_no_process_died(proc_info):
     assert not died, f"processes of the launch died while the tests were running: {died}"
 
 
-def assert_launch_healthy(proc_info, expected, allowed=None):
+def process_exit_records(proc_info):
+    """[{"process": name, "exit_code": code}] for every process the launch started, in name order (P24). `exit_code` is the returncode of the
+    process's last event: an int once it has exited (negative for a signal: -11 is SIGSEGV), None when the framework saw no exit. This is what a crash
+    like `parameter_bridge-4 exited with code -11` is as DATA: before P24 it was a line on the console and a failed test name in the report."""
+    records = []
+    for action in proc_info.processes():              # by action, not by name: proc_info["spawner-1"] is a substring match and would also find "spawner-10"
+        code = getattr(proc_info[action], "returncode", None)
+        records.append({"process": action.process_details["name"], "exit_code": code if isinstance(code, int) else None})
+    return sorted(records, key=lambda r: r["process"])
+
+
+def assert_launch_healthy(proc_info, expected, allowed=None, record=None):
     """Fail if a process in `expected` (name prefixes) never started, or if any process that did start exited with a code that is neither 0 nor
-    listed for it in `allowed` ({name prefix: [exit codes]})."""
+    listed for it in `allowed` ({name prefix: [exit codes]}).
+
+    `record(records)` (P24), when given, is called with `process_exit_records(proc_info)` BEFORE anything is asserted, so a launch that fails
+    this check still leaves its exit codes in the evidence; it is how G01, G02, M01, M02 and M07 put them into their sidecars. It records and
+    judges nothing: no allowance was added by it."""
     allowed = allowed or {}
+    if record is not None:
+        record(process_exit_records(proc_info))
     started = list(proc_info.process_names())
     never_started = [prefix for prefix in expected if not any(name.startswith(prefix) for name in started)]
     assert not never_started, f"processes that never started: {never_started} (the launch started {started})"
