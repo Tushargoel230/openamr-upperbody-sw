@@ -8,7 +8,7 @@
 
 - Ubuntu 24.04.5 (WSL2), ROS 2 Jazzy: `ros-jazzy-ros-gz-bridge 1.0.24`, `ros-jazzy-ros-gz-sim 1.0.24`, `ros-jazzy-gz-sim-vendor 0.0.13` (gz-sim 8.15.0),
   `ros-jazzy-gz-transport-vendor 0.0.9`, `ros-jazzy-gz-ros2-control 1.2.20`. Software rendering (no GPU), headless server (`gz sim -r -s -v 2`).
-- Physics: gz-physics Bullet-Featherstone (both crashes below). The server has `gz_ros2_control` loaded and five controllers active.
+- Physics: gz-physics Bullet-Featherstone (the crashes below). The server has `gz_ros2_control` loaded and five controllers active.
 - Two `ros_gz_bridge` `parameter_bridge` nodes in the launch: one from a platform package (`platform_bridge`, a YAML of clock, tf, lidar, imu and so on) and
   one added by our package, **`base_joint_states_bridge`**, with a single entry:
 
@@ -44,10 +44,11 @@ The `-11` column below is OBSERVED-NOT-RECORDED: it was read from the console at
 | 3 runs, platform package at `dfd44a5` | 12 | **2** (runs 2 and 3, both in the Bullet-Featherstone gripper test) | 1 (the other bridge, run 2) |
 | 3 more runs, platform package at `dfd44a5`, a few hours later, same code | 12 | 0 | 1 |
 | 3 more runs, platform package at `dfd44a5`, a few hours later, with test-only changes | 12 | 0 | 1 |
+| 3 more runs, platform package at `dfd44a5`, the next day (P23), after a clean rebuild | 12 | **1** (run 1, in the **M07** launch test, the gripper test was clean; the console tail is `evidence/p23/a7_run1_console_tail.txt`) | not counted | not counted |
 
-That is **2 of 60 launches in total, 2 of 36 on the one platform package where it was seen**; the three sets of three on that package ran within a day of each other and gave 2, 0 and 0, so we cannot say the
-rate depends on anything we changed or on the platform package. Both crashes were in the same launch test (the gripper test, Bullet-Featherstone), in the same bridge instance. We have not
-run a larger sample and have no claim about the true rate. **The only observed rate is 2 of 60 launches since P18, OBSERVED-NOT-RECORDED: the exit codes were read from the console, and the reports record only that G02 and AUX failed.** (An earlier figure from this project, about 1 in 7 G02 runs, appeared in a report with no evidence behind it and was never recorded; we searched our earlier reports and logs and found no SIGSEGV of this process in them. Please do not rely on it.)
+That is **3 of 72 launches in total, 3 of 48 on the one platform package where it was seen**; the four sets of three on that package gave 2, 0, 0 and 1, so we cannot say the
+rate depends on anything we changed or on the platform package. The first two crashes were in the same launch test (the gripper test, Bullet-Featherstone), in the same bridge instance; the third was in another launch test (M07's), and the console tail does not name the instance. We have not
+run a larger sample and have no claim about the true rate. **The only observed rate is 3 of 72 launches since P18, OBSERVED-NOT-RECORDED: the exit codes were read from the console, and the reports record only which checks failed (G02 and AUX twice, M07 and AUX once).** (An earlier figure from this project, about 1 in 7 G02 runs, appeared in a report with no evidence behind it and was never recorded; we searched our earlier reports and logs and found no SIGSEGV of this process in them. Please do not rely on it.)
 The exit -6 case, a heap-corruption abort of the same executable at the same moment, was seen before (the project's process guard allows it and says so), which suggests one
 underlying teardown problem with two outcomes, not two problems. That is a guess.
 
@@ -67,8 +68,8 @@ git checkout feat/a7-gazebo-moveit       # the commit that carries this draft
 colcon test --packages-select openamrobot_upperbody_gazebo --event-handlers console_direct+ --pytest-args -k g02    # the Bullet-Featherstone gripper launch test
 ```
 
-Repeat until a launch ends with `Proc parameter_bridge-4 exited with code -11`. The reports that record the two failed runs (they record G02 and AUX failing, **not the exit code**, which was read from the console: OBSERVED-NOT-RECORDED) are `evidence/reports/20261018T200829Z_a7.json` and
-`20261018T201608Z_a7.json`. Expect it in a minority of launches.
+Repeat until a launch ends with `Proc parameter_bridge-4 exited with code -11`. The reports that record the three failed runs (they record which checks failed, **not the exit code**, which was read from the console: OBSERVED-NOT-RECORDED; the P23 run's console tail is kept) are `evidence/reports/20261018T200829Z_a7.json`,
+`20261018T201608Z_a7.json` and `20261020T105921Z_a7.json`. Expect it in a minority of launches.
 
 ## Expected
 

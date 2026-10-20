@@ -29,6 +29,26 @@ All notable changes to this repository. Evidence for the description is static a
   `ros2_control`; `lift_joint` and the mimic `finger_joint2`s are recorded as not measured, with the reason), and every expected joint needs 50
   samples in the window; a missing or under-sampled joint is a FAIL recorded as incomplete coverage. `test_m07_coverage.py` pins it.
 
+### Changed (P23): the false column statement, the datums citation, the bridge rate
+
+- **The report generators no longer say the lift column has no collision geometry.** `build_a7_evidence.py` (the limitation) and `build_evidence.py` (the limitation, and the V01 item 1 note
+  "nothing is drawn for the column") now say what `b45d8f6` made true: a 240 x 240 mm placeholder box, visual and collision, on each stage, whose lateral side is invented. The old sentence was a
+  generator string and not a finding. It is in 56 committed reports: true in the 32 of P15 to P18, **false in the 24 of P19 to P21** (`20261018T191032Z_dev.json` to `20261019T010818Z_a7.json`). None is edited;
+  `evidence/reports/README.md`, section P23, lists them. Mohammad cited that statement as a reason to hold #14 (Tushar's instruction; the comment is not in this repository), and the PR body says it did not describe the model.
+- **`datums.yaml` re-cited; datums revision `2026-10-20.a`; every `config_id` changed.** `base_link_height_above_floor` cited FRAMES-REP105 at P-03 rev19.0; 0.098 m is in the register's CAMERAS at
+  rev19.4 (`decisions.yaml:600`). The value is unchanged; the `ref` and the `lift_column_section` note (which still said "no collision, no visual") changed, so the revision moved and with it all 14 ids of the A6
+  reports and all 9 of the A7 reports. An id recorded under another datums revision is not comparable, which the existing non-comparability note (Satya, C9; the PR body, "`config_id` inputs changed") already says; no input was added.
+  `tools/check_decision_currency.py`: **0 STALE** (31 CURRENT, 3 HISTORICAL), was 1.
+- **The bridge exit rate is OBSERVED-NOT-RECORDED.** The A7 JSON does not carry process exit codes, so "2 of 60" was as unbacked as the retracted "1 of 7". Chosen: print it as OBSERVED-NOT-RECORDED everywhere
+  it appears (PR body, this file, the reports index, the issue draft, the design folder) and have `check_evidence_backing.py` accept such a rate only while the text on its line says so. Not chosen: recording
+  the exit code in the stop-helper sidecar, which would make the next occurrence data but recover none of the past ones. **A third occurrence came with the P23 evidence run**: run 1 of 3 on `77374a0`, in M07's launch
+  (the first two were G02's); M07 and AUX FAILed, the console tail is kept in `evidence/p23/a7_run1_console_tail.txt`. Now 3 of 72 launches since P18, 3 of 48 on `dfd44a5`, 3 of 12 A7 runs on that pin. Nothing was allow-listed.
+- **A6 x3: 25 PASS / 3 WARN / 0 FAIL. A7 x3: 14 / 2 / 0 twice and 13 / 1 / 2 once**, platform-sw `dfd44a5`, tested code `77374a0` (`evidence/reports/20261020T*`).
+- **`openamrobot-manipulation` for the P19 to P23 runs is `795143e`**, not `095e6c7` (Alex's container): the local checkout has one reflog entry, the clone of 5 Oct (`evidence/p23/workspace_checkouts.txt`), and `095e6c7`
+  is two docs-only commits ahead (GitHub compare). The PR body is corrected.
+- `tools/check_evidence_backing.py`: bare `a / b / c` triples followed by a comma were not scanned (a hole in the P22 pattern); they are now, and a triple that equals a committed report's PASS / WARN / FAIL is backed.
+  `check_decision_currency.py`: the `scan` globs are anchored (`README.md` meant every README).
+
 ### Added / Changed (P22): audit of the sources of truth; two prototype checks
 
 - **Documents brought into line with the register (`openAMRobot/.github` `decisions.yaml`, P-03 rev19.6) and with what the repository decided in P17 to P21.** Design folder

@@ -54,6 +54,12 @@ def test_the_claim_grammar():
     assert found("0.001 of 0 and 350 of 11.7 and one of the two and 240 mm") == []
 
 
+def test_a_bare_triple_followed_by_punctuation_is_still_a_claim_and_a_matching_report_backs_it(tree):
+    assert [c for c, k in ceb.find_claims("25 / 3 / 0, each; 14 / 2 / 0. And 1,795 / 957 / 1,832")] == ["25 / 3 / 0", "14 / 2 / 0", "1,795 / 957 / 1,832"]
+    assert statuses(check(tree, "Rows: 2 / 1 / 0, each.\n")) == ["BACKED"]
+    assert statuses(check(tree, "Rows: 7 / 7 / 7, each.\n")) == ["UNBACKED!"]
+
+
 def test_fenced_code_and_html_comments_are_not_scanned(tree):
     body = "```\n9 tests\n```\n<!-- 8 tests -->\ntext <!-- 7 tests --> after\nplain\n"
     assert statuses(check(tree, body)) == []

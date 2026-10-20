@@ -68,6 +68,15 @@ citations:
     decision: CAMERAS
     revision: P-03-rev19.4
     quote: "stated in CAMERAS (P-03 rev19.4)"
+  - document: docs/pr/PR14_BODY.md
+    decision: FRAMES-REP105
+    revision: P-03-rev19.0
+    historical: "says what datums.yaml cited before P23 re-cited it; not a citation of its own"
+    quote: "base_link_height_above_floor cited FRAMES-REP105 at P-03 rev19.0"
+  - document: docs/pr/PR14_BODY.md
+    decision: CAMERAS
+    revision: P-03-rev19.4
+    quote: "0.098 m is stated in CAMERAS at P-03 rev19.4"
 
   - document: design:FRAMES.md
     decision: CAMERAS

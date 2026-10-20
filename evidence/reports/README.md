@@ -249,3 +249,18 @@ PR-body statements on W03 and M07 (`CHANGELOG.md`, P21). platform-sw `dfd44a5`, 
   -6 for the bridge, and the 36-run orphan count, the shutdown timings and the bisect logs have none. The only recorded bridge crash before P19 is one SIGABRT (-6) in a P12A G01 log
   (`docs/verification.md`). The claim in P16's report to the architecture chat was unbacked and is recorded as such in `CHANGELOG.md`.
 
+
+## P23
+
+Tested code `77374a0`: the generators no longer write that the lift column has no collision geometry, `datums.yaml` cites the register's CAMERAS at P-03 rev19.4 for `base_link`'s 0.098 m, and the datums revision is `2026-10-20.a` (so every `config_id` differs from P21's: all 14 in the A6 reports, all 9 in the A7 reports). platform-sw `dfd44a5`, clean tree, a clean rebuild first; the pushed head adds only these reports and documents.
+The workspace's other checkouts are in `../p23/workspace_checkouts.txt`: `openamrobot-manipulation` is `795143e` for every run on this workstation (P15 to P23), not the `095e6c7` of Alex's container.
+
+| file | what | platform-sw | result |
+|---|---|---|---|
+| `20261020T104401Z_dev.json`, `...T104733Z_dev.json`, `...T105107Z_dev.json` | A6 suite, runs 1 to 3 | `dfd44a5` | 25 PASS, 3 WARN (E01, W02, V01), 0 FAIL, 0 NOT_RUN, each |
+| `20261020T105921Z_a7.json` | A7, run 1: **FAILED** | `dfd44a5` | 13 PASS, 1 WARN (V01), 2 FAIL (M07, AUX), 0 NOT_RUN |
+| `20261020T110705Z_a7.json`, `...T111449Z_a7.json` | A7, runs 2 and 3 | `dfd44a5` | 14 PASS, 2 WARN (M07, V01), 0 FAIL, 0 NOT_RUN, each |
+
+- **Run 1 failed on the `parameter_bridge` SIGSEGV, the third occurrence, and the first in M07's launch** (the two of P19 were in G02's). M07's physics were as in the passing runs: no failing joint, the same four WARN joints. What failed is `test_m07_processes_started_and_exited_cleanly`, and AUX with it because the bringup `colcon test` step exited 1; both are recorded in the report. The exit code is not: the last lines the driver kept are `../p23/a7_run1_console_tail.txt` ("Proc parameter_bridge-4 exited with code -11"). The stop took 1.42 s and nothing survived. W04 PASS in all three runs; M02 0 excursions in all three, largest overshoot 1.99e-6, 1.54e-6 and 3.71e-6 rad against 1e-5 (not widened). The failed run is kept beside the two clean ones, and no run was repeated to replace it. Nothing was added to the allow list.
+- **Rates of this bridge exit are OBSERVED-NOT-RECORDED**, here and everywhere: the JSON of an A7 report does not carry exit codes, so "2 of 60" (P21 section above), and now 3 of 72 launches since P18 and 3 of 48 on `dfd44a5`, were read from the console. The reports record which checks failed in which runs. Option A (recording each process's exit code in the stop-helper sidecar) would make the next occurrence data; it would not recover the past ones, and it was not done.
+- **Which reports carry the false column statement.** The generators' limitation "the lift column has no collision geometry (its lateral extent is not sourced): the arms can plan through the column body" (and, in the A6 reports, the V01 item 1 note "nothing is drawn for the column") is in 56 of the reports above. It was true of the 32 reports of P15 to P18 (`20261013T101652Z_dev.json` to `20261018T175119Z_a7.json`), produced on code without the column boxes. It is **false in the 24 reports of P19 to P21, `20261018T191032Z_dev.json` to `20261019T010818Z_a7.json`**, produced on code with `b45d8f6`'s boxes (tested code `538a32a`, `24c66f5` and `fe2e821`). It was a generator string and not a finding: nothing was measured that said the arms can plan through the column. None of the reports is edited; the six reports of this section carry the corrected limitation.

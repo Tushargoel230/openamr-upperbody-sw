@@ -68,7 +68,7 @@ INT = r"\d+(?:,\d{3})*"                 # an integer, thousands commas only
 NUM = INT
 PATTERNS = [
     ("verdicts", re.compile(r"\b\d+\s+PASS\b[^|\n]{0,60}?\b\d+\s+WARN\b[^|\n]{0,60}?\b\d+\s+FAIL\b(?:[^|\n]{0,40}?\b\d+\s+NOT_RUN\b)?")),
-    ("bare_triple", re.compile(r"(?<![\w.,])%s / %s / %s(?: / %s)?(?![\w.,])" % ((INT,) * 4))),
+    ("bare_triple", re.compile(r"(?<![\w.,])%s / %s / %s(?: / %s)?(?!\w)(?!,\d)(?!\.\d)" % ((INT,) * 4))),
     ("rate_of", re.compile(r"(?<![\d.,])%s of (?:about |the )?%s\b(?!\.\d)" % (NUM, NUM))),
     ("rate_in", re.compile(r"(?<![\d.,])(?:about |roughly )?%s in (?:about )?%s\b(?!\.\d)" % (NUM, NUM))),
     ("rate_words", re.compile(r"\b(?:%s of (?:the )?(?:%s|%s)|%s in (?:about )?(?:%s|%s)) (?:[A-Za-z0-9]+ ){0,2}?(?:runs|launches|reports|tests|pairs|samples)\b"
@@ -270,6 +270,13 @@ def resolve(claim, entry, repo_root, reports):
         if problems:
             return "MISMATCH", "the report(s) named in the same row do not have these counts: " + "; ".join(problems), found
         return "BACKED", "every report named in the same row has exactly these verdict counts", found[:3]
+    if claim["kind"] == "bare_triple" and entry is None:
+        wanted = [int(n) for n in numbers(claim["text"])]
+        if len(wanted) == 3:
+            matches = [name for name, report in reports.items()
+                       if [verdict_counts(report)[k] for k in ("PASS", "WARN", "FAIL")] == wanted]
+            if matches:
+                return "BACKED", f"{len(matches)} committed report(s) have PASS / WARN / FAIL = {wanted[0]} / {wanted[1]} / {wanted[2]}", matches[:3]
     if claim["kind"] == "verdicts" and entry is None:
         wanted = {label: int(n) for n, label in re.findall(r"(\d+)\s+(PASS|WARN|FAIL|NOT_RUN)\b", claim["text"].upper())}
         matches = [name for name, report in reports.items()

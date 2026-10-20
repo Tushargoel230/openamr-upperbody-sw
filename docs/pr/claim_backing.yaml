@@ -111,7 +111,7 @@ claims:
   reason: 95 is M03's disabled_pairs.total in the pinned reports and the four permanently colliding constant pairs are listed in M03's failures in the d619012 reports
     (evidence/reports/20261018T192527Z_a7.json); 95 - 4 = 91 is not written in a file
 - doc: docs/pr/PR14_BODY.md
-  claim: 2 of the 9
+  claim: 3 of the 12
   kind: json_count
   numerator:
     glob: evidence/reports/*_a7.json
@@ -125,13 +125,17 @@ claims:
     - path: upstream.openamr-platform-sw
       equals: dfd44a5
 - doc: docs/pr/PR14_BODY.md
-  claim: 2 of 36
+  claim: 3 of 48
   kind: observed_not_recorded
-  observed_by: console, P19 runs 2 and 3; quoted in docs/issues/ros_gz-bridge_teardown_segfault.md
+  observed_by: console, P19 runs 2 and 3 and P23 run 1; the P23 tail is evidence/p23/a7_run1_console_tail.txt
+- doc: docs/pr/PR14_BODY.md
+  claim: 3 of 72
+  kind: observed_not_recorded
+  observed_by: console; evidence/reports/README.md P21 and P23 and docs/issues/ros_gz-bridge_teardown_segfault.md say the same, as prose
 - doc: docs/pr/PR14_BODY.md
   claim: 2 of 60
   kind: observed_not_recorded
-  observed_by: console; evidence/reports/README.md P21 and docs/issues/ros_gz-bridge_teardown_segfault.md say the same, as prose
+  observed_by: console, until the P23 run
 - doc: docs/pr/PR14_BODY.md
   claim: 0 of 24
   kind: observed_not_recorded
@@ -301,6 +305,24 @@ claims:
   claim: 3%
   kind: unbacked
   reason: stated in the MoveIt package README as a sampled figure; the samples are not under evidence/
+- doc: docs/pr/PR14_BODY.md
+  claim: 81 / 2 / 3
+  kind: unbacked
+  reason: a colcon test total or per-package count of Alex's run; the colcon logs are not under evidence/ (the committed reports carry per-check results, not colcon
+    totals)
+- doc: docs/pr/PR14_BODY.md
+  claim: 68 / 0 / 0
+  kind: unbacked
+  reason: a colcon test total or per-package count of Alex's run; the colcon logs are not under evidence/ (the committed reports carry per-check results, not colcon
+    totals)
+- doc: docs/pr/PR14_BODY.md
+  claim: 24 reports
+  kind: json_count
+  globs:
+  - evidence/reports/20261018T19*.json
+  - evidence/reports/20261018T2*.json
+  - evidence/reports/20261019T*.json
+  expect: 24
 - doc: report:dev
   claim: 0 of 478
   kind: record
