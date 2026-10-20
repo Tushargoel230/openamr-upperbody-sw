@@ -35,6 +35,8 @@ the gz server's `controller_manager.pal_statistics` teardown lines were being pr
 
 ## How often (our launch tests; each is one headless launch with this stack)
 
+The `-11` column below is OBSERVED-NOT-RECORDED: it was read from the console at the time. The number of launches is four per recorded run.
+
 | set of runs | launches with this bridge | `parameter_bridge` exit -11 | exit -6 (SIGABRT, "corrupted double-linked list", a different, older symptom) |
 |---|---|---|---|
 | 3 runs on an earlier commit of our branch (`bb39c83`), platform package at `174731c` | 12 | 0 | not counted |
@@ -45,7 +47,7 @@ the gz server's `controller_manager.pal_statistics` teardown lines were being pr
 
 That is **2 of 60 launches in total, 2 of 36 on the one platform package where it was seen**; the three sets of three on that package ran within a day of each other and gave 2, 0 and 0, so we cannot say the
 rate depends on anything we changed or on the platform package. Both crashes were in the same launch test (the gripper test, Bullet-Featherstone), in the same bridge instance. We have not
-run a larger sample and have no claim about the true rate. **The only recorded rate is 2 of 60 launches since P18.** (An earlier figure from this project, about 1 in 7 G02 runs, appeared in a report with no evidence behind it and was never recorded; we searched our earlier reports and logs and found no SIGSEGV of this process in them. Please do not rely on it.)
+run a larger sample and have no claim about the true rate. **The only observed rate is 2 of 60 launches since P18, OBSERVED-NOT-RECORDED: the exit codes were read from the console, and the reports record only that G02 and AUX failed.** (An earlier figure from this project, about 1 in 7 G02 runs, appeared in a report with no evidence behind it and was never recorded; we searched our earlier reports and logs and found no SIGSEGV of this process in them. Please do not rely on it.)
 The exit -6 case, a heap-corruption abort of the same executable at the same moment, was seen before (the project's process guard allows it and says so), which suggests one
 underlying teardown problem with two outcomes, not two problems. That is a guess.
 
@@ -65,8 +67,8 @@ git checkout feat/a7-gazebo-moveit       # the commit that carries this draft
 colcon test --packages-select openamrobot_upperbody_gazebo --event-handlers console_direct+ --pytest-args -k g02    # the Bullet-Featherstone gripper launch test
 ```
 
-Repeat until a launch ends with `Proc parameter_bridge-4 exited with code -11`. Reports and logs that show it: `evidence/reports/20261018T200829Z_a7.json` and
-`20261018T201608Z_a7.json` (check G02, `failed_tests`). Expect it in a minority of launches.
+Repeat until a launch ends with `Proc parameter_bridge-4 exited with code -11`. The reports that record the two failed runs (they record G02 and AUX failing, **not the exit code**, which was read from the console: OBSERVED-NOT-RECORDED) are `evidence/reports/20261018T200829Z_a7.json` and
+`20261018T201608Z_a7.json`. Expect it in a minority of launches.
 
 ## Expected
 

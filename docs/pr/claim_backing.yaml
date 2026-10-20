@@ -126,18 +126,16 @@ claims:
       equals: dfd44a5
 - doc: docs/pr/PR14_BODY.md
   claim: 2 of 36
-  kind: record
-  file: evidence/reports/README.md
-  contains: 2 of 36, both in P19
+  kind: observed_not_recorded
+  observed_by: console, P19 runs 2 and 3; quoted in docs/issues/ros_gz-bridge_teardown_segfault.md
 - doc: docs/pr/PR14_BODY.md
   claim: 2 of 60
-  kind: record
-  file: evidence/reports/README.md
-  contains: 2 of 60 launches since P18
+  kind: observed_not_recorded
+  observed_by: console; evidence/reports/README.md P21 and docs/issues/ros_gz-bridge_teardown_segfault.md say the same, as prose
 - doc: docs/pr/PR14_BODY.md
   claim: 0 of 24
-  kind: unbacked
-  reason: 'P20 (README: ''did not occur in these three runs'') and P21 (''0 in these 12 launches'') give 12 launches each; the sum 24 is not written in a file'
+  kind: observed_not_recorded
+  observed_by: console, P20 and P21 (12 launches each)
 - doc: docs/pr/PR14_BODY.md
   claim: 1 of 7
   kind: unbacked

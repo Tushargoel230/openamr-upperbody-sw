@@ -26,6 +26,9 @@ What a claim can resolve to (ledger: `docs/pr/claim_backing.yaml`; a claim is ma
               equals the claim (a rate: numerator and denominator both)
   RECORDED    a `record` entry: the named file under evidence/ contains the stated text. The file is a written record, not data derived from
               the reports, and the status says so; it is weaker than BACKED on purpose
+  OBSERVED-NOT-RECORDED
+              an `observed_not_recorded` entry: someone saw it (a console line, say) and nothing was recorded. Printed as such, does not fail, and
+              only while the text on the claim's line says OBSERVED-NOT-RECORDED, so a reader of the document sees the status too
   UNBACKED    a `unbacked` entry, with a reason: acknowledged and still printed as UNBACKED, so the list of what has nothing behind it is a
               list a reviewer can read. A claim with no entry at all is UNBACKED and fails
   MISMATCH    an entry whose backing does not say what the claim says (the file is missing, the text is not in it, the count differs): fails
@@ -74,6 +77,7 @@ PATTERNS = [
     ("percent", re.compile(r"\b\d+(?:\.\d+)?\s*(?:%|per cent|percent)")),
 ]
 CHECK_COUNT_FIELDS = ("PASS", "WARN", "FAIL", "NOT_RUN")
+OBSERVED_LABEL = "observed-not-recorded"        # normalised: the text must carry OBSERVED-NOT-RECORDED next to such a number
 ROW_DOCS = ["evidence/reports/README.md"]       # tables whose rows name report files next to a verdict count: only those counts are read
 REPORT_NAME = re.compile(r"(?:(\d{8})T(\d{6})Z|\.\.\.T(\d{6})Z)_(dev|a7)\.json")
 
@@ -277,6 +281,10 @@ def resolve(claim, entry, repo_root, reports):
     kind = entry.get("kind")
     if kind == "unbacked":
         return "UNBACKED", "acknowledged: " + str(entry.get("reason", "")).strip(), []
+    if kind == "observed_not_recorded":
+        if OBSERVED_LABEL not in claim.get("line", ""):
+            return "MISMATCH", f"this claim is an observation nothing recorded, and the text around it must say {OBSERVED_LABEL.upper()}", []
+        return "OBSERVED-NOT-RECORDED", "seen by a person (" + str(entry.get("observed_by", "console")).strip() + "); no file under evidence/ carries it as data", []
     if kind == "record":
         path = under_evidence(repo_root, entry.get("file", ""))
         if path is None:
@@ -494,6 +502,15 @@ def canary(repo_root, ledger_path):
         caught, statuses, _ = attempt("row", base_doc, backed, None)
         ok &= caught
         lines.append(f"{'OK     ' if caught else 'WRONG  '} the same row with the report's own counts is clean: statuses {statuses}")
+        # An observation nothing recorded: allowed only while the text says so.
+        obs = backed + [{"doc": "docs/pr/BODY.md", "claim": "2 of 9", "kind": "observed_not_recorded", "observed_by": "console"}]
+        caught, statuses, result = attempt("observed", base_doc + "The exit was seen in 2 of 9 launches.\n", obs, "MISMATCH")
+        ok &= caught
+        lines.append(f"{'CAUGHT ' if caught else 'MISSED '} an observed-only rate whose text does not say OBSERVED-NOT-RECORDED: statuses {statuses}")
+        caught, statuses, result = attempt("observed", base_doc + "The exit was seen (OBSERVED-NOT-RECORDED) in 2 of 9 launches.\n", obs, None)
+        printed = any(r["status"] == "OBSERVED-NOT-RECORDED" for r in result["claims"])
+        ok &= caught and printed
+        lines.append(f"{'OK     ' if caught and printed else 'WRONG  '} the same rate labelled OBSERVED-NOT-RECORDED is printed with that status and does not fail: statuses {statuses}")
         # A planted number in a generated report's prose.
         planted = dict(report, limitations=["the bridge exits -11 in 3 of 5 launches"])
         with open(os.path.join(tmp, "evidence", "reports", "20260102T000000Z_dev.json"), "w") as f:

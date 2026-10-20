@@ -135,7 +135,7 @@ V01_ANSWERED = {"1": "(item 1 as it stood in P14, about the mast) the mast read 
 V01_LIFT_MEASURED = {
     "1": {"verdict": "PASS", "expected": "base_footprint->lift_column_base_link x 0.060 z 0.304 (bp000), x 0.110 (bp050); openarm_left_base_link z 1.000 / 1.175 / 1.350, x and y unchanged",
           "measured": "x 0.060 z 0.304 (bp000), x 0.110 (bp050); left base z 1.000 / 1.175 / 1.350 at x 0.240 y +0.031 at all three stops",
-          "note": "no <visual> and no <collision> on lift_column_base_link or lift_carriage_link: nothing is drawn for the column"},
+          "note": "positions only. When this was measured (P16) neither column stage had a <visual> or a <collision>; since b45d8f6 both carry a 240 x 240 mm placeholder box (visual and collision) whose lateral side is invented, and this item was not re-measured with the boxes"},
     "2": {"verdict": "PASS", "expected": "arm_profile_link 0.120 fore-aft x 0.060 across x 0.340, centre 0.180 ahead of the column axis; carriage->arm base x 0.180 y +-0.031 z 0.166 (62 mm apart)",
           "measured": "box 0.12 x 0.06 x 0.34, centre x 0.180 from the carriage origin; left base (0.180, +0.031, 0.166), right (0.180, -0.031, 0.166); long side is fore-aft",
           "note": "read from the URDF, not from RViz seen from above"},
@@ -433,8 +433,9 @@ def limitations(datums, sidecars):
         "real envelope. A4 decides",
         "T10 reports what the description models. The battery, hub motors, electronics and the lift column's structure beyond "
         "its catalogue mass are not modelled, so the total is not the gross mass of the robot",
-        "the lift column has no collision geometry: its lateral extent is not sourced, so the arms can plan through the "
-        "column body; the arm profile (option B's 340 mm box) is the only collision body of the upper structure",
+        "the lift column has placeholder geometry since b45d8f6 (Alex's follow-up, accepted 16 Oct): a 240 x 240 mm box, visual and "
+        "collision, on each stage; the box is not the supplier's shape and its lateral side is invented (datum lift_column_section), so it "
+        "is collision geometry whose size nobody sourced; the arm profile (option B's 340 mm box) is the other collision body of the upper structure",
         "T14, T15 and T16 are expansion checks: nothing here loads the gazebo or the real plugin (the gazebo profile report, "
         "G01 and G02, is where the gazebo one runs), and the real profile cannot even be built here (openarm_hardware needs "
         "OpenArmCAN)",

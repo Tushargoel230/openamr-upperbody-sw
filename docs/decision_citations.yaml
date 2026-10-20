@@ -17,14 +17,18 @@
 # otherwise). History is not scanned: DESIGN_LOG.md, CHANGELOG.md, findings/, evidence/. A mention with no revision near it cannot be stale
 # and is only counted.
 #
-# What is deliberately red: the first entry, datums.yaml line 30, is STALE and stays so until the next change that bumps the datums revision
-# (a change to datums.yaml changes every config_id). It is listed rather than excused.
+# P22 left datums.yaml line 30 red (it cited FRAMES-REP105 at rev19.0) because re-citing it bumps the datums revision and every config_id;
+# P23 took the bump (revision 2026-10-20.a) and the first two entries now cite CAMERAS and FRAMES-REP105 at rev19.4.
 schema_version: 1
 citations:
   - document: ros2/src/openamrobot_upperbody_description/config/datums.yaml
+    decision: CAMERAS
+    revision: P-03-rev19.4
+    quote: "register CAMERAS, P-03 rev19.4 item 19 D3 update"
+  - document: ros2/src/openamrobot_upperbody_description/config/datums.yaml
     decision: FRAMES-REP105
-    revision: P-03-rev19.0
-    quote: "P-03 rev19.0 item 19 (Alex, 12 Oct 2026; register FRAMES-REP105)"
+    revision: P-03-rev19.4
+    quote: "register FRAMES-REP105, P-03 rev19.4: 'axle height', no number"
 
   - document: ros2/src/openamrobot_upperbody_description/config/frame_contract.yaml
     decision: FRAMES-REP105
@@ -58,8 +62,12 @@ citations:
   - document: docs/pr/PR14_BODY.md
     decision: FRAMES-REP105
     revision: P-03-rev19.0
-    historical: "describes datums.yaml's stale citation (the next line of the same bullet says so); it is not a citation of its own"
-    quote: "Our datums.yaml:30 cites FRAMES-REP105 at rev19.0"
+    historical: "says what datums.yaml cited before P23 re-cited it; not a citation of its own"
+    quote: "Our datums.yaml cited FRAMES-REP105 at rev19.0"
+  - document: docs/pr/PR14_BODY.md
+    decision: CAMERAS
+    revision: P-03-rev19.4
+    quote: "stated in CAMERAS (P-03 rev19.4)"
 
   - document: design:FRAMES.md
     decision: CAMERAS

@@ -258,8 +258,9 @@ def limitations(sidecars):
         "the lift is not under ros2_control and has no authority to be commanded (option B: effort 0, velocity 0): its state is the "
         "operating point of a run (the mock stub's lift_position in M01; joint_state_publisher's default zero in Gazebo, not read from the "
         "physics), and MoveIt plans the arms from it. The three lift stops are calibration IDs, not configuration IDs",
-        "the lift column has no collision geometry (its lateral extent is not sourced): the arms can plan through the column body, and "
-        "arm_profile_link, option B's 340 mm box, is the one collision body of the upper structure",
+        "the lift column has placeholder geometry since b45d8f6 (Alex's follow-up, accepted 16 Oct): a 240 x 240 mm box, visual and collision, on "
+        "each stage. The box is not the supplier's shape and its lateral side is invented (datum lift_column_section), so it is collision "
+        "geometry whose size nobody sourced; arm_profile_link, option B's 340 mm box, is the other collision body of the upper structure",
         "`park` is a placeholder copy of upstream's `home`, until the safe-pose definition lands under the manipulation action contract",
         "the gripper controller is still the deprecated position_controllers/GripperActionController serving GripperCommand (option 1 of "
         "ADR-009 point 4): this report does not choose between the three gripper interfaces (manipulation#11)",

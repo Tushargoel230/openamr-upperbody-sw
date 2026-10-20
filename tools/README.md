@@ -41,7 +41,7 @@ python3 tools/check_evidence_backing.py --canary
 
 A claim is a verdict count (`25 PASS / 3 WARN / 0 FAIL`), a rate (`2 of 36`, `about 1 in 13`), a count (`826 tests`) or a percentage. It is `BACKED` (a
 committed report has it, or `docs/pr/claim_backing.yaml` says how to derive it from committed reports), `RECORDED` (a written record under `evidence/`
-says it: weaker, and labelled so), `UNBACKED` with an acknowledged reason, or `UNBACKED` without one, which fails. The table rows of
+says it: weaker, and labelled so), `UNBACKED` with an acknowledged reason, `OBSERVED-NOT-RECORDED` (seen, never recorded, and labelled so in the text), or `UNBACKED` without a reason, which fails. The table rows of
 `evidence/reports/README.md` are read for one thing: the report files named in a row must have the verdict counts the row states.
 
 What it does **not** prove: that a number is right (a record written by us is only as good as we were), and it does not see numbers that are not counts of
@@ -57,9 +57,12 @@ They use small registers and trees of their own; they do not read the real `deci
 
 ### Wiring them in, if someone wants to (not done)
 
-Run `--canary` first in the same job (a check that cannot fail is not a check), pin the register to a harness commit (the same SHA as the caller's
-`harness_ref`), and decide what happens to the one citation that is red today (`datums.yaml`, line 30: it can only be re-cited with the next change that
-bumps the datums revision). Neither tool should be added to another repository's workflow.
+Run `--canary` first in the same job (a check that cannot fail is not a check) and pin the register to a harness commit (the same SHA as the caller's
+`harness_ref`). Neither tool should be added to another repository's workflow. Since P23 the currency check is clean on the real list (0 STALE): the
+`datums.yaml` citation that P22 left red was re-cited with the revision bump to `2026-10-20.a`.
+
+The backing check has a fourth status besides BACKED, RECORDED and UNBACKED: `OBSERVED-NOT-RECORDED`, for a number someone saw (a console line) and nothing
+recorded. It is allowed only while the text on the claim's line says OBSERVED-NOT-RECORDED.
 
 ## `compare_option_b_wrapper.sh`
 

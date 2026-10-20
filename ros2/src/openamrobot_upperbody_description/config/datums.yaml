@@ -3,7 +3,7 @@
 # Schema v1, see 10_architecture/DATUMS.md. Values may change; names and the frame structure may not.
 # Computed values (e.g. the lift's inertia tensor) are NOT stored here; upstream-owned values (option B's geometry, the arm) are read from upstream YAML.
 schema_version: 1
-revision: "2026-10-15.a"          # bump on every change to this file; goes into config_id (test_datums_revision.py enforces it)
+revision: "2026-10-20.a"          # bump on every change to this file; goes into config_id (test_datums_revision.py enforces it)
 units: {length: m, angle: rad, mass: kg}
 
 # Datums that are reported but never feed the model (DATUMS.md rule 1).
@@ -27,7 +27,7 @@ datums:
     value: 0.098
     source: plan
     status: provisional
-    ref: "P-03 rev19.0 item 19 (Alex, 12 Oct 2026; register FRAMES-REP105): base_link at the drive-axle midpoint, 98 mm above the floor; base_footprint on the floor. platform-sw 935efc7 has the same 0.098 in base_footprint_joint"
+    ref: "register CAMERAS, P-03 rev19.4 item 19 D3 update (Alex decision 16 Oct 2026, CAD Rev B): base_link 0.098 m above the floor (camera centre 144 mm = base_link 0.098 m + z 0.046 m); base_link at the drive-axle midpoint, base_footprint on the floor (register FRAMES-REP105, P-03 rev19.4: 'axle height', no number). platform-sw has the same 0.098 in base_footprint_joint (robo_urdf.urdf.xacro:20)"
     owner: "Alex (decision) / platform-sw (base frames)"
     note: "A placeholder from S3 to P14 (0.0635, read off the SolidWorks export origin and a 0.110 m wheel) because nobody had defined it. It is a decision record, not a measurement, so provisional. T04 (test_t04_optb_composition) asserts it equals the base_footprint -> base_link joint of the expansion, so a platform-sw change cannot leave it behind."
 
@@ -75,7 +75,7 @@ datums:
     status: placeholder
     ref: "x = 0.240 is option B's own statement that the DOLD column is mounted with its 240 mm side fore-aft (upperbody_configuration.yaml, a description string, not a number field). y, the lateral side, is in no document we hold: it is set equal to x only so the placeholder inertia and the density bound can be evaluated"
     owner: "Alex (supplier drawing)"
-    note: "The one invented number of the lift. It reaches only the inertia tensor of the column (no collision, no visual, no joint), and it is the datum to replace first when the supplier drawing arrives. Not made a hard-fail because that would remove the lift's mass from every expansion; see the P15 report."
+    note: "The one invented number of the lift. It sizes the inertia tensor of the column AND, since b45d8f6 (Alex's follow-up, accepted 16 Oct), the visual and collision boxes of both column stages, so it decides where a planned arm is refused; it is the datum to replace first when the supplier drawing arrives. Not made a hard-fail because that would remove the lift's mass from every expansion; see the P15 report."
 
   left_wrist_camera_pose:
     value: {xyz: [0.0, 0.05, -0.03], rpy: [0.0, 0.0, 0.0]}

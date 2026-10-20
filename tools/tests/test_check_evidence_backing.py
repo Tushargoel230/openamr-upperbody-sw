@@ -157,6 +157,15 @@ def test_numbers_in_a_generated_reports_prose_are_scanned_and_keyed_by_profile(t
     assert check(tree, "No numbers.\n", [ack], reports=["evidence/reports/20260104T000000Z_a7.json"])["status"] == "PASS"
 
 
+def test_an_observed_but_unrecorded_rate_must_say_so_in_the_text(tree):
+    entry = {"doc": "docs/pr/BODY.md", "claim": "2 of 9", "kind": "observed_not_recorded", "observed_by": "console"}
+    bare = check(tree, "The exit was seen in 2 of 9 launches.\n", [entry])
+    assert statuses(bare) == ["MISMATCH"] and bare["status"] == "FAIL"
+    labelled = check(tree, "The exit was seen (OBSERVED-NOT-RECORDED) in 2 of 9 launches.\n", [entry])
+    assert statuses(labelled) == ["OBSERVED-NOT-RECORDED"] and labelled["status"] == "PASS"
+    assert check(tree, "The exit was seen in 2 of 9 launches.\n")["status"] == "FAIL"
+
+
 def test_the_cli_and_its_exit_codes(tree, capsys):
     (tree / "docs" / "pr" / "BODY.md").write_text("It was 3 of 5.\n")
     (tree / "ledger.yaml").write_text(yaml.safe_dump({"claims": []}))
@@ -174,7 +183,7 @@ def test_the_canary_catches_every_planted_number(tree):
     (tree / "ledger.yaml").write_text(yaml.safe_dump({"claims": []}))
     ok, lines = ceb.canary(str(tree), str(tree / "ledger.yaml"))
     assert ok, "\n".join(lines)
-    assert sum(line.startswith("CAUGHT") for line in lines) == 10 and "PASS" in lines[0]
+    assert sum(line.startswith("CAUGHT") for line in lines) == 11 and "PASS" in lines[0]
 
 
 def test_the_canary_fails_when_the_check_is_blind(tree, monkeypatch):

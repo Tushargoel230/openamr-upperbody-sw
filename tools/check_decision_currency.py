@@ -353,7 +353,7 @@ def expand_globs(root, patterns):
         dirs[:] = [d for d in dirs if d not in (".git", "node_modules", "build", "install", "log", "__pycache__", ".pytest_cache")]
         for name in files:
             relative = os.path.relpath(os.path.join(base, name), root).replace(os.sep, "/")
-            if any(fnmatch(relative, pattern) or fnmatch("/" + relative, "*/" + pattern) for pattern in patterns):
+            if any(fnmatch(relative, pattern) for pattern in patterns):          # anchored: "README.md" is the top-level one only
                 found.append(relative)
     return sorted(found)
 

@@ -241,7 +241,7 @@ PR-body statements on W03 and M07 (`CHANGELOG.md`, P21). platform-sw `dfd44a5`, 
 | `20261019T003746Z_dev.json`, `...T004121Z_dev.json`, `...T004454Z_dev.json` | A6 suite, runs 1 to 3 | `dfd44a5` | 25 PASS, 3 WARN (E01, W02, V01), 0 FAIL, 0 NOT_RUN, each |
 | `20261019T005239Z_a7.json`, `...T010031Z_a7.json`, `...T010818Z_a7.json` | A7, runs 1 to 3 | `dfd44a5` | **14 PASS, 2 WARN (M07, V01), 0 FAIL, 0 NOT_RUN, each**; AUX 131 tests, 0 failed; H01 and H02 PASS |
 
-- **`parameter_bridge` SIGSEGV: 0 in these 12 launches** (one bridge exit -6, allowed, in run 3). Cumulative: **2 of 60** launches since P18 (P18 12, P19 on `d619012` 12, P19 on `dfd44a5` 12, P20 12, P21 12);
+- **`parameter_bridge` SIGSEGV: 0 in these 12 launches** (one bridge exit -6, allowed, in run 3). Cumulative (**OBSERVED-NOT-RECORDED**: the -11 exits were read from the console, no report or log here carries them; the reports record only that G02 and AUX failed): **2 of 60** launches since P18 (P18 12, P19 on `d619012` 12, P19 on `dfd44a5` 12, P20 12, P21 12);
   on `dfd44a5` alone **2 of 36**, both in P19, both G02 `base_joint_states_bridge`; A7 runs on `dfd44a5`: 9, of which 2 FAILED (G02, AUX) and 7 passed with 0 FAIL. Not allow-listed.
 - **W04**: PASS in all three (12 launches, all `stopped`, 1.33 to 1.43 s). It now reads only `stopped` and `force_stopped` as results; see `CHANGELOG.md`, P21.
 - **M02**: 0 excursions in all three; largest overshoot 1.28e-6, 1.99e-6, 2.15e-6 rad against 1e-5 (not widened). **M07** WARN on the four joints in all three.
