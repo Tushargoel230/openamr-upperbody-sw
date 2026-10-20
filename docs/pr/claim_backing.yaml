@@ -114,6 +114,43 @@ claims:
   claim: 3 of the 12
   kind: json_count
   numerator:
+    globs: &id001
+    - evidence/reports/20261018T*_a7.json
+    - evidence/reports/20261019T*_a7.json
+    - evidence/reports/20261020T10*_a7.json
+    - evidence/reports/20261020T11[0-4]*_a7.json
+    where:
+    - path: upstream.openamr-platform-sw
+      equals: dfd44a5
+    - any_check_result: FAIL
+  denominator:
+    globs: *id001
+    where:
+    - path: upstream.openamr-platform-sw
+      equals: dfd44a5
+  near: of p19 to p23
+- doc: docs/pr/PR14_BODY.md
+  claim: 3 of 3
+  kind: json_count
+  numerator:
+    glob: evidence/reports/*_a7.json
+    where:
+    - path: git_hash
+      startswith: 15109f9
+    - verdicts:
+        PASS: 14
+        WARN: 2
+        FAIL: 0
+  denominator:
+    glob: evidence/reports/*_a7.json
+    where:
+    - path: git_hash
+      startswith: 15109f9
+  near: 15109f9
+- doc: docs/pr/PR14_BODY.md
+  claim: 3 of 15
+  kind: json_count
+  numerator:
     glob: evidence/reports/*_a7.json
     where:
     - path: upstream.openamr-platform-sw
@@ -124,6 +161,23 @@ claims:
     where:
     - path: upstream.openamr-platform-sw
       equals: dfd44a5
+- doc: docs/pr/PR14_BODY.md
+  claim: 0 of 12
+  kind: launch_exits
+  globs:
+  - evidence/reports/20261020T12*_a7.json
+  process: parameter_bridge
+  exit_code: -11
+- doc: docs/pr/PR14_BODY.md
+  claim: 25 percent
+  kind: unbacked
+  reason: 'arithmetic or a probability derived from other figures; the result is not itself written in any file under evidence/: 3 of the 12 A7 runs of P19 to P23
+    (backed by the reports'' failed checks)'
+- doc: docs/pr/PR14_BODY.md
+  claim: 20 percent
+  kind: unbacked
+  reason: 'arithmetic or a probability derived from other figures; the result is not itself written in any file under evidence/: 3 of the 15 A7 runs on dfd44a5 (backed
+    by the reports'' failed checks)'
 - doc: docs/pr/PR14_BODY.md
   claim: 3 of 48
   kind: observed_not_recorded

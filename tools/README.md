@@ -61,6 +61,8 @@ Run `--canary` first in the same job (a check that cannot fail is not a check) a
 `harness_ref`). Neither tool should be added to another repository's workflow. Since P23 the currency check is clean on the real list (0 STALE): the
 `datums.yaml` citation that P22 left red was re-cited with the revision bump to `2026-10-20.a`.
 
+Since P24 an A7 report carries `process_exits` (the exit code of every process of every launch), and the ledger kind `launch_exits` derives "N of M launches with a `parameter_bridge` ended in -11" from it: BACKED for runs since P24, nothing for earlier reports.
+
 The backing check has a fourth status besides BACKED, RECORDED and UNBACKED: `OBSERVED-NOT-RECORDED`, for a number someone saw (a console line) and nothing
 recorded. It is allowed only while the text on the claim's line says OBSERVED-NOT-RECORDED.
 

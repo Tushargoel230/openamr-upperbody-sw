@@ -45,8 +45,9 @@ The `-11` column below is OBSERVED-NOT-RECORDED: it was read from the console at
 | 3 more runs, platform package at `dfd44a5`, a few hours later, same code | 12 | 0 | 1 |
 | 3 more runs, platform package at `dfd44a5`, a few hours later, with test-only changes | 12 | 0 | 1 |
 | 3 more runs, platform package at `dfd44a5`, the next day (P23), after a clean rebuild | 12 | **1** (run 1, in the **M07** launch test, the gripper test was clean; the console tail is `evidence/p23/a7_run1_console_tail.txt`) | not counted | not counted |
+| 3 more runs, platform package at `dfd44a5`, the next day (P24, exit codes now **recorded** in the report's `process_exits`), after a clean rebuild | 12 | **0** (recorded) | not counted |
 
-That is **3 of 72 launches in total, 3 of 48 on the one platform package where it was seen**; the four sets of three on that package gave 2, 0, 0 and 1, so we cannot say the
+Up to P23 that is **3 of 72 launches in total, 3 of 48 on the one platform package where it was seen** (observed; the P24 row is recorded and is not added); the four sets of three on that package gave 2, 0, 0 and 1, so we cannot say the
 rate depends on anything we changed or on the platform package. The first two crashes were in the same launch test (the gripper test, Bullet-Featherstone), in the same bridge instance; the third was in another launch test (M07's), and the console tail does not name the instance. We have not
 run a larger sample and have no claim about the true rate. **The only observed rate is 3 of 72 launches since P18, OBSERVED-NOT-RECORDED: the exit codes were read from the console, and the reports record only which checks failed (G02 and AUX twice, M07 and AUX once).** (An earlier figure from this project, about 1 in 7 G02 runs, appeared in a report with no evidence behind it and was never recorded; we searched our earlier reports and logs and found no SIGSEGV of this process in them. Please do not rely on it.)
 The exit -6 case, a heap-corruption abort of the same executable at the same moment, was seen before (the project's process guard allows it and says so), which suggests one

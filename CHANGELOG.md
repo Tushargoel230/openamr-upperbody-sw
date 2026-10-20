@@ -29,12 +29,23 @@ All notable changes to this repository. Evidence for the description is static a
   `ros2_control`; `lift_joint` and the mimic `finger_joint2`s are recorded as not measured, with the reason), and every expected joint needs 50
   samples in the window; a missing or under-sampled joint is a FAIL recorded as incomplete coverage. `test_m07_coverage.py` pins it.
 
+### Added (P24): the exit code of every launch process is recorded
+
+- **`launch_guard.assert_launch_healthy(record=...)`** writes `{process, exit_code}` for every process of the launch into the sidecar of the check whose launch it was (G01, G02, M01, M02, M07: key `process_exits`),
+  before it asserts, so a launch that fails the check still leaves its exit codes. `build_a7_evidence.py` lists them per launch as `process_exits` in the A7 report. Nothing is allow-listed or widened: `parameter_bridge` -11 is still a
+  FAIL (a test pins it). The processes are read by action, not by name (`proc_info["spawner-1"]` is a substring match).
+- **The bridge exit rate can now be BACKED, for new runs only.** `tools/check_evidence_backing.py` has the ledger kind `launch_exits`: "N of M launches with a `parameter_bridge` ended in -11" derives from `process_exits` (reports before P24 contribute no launch).
+  Canary: a synthetic -11 in a sidecar comes out of the report as a rate the check backs, and a different number is a MISMATCH (`test_a7_process_exits.py`, `check_evidence_backing.py --canary`). **The three past occurrences stay OBSERVED-NOT-RECORDED**: they cannot be recovered.
+- **P24 runs on `15109f9`, platform-sw `dfd44a5`: A6 x3 25 / 3 / 0; A7 x3 14 / 2 / 0.** Recorded: 12 launches with a `parameter_bridge` (two per launch), 0 ended in -11. Run-level: 3 of the 12 A7 runs of P19 to P23 on `dfd44a5` failed on this crash, 25 percent, across two different
+  launches (G02 twice, M07 once); with P24's three clean runs, 3 of 15, 20 percent.
+- **PR body**: Mohammad's words on the column finding are quoted (his review of `9406af6`), the run-level rate is stated, and the P23 sentence that the statement "did not describe the model" is corrected: for the P18 reports he reviewed it was true.
+
 ### Changed (P23): the false column statement, the datums citation, the bridge rate
 
 - **The report generators no longer say the lift column has no collision geometry.** `build_a7_evidence.py` (the limitation) and `build_evidence.py` (the limitation, and the V01 item 1 note
   "nothing is drawn for the column") now say what `b45d8f6` made true: a 240 x 240 mm placeholder box, visual and collision, on each stage, whose lateral side is invented. The old sentence was a
   generator string and not a finding. It is in 56 committed reports: true in the 32 of P15 to P18, **false in the 24 of P19 to P21** (`20261018T191032Z_dev.json` to `20261019T010818Z_a7.json`). None is edited;
-  `evidence/reports/README.md`, section P23, lists them. Mohammad cited that statement as a reason to hold #14 (Tushar's instruction; the comment is not in this repository), and the PR body says it did not describe the model.
+  `evidence/reports/README.md`, section P23, lists them. Mohammad's review of `9406af6` on #14 (on GitHub, quoted in the PR body) cited it; for the P18 reports he reviewed it was true, and P24 corrected the P23 wording that said it "did not describe the model".
 - **`datums.yaml` re-cited; datums revision `2026-10-20.a`; every `config_id` changed.** `base_link_height_above_floor` cited FRAMES-REP105 at P-03 rev19.0; 0.098 m is in the register's CAMERAS at
   rev19.4 (`decisions.yaml:600`). The value is unchanged; the `ref` and the `lift_column_section` note (which still said "no collision, no visual") changed, so the revision moved and with it all 14 ids of the A6
   reports and all 9 of the A7 reports. An id recorded under another datums revision is not comparable, which the existing non-comparability note (Satya, C9; the PR body, "`config_id` inputs changed") already says; no input was added.
