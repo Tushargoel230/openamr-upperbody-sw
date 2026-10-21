@@ -5,6 +5,17 @@ All notable changes to this repository. Evidence for the description is static a
 
 ## [Unreleased]
 
+### Changed (P25, 21 Oct 2026)
+
+- **The three placeholder boxes have one named, explicit colour.** `lift_column_base_link`, `lift_carriage_link` and `arm_profile_link` had no
+  `<material>`, so RViz drew them red and Gazebo black. They now use the material `placeholder_geometry` (rgba 0.78 0.64 0.45 1.0, a flat cardboard
+  tan that nothing else in the combined robot uses) in the URDF, and each link has a `<gazebo reference>` block with the same ambient and diffuse,
+  because sdformat takes a link's colour from that block. **The two column visuals lost their `name` attribute** (`placeholder_lift_column_*_stage`):
+  sdformat applies the `<gazebo>` material block only to a visual with no name of its own, so a named column visual kept whatever the URDF material
+  converts to (1.25 times brighter in the SDF). The collisions keep their `placeholder_*` names. No pose, mount, stop height, frame or joint changed;
+  `config_id` changes because the URDF text does. `test_p25_placeholder_material.py` pins the colour in the URDF, the `<gazebo>` block and the SDF
+  that `gz sdf -p` produces.
+
 ### Changed (follow-ups to 49d2368, accepted by Alex on 16 Oct)
 
 - **The lift column has placeholder geometry.** Both stages carry a 240 x 240 mm box (datum `lift_column_section`, placeholder), visual and

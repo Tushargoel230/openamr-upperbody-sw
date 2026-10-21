@@ -62,6 +62,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(c01_config_id test/test_c01_config_id.py TIMEOUT 600)
   ament_add_pytest_test(c02_upstream_pin test/test_c02_upstream_pin.py TIMEOUT 600)
   ament_add_pytest_test(w02_planar_kdl test/test_w02_planar_kdl.py TIMEOUT 600)
+  # the three placeholder boxes have one explicit colour in the URDF and in the SDF (P25)
+  ament_add_pytest_test(p25_placeholder_material test/test_p25_placeholder_material.py TIMEOUT 600)
   ament_add_pytest_test(evidence_dir test/test_evidence_dir.py TIMEOUT 600)
   ament_add_pytest_test(build_evidence test/test_build_evidence.py TIMEOUT 600)
   # the detector of a gz server that outlives its launch, on decoy processes (P16); no ROS graph
