@@ -291,3 +291,17 @@ Tested code `ecdfcf2` (the placeholder boxes get one named material, in the URDF
 - **Process exits (recorded).** 24 `parameter_bridge` processes in the 12 simulator launches of the three A7 runs: none ended in -11; one ended in -6 (G01, run 3), which the guard allows (`launch_guard.py`, the shutdown abort of the bridge, seen in P16). `move_group` -11 (allowed, at every stop) appears 4 times in every run, as before.
 - **No orphan.** `pgrep -af "^gz sim"` after each A7 run, and a sweep of my own processes by environment (private domains 101 to 200, the test partitions), found nothing to kill after any of the three.
 - **Run level, now:** of the 18 A7 runs on `dfd44a5` of P19 to P25, 3 failed on the bridge crash, 17 percent; none of the six of P24 and P25 did.
+
+## P27
+
+Three A6 and three A7 runs on `26f539c` (the M07 non-finite fix, Om's two tests, the merge-marker fix), clean tree, platform-sw `dfd44a5`. Details in `../p27/README.md`.
+
+| file | run | result |
+|---|---|---|
+| `20261021T131959Z_dev.json` | A6 1 | 25 PASS, 3 WARN, 0 FAIL |
+| `20261021T132342Z_dev.json` | A6 2 | 25 PASS, 3 WARN, 0 FAIL |
+| `20261021T132726Z_dev.json` | A6 3 | 25 PASS, 3 WARN, 0 FAIL |
+| `20261021T133515Z_a7.json` | A7 1 | 14 PASS, 2 WARN (M07, V01), 0 FAIL |
+| `20261021T134303Z_a7.json` | A7 2 | 14 PASS, 2 WARN (M07, V01), 0 FAIL |
+| `20261021T135052Z_a7.json` | A7 3 | 14 PASS, 2 WARN (M07, V01), 0 FAIL |
+
