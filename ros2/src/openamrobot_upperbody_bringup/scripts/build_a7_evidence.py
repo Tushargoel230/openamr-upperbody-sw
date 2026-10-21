@@ -59,7 +59,7 @@ A7_CHECKS = [
     ("M05", "per-hand gripper values: closed is each hand's own far limit, opposite signs (ADR-009 point 5); the single-number version fails both ways"),
     ("M06", "named-pose plans need some acceleration limit and are insensitive to its value across three orders of magnitude (the limits stay placeholders)"),
     ("M07", "at rest in Gazebo no joint sits within the joint_rest_margin_rad datum of either of its limits (FAIL; WARN for the joints whose rest pose is an "
-            "upstream limit; lift_joint is not measured, and says why)"),
+            "upstream limit; a non-finite reading is a FAIL; lift_joint and the mimic finger_joint2s are not measured, and say why)"),
     ("W04", "a gz server had to be force-stopped by the launch's stop helper (WARN; a server still running after that is the survivor check's FAIL, in the test that owns it)"),
     ("L01", "launch test: five controllers active on mock, one trajectory followed"),
     ("H01", "every test file is registered and every launch test checks that its processes started and exited cleanly"),

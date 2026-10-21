@@ -11,12 +11,40 @@ import evidence_common as ev
 from conftest import SCRIPTS, SHARE, write_sidecar
 
 
+def _parent_of_the_install_ancestor(path):
+    """The expected workspace, worked out from the path alone and independently of evidence_common: the parent of the nearest path component
+    named `install`. It does not look for, or require, any sibling directory (a `src/` in particular)."""
+    parts = os.path.abspath(path).split(os.sep)
+    index = len(parts) - 1 - parts[::-1].index("install")
+    return os.sep.join(parts[:index]) or os.sep
+
+
 def test_default_is_the_workspace_evidence_directory_found_from_the_share_path():
+    """Found from the SHARE PATH, wherever the sources sit. This test used to also assert `<workspace>/src` exists: that is how some colcon
+    workspaces are laid out, not this repository's (its sources are under ros2/src, and a checkout that is built in place has no root-level
+    src/). The contract is install -> workspace -> evidence, and nothing about the source tree."""
     directory = ev.evidence_dir(SHARE, environ={})
-    workspace = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(SHARE)))))
+    workspace = _parent_of_the_install_ancestor(SHARE)
     assert directory == os.path.join(workspace, "evidence")
-    assert os.path.isdir(os.path.join(workspace, "install")) and os.path.isdir(os.path.join(workspace, "src"))
+    assert os.path.isdir(os.path.join(workspace, "install"))
     assert os.path.isdir(directory)
+
+
+@pytest.mark.parametrize("root,sources", [
+    ("checkout", "checkout/ros2/src/pkg"),                       # this repository built from its root: no root-level src/ anywhere
+    ("checkout/ros2", "checkout/ros2/src/pkg"),                  # built from ros2/: src/ is a sibling of install/
+    ("ws", "ws/src/repo/ros2/src/pkg"),                          # a conventional workspace with this repository cloned into src/
+])
+def test_the_evidence_directory_does_not_depend_on_where_the_sources_sit(tmp_path, root, sources):
+    """A checkout with no root-level src/ (the first case) must resolve and create `<root>/evidence`; it cannot regress to demanding a src/."""
+    (tmp_path / sources).mkdir(parents=True)
+    share = tmp_path / root / "install" / "pkg" / "share" / "pkg"
+    share.mkdir(parents=True)
+    if root == "checkout":
+        assert not (tmp_path / "checkout" / "src").exists()
+    directory = ev.evidence_dir(str(share), environ={})
+    assert directory == str(tmp_path / root / "evidence") and os.path.isdir(directory)
+    assert _parent_of_the_install_ancestor(str(share)) == str(tmp_path / root)
 
 
 def test_the_env_var_overrides_and_the_directory_is_created(tmp_path):

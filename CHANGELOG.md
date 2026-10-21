@@ -5,6 +5,23 @@ All notable changes to this repository. Evidence for the description is static a
 
 ## [Unreleased]
 
+### Fixed (P27, 21 Oct 2026; the three reviewer findings on PR #14 at `ba5b4ea`)
+
+- **M07 rejects non-finite joint positions and FAILs on them (Mohammad, twice).** Before: a NaN compares false with everything, so 50 NaNs per expected joint
+  counted as 50 samples with no extremum and passed, and 49 finite readings plus one NaN counted 50 and passed (`evidence/p27/m07_nan_before.txt`). Now the NaNs and
+  infinities are split off BEFORE the coverage count and before any extremum (`a7_support.split_finite`), a non-finite reading never counts toward the 50-sample minimum,
+  the rejected readings are kept in the sidecar (`invalid_readings`: per joint, count, kind, position), and any non-finite reading is a FAIL, never a PASS or a WARN. The
+  decision is now one pure function, `a7_support.evaluate_m07`, that the launch test records; `test_m07_non_finite.py` covers both reproductions, mixed readings, a missing
+  joint, +/-inf, and Alex's rule (WARN only for the four upstream-limit joints, FAIL more than 0.001 rad beyond a limit, those four included). One boundary moved by one
+  float: a listed joint read exactly 0.001 rad past its limit is WARN ("more than 0.001 rad" is the FAIL), it was FAIL. No margin, model, clamp epsilon or named pose changed.
+- **`test_evidence_dir` no longer requires a root-level `src/`** (Om): this repository's sources are under `ros2/src`. The workspace is found from the share path alone
+  (`install` ancestor), with cases for a checkout with no `src/`, a build from `ros2/`, and a conventional workspace. **`test_build_evidence` asserts the simulation-only
+  disclaimer is PRESENT, not last** (any later limitation, such as an upstream pin read from metadata, used to break it); cases: a limitation after the disclaimer passes, a
+  report without it fails, a physical claim fails.
+- **The red `repository-quality` check (run 39575711096).** The merge-marker scan is the organisation's (`openAMRobot/.github`, `repository-quality-reusable.yml@main`): any tracked
+  line starting with seven `=` matches, and pytest's summary separator in `evidence/p24/pytest_process_exits.txt:14` did. The file is now `pytest_process_exits.md` (git mv, content
+  unchanged; the scan skips `*.md`), and `test_merge_markers.py` runs the organisation's exact command over the tracked files, with canaries.
+
 ### Changed (P25, 21 Oct 2026)
 
 - **The three placeholder boxes have one named, explicit colour.** `lift_column_base_link`, `lift_carriage_link` and `arm_profile_link` had no

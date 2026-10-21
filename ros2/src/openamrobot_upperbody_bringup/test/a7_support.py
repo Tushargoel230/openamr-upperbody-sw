@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 """Shared by the M01 and M02 launch tests: the named-pose sequence, the settle-and-measure step, and the per-run sidecar."""
+import math
 import os
 import sys
 import time
@@ -194,13 +195,130 @@ def expected_rest_joints(urdf_xml, not_measured):
     return expected, also
 
 
+# Joints whose rest pose is one of their upstream URDF limits by construction (`home` and `open` are 0, the lower or upper limit; evidence/m02_bisect/RESULTS.md).
+# M07 reports them WARN with this reason when they rest within the margin of that limit, on either side, and FAIL when one is read further past it than the margin.
+AT_UPSTREAM_LIMIT = {
+    "openarm_left_finger_joint1": "rest pose at an upstream limit",
+    "openarm_right_finger_joint1": "rest pose at an upstream limit",
+    "openarm_left_joint4": "rest pose at an upstream limit",
+    "openarm_right_joint4": "rest pose at an upstream limit",
+}
+
+
+def non_finite_kind(value):
+    """'nan', '+inf' or '-inf' for a reading that is not a finite number, else None. Anything that is not a real number (None, a string) is 'nan'."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return "nan"
+    if math.isfinite(value):
+        return None
+    return "nan" if math.isnan(value) else ("+inf" if value > 0 else "-inf")
+
+
+def split_finite(readings):
+    """(valid, invalid) for M07: `readings` is {joint: [raw positions in arrival order]}. `valid` keeps only the finite ones, in order; `invalid` is
+    {joint: {"count", "by_kind": {"nan": n, ...}, "indices": [position in that joint's raw list ...]}} for every joint that had a non-finite
+    reading, so the sidecar keeps what was rejected. Done BEFORE anything counts or takes an extremum: a NaN compares false with everything, so it
+    can sit in a list of 50 readings and leave `min`, `max` and a distance-to-limit that look fine (P27, Mohammad's two reproductions)."""
+    valid, invalid = {}, {}
+    for joint, values in readings.items():
+        keep = []
+        for index, value in enumerate(values):
+            kind = non_finite_kind(value)
+            if kind is None:
+                keep.append(float(value))
+                continue
+            entry = invalid.setdefault(joint, {"count": 0, "by_kind": {}, "indices": []})
+            entry["count"] += 1
+            entry["by_kind"][kind] = entry["by_kind"].get(kind, 0) + 1
+            entry["indices"].append(index)
+        valid[joint] = keep
+    return valid, invalid
+
+
 def coverage_problems(readings, expected, min_samples):
     """{"missing": [...], "too_few_samples": {joint: n}} for M07: an expected joint that never appeared, or appeared fewer than `min_samples`
     times in the window, means the window did not measure it. Empty lists/dicts mean complete coverage; anything else is a FAIL of the
-    measurement (never a PASS, never a WARN)."""
-    missing = [j for j in expected if not readings.get(j)]
-    short = {j: len(readings[j]) for j in expected if readings.get(j) and len(readings[j]) < min_samples}
+    measurement (never a PASS, never a WARN). Only FINITE readings count (P27): a joint whose readings were all NaN has no valid reading, and
+    49 finite readings plus one NaN is 49, fewer than 50. `readings` may be raw; the count is the same whether or not split_finite ran first."""
+    valid, _ = split_finite(readings)
+    missing = [j for j in expected if not valid.get(j)]
+    short = {j: len(valid[j]) for j in expected if valid.get(j) and len(valid[j]) < min_samples}
     return {"missing": missing, "too_few_samples": short}
+
+
+def rest_rows(readings, limits, margin):
+    """[{joint, min, max, lower, upper, to_lower, to_upper, nearest, distance, within_margin}] for every joint with limits that was read.
+    `readings` must already be finite (split_finite). `distance` is the smaller of (lowest reading - lower) and (upper - highest reading);
+    negative means the joint was read past a limit."""
+    rows = []
+    for joint in sorted(readings):
+        if joint not in limits or not readings[joint]:
+            continue
+        values = readings[joint]
+        low, high = min(values), max(values)
+        lower, upper = limits[joint]
+        to_lower, to_upper = low - lower, upper - high
+        nearest = "lower" if to_lower <= to_upper else "upper"
+        distance = min(to_lower, to_upper)
+        rows.append({"joint": joint, "readings": len(values), "min_rad": low, "max_rad": high, "lower_limit_rad": lower, "upper_limit_rad": upper,
+                     "distance_to_lower_rad": to_lower, "distance_to_upper_rad": to_upper, "nearest_limit": nearest,
+                     "distance_to_nearest_limit_rad": distance, "within_margin": bool(distance < margin)})
+    return rows
+
+
+def classify(rows, margin):
+    """(failing, warned). A row within the margin of a limit is `failing`, except a joint of AT_UPSTREAM_LIMIT, which is `warned` while it is no
+    more than `margin` BEYOND that limit (distance >= -margin). A listed joint read more than `margin` past its limit is failing, like any other."""
+    failing, warned = [], []
+    for r in rows:
+        if not r["within_margin"]:
+            continue
+        if r["joint"] in AT_UPSTREAM_LIMIT and r["distance_to_nearest_limit_rad"] >= -margin:
+            warned.append(r)
+        else:
+            failing.append(r)
+    return failing, warned
+
+
+def evaluate_m07(raw_readings, expected, limits, margin, min_samples):
+    """The whole M07 verdict from raw `/arm/joint_states` positions, as a pure function (the launch test records what it returns; P27).
+
+    Order, and why: (1) split off the non-finite readings, (2) count coverage on the finite ones only, (3) take extrema and distances on the finite
+    ones only, (4) classify. The result is FAIL when any expected joint was not covered by `min_samples` finite readings, when ANY reading of any
+    joint was non-finite (a NaN or an infinity is a defect in the physics output whatever the other readings say, so it is never averaged away
+    into a PASS or a WARN), when no joint with limits was read, or when a joint is failing under classify(); else WARN when a joint of
+    AT_UPSTREAM_LIMIT is within the margin of its limit; else PASS.
+    Returns {"result", "rows", "failing_joints", "warned_joints", "coverage", "invalid_readings", "raw_samples_per_joint",
+    "valid_samples_per_joint", "problems"}."""
+    valid, invalid = split_finite(raw_readings)
+    coverage = coverage_problems(valid, expected, min_samples)
+    rows = rest_rows(valid, limits, margin)
+    failing_rows, warned_rows = classify(rows, margin)
+    incomplete = bool(coverage["missing"] or coverage["too_few_samples"])
+    problems = []
+    if invalid:
+        problems.append("non-finite readings (FAIL): " + "; ".join(
+            f"{j} {e['count']} ({', '.join(f'{k} x{n}' for k, n in sorted(e['by_kind'].items()))})" for j, e in sorted(invalid.items())))
+    if incomplete:
+        problems.append("incomplete joint-state coverage by finite readings (FAIL): missing " + ", ".join(coverage["missing"]) +
+                        "; too few finite samples " + ", ".join(f"{j} ({n} of {min_samples})" for j, n in coverage["too_few_samples"].items()))
+    if not rows:
+        problems.append("no joint with limits has a finite reading (FAIL)")
+    failing = [r["joint"] for r in failing_rows]
+    warned = {r["joint"]: AT_UPSTREAM_LIMIT[r["joint"]] for r in warned_rows}
+    if failing:
+        problems.append("joints within the margin of a limit (FAIL): " + ", ".join(failing))
+    if invalid or incomplete or not rows or failing:
+        result = "FAIL"
+    else:
+        result = "WARN" if warned else "PASS"
+        if warned:
+            problems.append("joints at an upstream limit at rest (WARN): " + ", ".join(sorted(warned)))
+    return {"result": result, "rows": rows, "failing_joints": failing, "warned_joints": warned, "coverage": coverage,
+            "invalid_readings": invalid, "raw_samples_per_joint": {j: len(raw_readings.get(j, [])) for j in expected},
+            "valid_samples_per_joint": {j: len(valid.get(j, [])) for j in expected}, "problems": problems}
 
 
 def stack_alive(proc_info):

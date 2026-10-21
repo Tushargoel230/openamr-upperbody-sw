@@ -1,6 +1,18 @@
 # SPDX-License-Identifier: MIT
 """M07: at rest in Gazebo, no joint sits within a margin of either of its limits (P17 task 2).
 
+THE RULE (Alex's posted rule for M07, as P27 states it; point 2 of it assigns the handling of non-finite samples to this repository. His comment's
+own wording was not re-read when this was written):
+  - the expected joints are the 16 limited joints under ros2_control (both arms' joint1..7 and both finger_joint1); `lift_joint` and the mimic
+    `finger_joint2`s are excluded, and RECORDED in the sidecar as not independently measured, with the reason;
+  - the margin is 0.001 rad (the datum `joint_rest_margin_rad`, read from datums.yaml, never a literal here);
+  - WARN, never PASS, only for `openarm_{left,right}_finger_joint1` and `openarm_{left,right}_joint4` at an inherited upstream limit (within the margin
+    of it, either side);
+  - FAIL for anything more than 0.001 rad beyond a physical limit, those four included; FAIL for any other joint within the margin;
+  - non-finite raw positions (NaN, +inf, -inf) are rejected BEFORE the coverage count and before any extremum; a non-finite value never counts toward the
+    50-sample minimum per joint; the rejected readings are preserved in the sidecar (`invalid_readings`); any non-finite reading is a FAIL, never a PASS
+    or a WARN. The decision is `a7_support.evaluate_m07`, a pure function with its own regression (test_m07_non_finite.py).
+
 Why this is a check of its own. In option B's body the right finger rests ON its open limit (-4.7e-6 .. +2.7e-8 rad); the old body rested 6.0e-5
 rad inside it. A joint that rests on a limit straddles it: solver noise carries it across, the joint-state clamp fires thousands of times a run
 (the count scatters 2-3x on an unchanged tree, which is why that count no longer gates anything), and every downstream number moves with it.
@@ -45,8 +57,8 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy  # noqa: E402
 from sensor_msgs.msg import JointState  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from a7_support import (A7_ENABLED, SKIP_REASON, coverage_problems, expected_rest_joints, stack_alive, stack_healthy,  # noqa: E402
-                        wait_for_controllers_active, write_run_sidecar)
+from a7_support import (A7_ENABLED, AT_UPSTREAM_LIMIT, SKIP_REASON, classify, evaluate_m07, expected_rest_joints, rest_rows,  # noqa: E402,F401
+                        stack_alive, stack_healthy, wait_for_controllers_active, write_run_sidecar)
 
 from openamrobot_upperbody_moveit.named_poses import urdf_joint_limits  # noqa: E402
 
@@ -59,14 +71,6 @@ MIN_MESSAGES = 50             # fewer readings than this is not a measurement of
 MIN_SAMPLES_PER_JOINT = 50    # the same, per expected joint: a joint read fewer times than this in the window was not measured (PR #14 review)
 DATUM = "joint_rest_margin_rad"
 EXPECTED_PROCESSES = ["gazebo", "robot_state_publisher", "parameter_bridge", "create", "joint_state_publisher", "spawner"]
-# Joints whose rest pose is one of their upstream URDF limits (the zero and open poses are limits by construction, evidence/m02_bisect/RESULTS.md).
-# Within the margin of that limit, on either side, they are WARN with this reason; read further past it than the margin, they FAIL.
-AT_UPSTREAM_LIMIT = {
-    "openarm_left_finger_joint1": "rest pose at an upstream limit",
-    "openarm_right_finger_joint1": "rest pose at an upstream limit",
-    "openarm_left_joint4": "rest pose at an upstream limit",
-    "openarm_right_joint4": "rest pose at an upstream limit",
-}
 NOT_MEASURED = {
     "lift_joint": "not under ros2_control: its state is joint_state_publisher's default zero (= its lower stop L1000 by construction), "
                           "not a physics reading, so there is no rest position of the simulator to compare with its limits",
@@ -94,39 +98,6 @@ def joint_limits_with_names(xml=None):
     return urdf_joint_limits(xml if xml is not None else model_xml())
 
 
-def rest_rows(readings, limits, margin):
-    """[{joint, min, max, lower, upper, to_lower, to_upper, nearest, distance, within_margin}] for every joint with limits that was read.
-    `distance` is the smaller of (lowest reading - lower) and (upper - highest reading); negative means the joint was read past a limit."""
-    rows = []
-    for joint in sorted(readings):
-        if joint not in limits:
-            continue
-        values = readings[joint]
-        low, high = min(values), max(values)
-        lower, upper = limits[joint]
-        to_lower, to_upper = low - lower, upper - high
-        nearest = "lower" if to_lower <= to_upper else "upper"
-        distance = min(to_lower, to_upper)
-        rows.append({"joint": joint, "readings": len(values), "min_rad": low, "max_rad": high, "lower_limit_rad": lower, "upper_limit_rad": upper,
-                     "distance_to_lower_rad": to_lower, "distance_to_upper_rad": to_upper, "nearest_limit": nearest,
-                     "distance_to_nearest_limit_rad": distance, "within_margin": bool(distance < margin)})
-    return rows
-
-
-def classify(rows, margin):
-    """(failing, warned): failing rows are within the margin and not excused; warned rows are AT_UPSTREAM_LIMIT joints within the margin of
-    their limit on either side (distance > -margin). A listed joint read further past its limit than the margin is failing."""
-    failing, warned = [], []
-    for r in rows:
-        if not r["within_margin"]:
-            continue
-        if r["joint"] in AT_UPSTREAM_LIMIT and r["distance_to_nearest_limit_rad"] > -margin:
-            warned.append(r)
-        else:
-            failing.append(r)
-    return failing, warned
-
-
 @pytest.mark.launch_test
 def generate_test_description():
     if not A7_ENABLED:
@@ -151,22 +122,14 @@ class TestRestPositionMargin(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rows = cls.record.get("joints", [])
-        coverage = cls.record.get("coverage") or {}
-        incomplete = bool(coverage.get("missing") or coverage.get("too_few_samples")) or "coverage" not in cls.record
-        measured = bool(rows) and not cls.record.get("error") and not incomplete
-        failing_rows, warned_rows = classify(rows, cls.record.get("margin_rad", 0.0))
-        failing = [r["joint"] for r in failing_rows]
-        warned = {r["joint"]: AT_UPSTREAM_LIMIT[r["joint"]] for r in warned_rows}
-        result = "FAIL" if not measured or failing else ("WARN" if warned else "PASS")
+        # The verdict is evaluate_m07's, recorded by the test; a test that died before it (no controllers, no clock, no window) is a FAIL.
+        verdict = cls.record.get("verdict")
+        result = "FAIL" if cls.record.get("error") or verdict is None else verdict
         details = {"physics_engine_used": ENGINE, "physics_engine_passed_explicitly": True, "reading_topic": "/arm/joint_states",
-                   "window_sim_s": WINDOW_SIM_S, "settle_sim_s": SETTLE_SIM_S, "failing_joints": failing, "warned_joints": warned,
+                   "window_sim_s": WINDOW_SIM_S, "settle_sim_s": SETTLE_SIM_S, "failing_joints": [], "warned_joints": {},
                    "not_measured": NOT_MEASURED, **cls.record}
-        if incomplete and rows:
-            details["problems"] = ["incomplete joint-state coverage (FAIL): missing " + ", ".join(coverage.get("missing", [])) +
-                                   "; too few samples " + ", ".join(f"{j} ({n})" for j, n in coverage.get("too_few_samples", {}).items())]
-        elif warned and not failing and measured:
-            details["problems"] = ["joints at an upstream limit at rest (WARN): " + ", ".join(sorted(warned))]
+        if verdict is None and not cls.record.get("error"):
+            details["problems"] = ["the measurement did not complete (FAIL)"]
         write_run_sidecar("M07", "rest_position_margin", "no joint rests within the margin of either of its limits", result, details)
         cls.node.destroy_node()
         rclpy.shutdown()
@@ -219,17 +182,20 @@ class TestRestPositionMargin(unittest.TestCase):
         self.assertTrue(self._spin_until(lambda: (clock.now().nanoseconds - t1) * 1e-9 >= WINDOW_SIM_S, 120.0), "the reading window did not elapse")
         window["on"] = False
         self.record["messages_in_window"] = count[0]
-        rows = rest_rows(readings, limits, margin)
-        self.record["joints"] = rows
-        self.record["joints_read"] = sorted(readings)
-        self.record["joints_with_limits_read"] = len(rows)
-        self.record["samples_per_joint"] = {j: len(readings.get(j, [])) for j in expected}
-        self.record["coverage"] = coverage_problems(readings, expected, MIN_SAMPLES_PER_JOINT)
+        evaluation = evaluate_m07(readings, expected, limits, margin, MIN_SAMPLES_PER_JOINT)
+        self.record.update({"verdict": evaluation["result"], "joints": evaluation["rows"], "joints_read": sorted(readings),
+                            "joints_with_limits_read": len(evaluation["rows"]), "failing_joints": evaluation["failing_joints"],
+                            "warned_joints": evaluation["warned_joints"], "coverage": evaluation["coverage"],
+                            "samples_per_joint": evaluation["valid_samples_per_joint"],       # FINITE readings: what counts toward the minimum
+                            "raw_samples_per_joint": evaluation["raw_samples_per_joint"],
+                            "invalid_readings": evaluation["invalid_readings"],               # every rejected reading, by joint, kind and position
+                            "problems": evaluation["problems"]})
         self.assertGreaterEqual(count[0], MIN_MESSAGES, f"only {count[0]} joint-state messages in a {WINDOW_SIM_S} s window: not a measurement of a rest")
-        self.assertTrue(rows, f"no joint of /arm/joint_states has limits in the URDF (read: {sorted(readings)})")
-        self.assertFalse(self.record["coverage"]["missing"] or self.record["coverage"]["too_few_samples"],
-                         f"incomplete coverage of the expected joints: {self.record['coverage']}")
-        failing, _ = classify(rows, margin)
+        self.assertFalse(evaluation["invalid_readings"], f"non-finite joint positions on /arm/joint_states: {evaluation['invalid_readings']}")
+        self.assertTrue(evaluation["rows"], f"no joint of /arm/joint_states has a finite reading and limits in the URDF (read: {sorted(readings)})")
+        self.assertFalse(evaluation["coverage"]["missing"] or evaluation["coverage"]["too_few_samples"],
+                         f"incomplete coverage of the expected joints by finite readings: {evaluation['coverage']}")
+        failing = [r for r in evaluation["rows"] if r["joint"] in evaluation["failing_joints"]]
         self.assertFalse(failing, "joints resting within %.3g rad of a limit: %s" % (margin, "; ".join(
             f"{r['joint']} min {r['min_rad']:+.3e} max {r['max_rad']:+.3e} vs [{r['lower_limit_rad']:+.4f}, {r['upper_limit_rad']:+.4f}] "
             f"(nearest {r['nearest_limit']}, {r['distance_to_nearest_limit_rad']:+.3e})" for r in failing)))

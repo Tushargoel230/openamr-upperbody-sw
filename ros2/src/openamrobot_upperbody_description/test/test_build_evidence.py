@@ -319,6 +319,55 @@ def _run_gazebo_build(tmp_path, repo, *steps):
     return result, sorted(p for p in evidence.iterdir() if p.name.endswith("_gazebo.json")) if evidence.is_dir() else []
 
 
+PHYSICAL_CLAIMS = ("works on hardware", "production-ready", "validated")
+
+
+def assert_simulation_only_contract(limitations):
+    """The contract of a `gazebo` report's limitations, as PRESENCE and not position: the simulation-only disclaimer appears (in any entry, once is
+    enough) and no physical claim appears anywhere. Where the disclaimer sits is not a safety property: requiring it LAST made every new limitation
+    (an upstream pin read from metadata, for one) break the test, which is what happened on a checkout without the upstream clones."""
+    assert all(isinstance(x, str) for x in limitations)
+    assert any("no physical evidence" in line and "simulation only" in line for line in limitations), "the simulation-only disclaimer is absent"
+    text = " ".join(limitations)
+    for claim in PHYSICAL_CLAIMS:
+        assert claim not in text.replace("not validated", ""), f"a physical claim appears: {claim!r}"
+
+
+DISCLAIMER = "no physical evidence; simulation only. This report is not a statement about hardware"
+
+
+def test_a_limitation_appended_after_the_disclaimer_still_passes_the_contract():
+    assert_simulation_only_contract(["something", DISCLAIMER, "upstream pin openarm_ros2 (4e837e1) was read from config/upstream_pins.yaml, not from a git checkout"])
+
+
+def test_the_disclaimer_in_any_position_passes_and_a_report_without_it_fails():
+    assert_simulation_only_contract([DISCLAIMER])
+    assert_simulation_only_contract([DISCLAIMER, "b", "c"])
+    assert_simulation_only_contract(["a", DISCLAIMER, "c"])
+    for missing in ([], ["only other text"], ["no physical evidence"], ["simulation only"], ["no physical evidence; a different sentence"]):
+        with pytest.raises(AssertionError, match="disclaimer is absent"):
+            assert_simulation_only_contract(missing)
+
+
+@pytest.mark.parametrize("claim", PHYSICAL_CLAIMS)
+def test_a_physical_claim_anywhere_fails_the_contract_even_with_the_disclaimer_present(claim):
+    for lines in ([f"the arm {claim}", DISCLAIMER], [DISCLAIMER, f"the arm {claim}"]):
+        with pytest.raises(AssertionError, match="physical claim"):
+            assert_simulation_only_contract(lines)
+
+
+def test_not_validated_is_not_a_physical_claim():
+    assert_simulation_only_contract(["this is not validated", DISCLAIMER])
+
+
+def test_the_real_gazebo_limitations_satisfy_the_contract_with_and_without_a_later_note():
+    """The generator's own text, against the contract: its disclaimer is present, and a later limitation does not break it."""
+    sims = {"gz_sim": "8", "gz_ros2_control": "1", "ros_gz_sim": "1"}
+    lines = be.gazebo_limitations({}, {}, sims)
+    assert_simulation_only_contract(lines)
+    assert_simulation_only_contract(lines + ["upstream pin openarm_description (14ff67b) was read from config/upstream_pins.yaml, not from a git checkout"])
+
+
 def test_the_gazebo_profile_writes_a_simulation_report_and_never_a_physical_claim(tmp_path):
     result, reports = _run_gazebo_build(tmp_path, _repo(tmp_path))
     assert len(reports) == 1, result.stdout + result.stderr
@@ -331,10 +380,7 @@ def test_the_gazebo_profile_writes_a_simulation_report_and_never_a_physical_clai
     assert by_id["V01"] == "WARN" and [f["id"] for f in v01["details"]["findings"]] == ["V01-F1", "V01-F2"]
     assert set(doc["config_ids"]) == {"dold_v4_350/bp000/hp25/bt10/openarm/gazebo", "dold_v4_350/bp050/hp25/bt10/openarm/gazebo"}
     assert set(doc["simulator"]) == {"gz_sim", "gz_ros2_control", "ros_gz_sim"}
-    text = " ".join(doc["limitations"])
-    assert "no physical evidence" in doc["limitations"][-1] and "simulation only" in doc["limitations"][-1]
-    for claim in ("works on hardware", "production-ready", "validated"):
-        assert claim not in text.replace("not validated", "")
+    assert_simulation_only_contract(doc["limitations"])
 
 
 def test_the_gazebo_profile_refuses_a_dirty_tree_like_the_dev_one(tmp_path):

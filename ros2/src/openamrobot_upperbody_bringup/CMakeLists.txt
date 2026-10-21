@@ -25,6 +25,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(a7_controller_deadline test/test_a7_controller_deadline.py TIMEOUT 60)
   # M07 fails on incomplete joint-state coverage (PR #14 review); the model and synthetic samples, no ROS graph
   ament_add_pytest_test(m07_coverage test/test_m07_coverage.py TIMEOUT 60)
+  # M07 rejects non-finite positions before it counts or takes an extremum, and FAILs on them (PR #14 review, P27); synthetic samples and the model, no ROS graph
+  ament_add_pytest_test(m07_non_finite test/test_m07_non_finite.py TIMEOUT 60)
   # L01 starts a real controller_manager: it picks its own ROS_DOMAIN_ID (see the test), so it cannot see or be seen by
   # another stack on the machine.
   add_launch_test(test/test_l01_mock_controllers.py TIMEOUT 60)
