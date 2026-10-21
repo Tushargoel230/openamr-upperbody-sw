@@ -12,8 +12,9 @@ All notable changes to this repository. Evidence for the description is static a
   infinities are split off BEFORE the coverage count and before any extremum (`a7_support.split_finite`), a non-finite reading never counts toward the 50-sample minimum,
   the rejected readings are kept in the sidecar (`invalid_readings`: per joint, count, kind, position), and any non-finite reading is a FAIL, never a PASS or a WARN. The
   decision is now one pure function, `a7_support.evaluate_m07`, that the launch test records; `test_m07_non_finite.py` covers both reproductions, mixed readings, a missing
-  joint, +/-inf, and Alex's rule (WARN only for the four upstream-limit joints, FAIL more than 0.001 rad beyond a limit, those four included). One boundary moved by one
-  float: a listed joint read exactly 0.001 rad past its limit is WARN ("more than 0.001 rad" is the FAIL), it was FAIL. No margin, model, clamp epsilon or named pose changed.
+  joint, +/-inf, and Alex's rule (WARN only for the four upstream-limit joints, FAIL more than 0.001 rad beyond a limit, those four included). Two boundaries of the WARN
+  exception now follow Alex's point 4: a listed joint read exactly 0.001 rad past its limit is WARN ("more than 0.001 rad" is the FAIL; it was FAIL), and WARN applies only at the
+  INHERITED limit (the zero end); a `joint4` within the margin of 2.4435 or a finger within it of +-0.7854 is FAIL (it was WARN: either end). No margin, model, clamp epsilon or named pose changed.
 - **`test_evidence_dir` no longer requires a root-level `src/`** (Om): this repository's sources are under `ros2/src`. The workspace is found from the share path alone
   (`install` ancestor), with cases for a checkout with no `src/`, a build from `ros2/`, and a conventional workspace. **`test_build_evidence` asserts the simulation-only
   disclaimer is PRESENT, not last** (any later limitation, such as an upstream pin read from metadata, used to break it); cases: a limitation after the disclaimer passes, a

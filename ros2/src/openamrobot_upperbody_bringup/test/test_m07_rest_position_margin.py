@@ -1,17 +1,26 @@
 # SPDX-License-Identifier: MIT
 """M07: at rest in Gazebo, no joint sits within a margin of either of its limits (P17 task 2).
 
-THE RULE (Alex's posted rule for M07, as P27 states it; point 2 of it assigns the handling of non-finite samples to this repository. His comment's
-own wording was not re-read when this was written):
-  - the expected joints are the 16 limited joints under ros2_control (both arms' joint1..7 and both finger_joint1); `lift_joint` and the mimic
-    `finger_joint2`s are excluded, and RECORDED in the sidecar as not independently measured, with the reason;
-  - the margin is 0.001 rad (the datum `joint_rest_margin_rad`, read from datums.yaml, never a literal here);
-  - WARN, never PASS, only for `openarm_{left,right}_finger_joint1` and `openarm_{left,right}_joint4` at an inherited upstream limit (within the margin
-    of it, either side);
-  - FAIL for anything more than 0.001 rad beyond a physical limit, those four included; FAIL for any other joint within the margin;
-  - non-finite raw positions (NaN, +inf, -inf) are rejected BEFORE the coverage count and before any extremum; a non-finite value never counts toward the
-    50-sample minimum per joint; the rejected readings are preserved in the sidecar (`invalid_readings`); any non-finite reading is a FAIL, never a PASS
-    or a WARN. The decision is `a7_support.evaluate_m07`, a pure function with its own regression (test_m07_non_finite.py).
+ALEX'S RULE, quoted from the comment posted on PR #14 by BotshareAI on 20 Oct 2026 ("Proposed M07 rest-state rule (Alex decision, 16 Oct 2026). Om, please
+confirm or comment."; once Om confirms it goes into the decisions register as M07-REST-STATE, and it is a proposal until then):
+
+  1. Scope: derive the expected set from the combined model: all 16 limited arm and gripper joints under ros2_control. lift_joint and the mimic
+     finger_joint2 joints are recorded as not independently measured and are excluded from the measured set.
+  2. Evidence: use raw /arm/joint_states samples during the six-second simulated-time measurement window, after the six-second settle period. Each
+     expected joint must have at least 50 samples. A missing joint, fewer than 50 samples, or any non-finite position value (NaN or infinity) is FAIL;
+     invalid values must not count as valid samples.
+  3. Margin: each measured joint must remain at least 0.001 rad inside both URDF limits throughout the window. The margin and clamp epsilon are unchanged.
+  4. Exception: only openarm_{left,right}_finger_joint1 and openarm_{left,right}_joint4 may receive WARN when their measured positions violate the 0.001
+     rad margin at their inherited upstream limit. A reading more than 0.001 rad beyond either physical limit is FAIL, including for these four joints.
+     All other joints that violate the margin are FAIL.
+  5. WARN is a recorded limitation, not acceptance. It remains until the upstream limits or rest pose are corrected and the real arms' rest state is
+     checked on hardware during integration.
+  6. Evidence handling: retain invalid and incomplete measurements in the sidecar and report them as FAIL; they must never be converted into PASS or WARN.
+  ("Tushar, point 2 covers Mohamed's open finding on non-finite values.")
+How this file keeps it: the expected set is expected_rest_joints (16, with lift_joint and the mimic finger_joint2s in the sidecar's `not_measured`); the margin is the
+datum `joint_rest_margin_rad` read from datums.yaml, never a literal here; non-finite raw positions are rejected BEFORE the coverage count and before any extremum,
+never count toward the 50 samples, are kept in the sidecar (`invalid_readings`), and any one of them is a FAIL. The decision is `a7_support.evaluate_m07`, a pure
+function with its own regression (test_m07_non_finite.py).
 
 Why this is a check of its own. In option B's body the right finger rests ON its open limit (-4.7e-6 .. +2.7e-8 rad); the old body rested 6.0e-5
 rad inside it. A joint that rests on a limit straddles it: solver noise carries it across, the joint-state clamp fires thousands of times a run

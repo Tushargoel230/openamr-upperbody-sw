@@ -205,6 +205,9 @@ AT_UPSTREAM_LIMIT = {
 }
 
 
+INHERITED_LIMIT_RAD = 0.0       # the upstream limit all four joints rest on: finger_joint1 left [0, 0.7854] lower, right [-0.7854, 0] upper, joint4 [0, 2.4435] lower
+
+
 def non_finite_kind(value):
     """'nan', '+inf' or '-inf' for a reading that is not a finite number, else None. Anything that is not a real number (None, a string) is 'nan'."""
     try:
@@ -269,13 +272,16 @@ def rest_rows(readings, limits, margin):
 
 
 def classify(rows, margin):
-    """(failing, warned). A row within the margin of a limit is `failing`, except a joint of AT_UPSTREAM_LIMIT, which is `warned` while it is no
-    more than `margin` BEYOND that limit (distance >= -margin). A listed joint read more than `margin` past its limit is failing, like any other."""
+    """(failing, warned). A row within the margin of a limit is `failing`, except a joint of AT_UPSTREAM_LIMIT that is within the margin of its INHERITED
+    upstream limit (INHERITED_LIMIT_RAD, the zero end where its rest pose sits by construction), which is `warned` while it is no more than `margin`
+    BEYOND that limit (distance >= -margin; Alex's rule, point 4). Within the margin of the OTHER end of its range (a joint4 at 2.4435, a finger at
+    0.7854), or more than `margin` past the inherited one, a listed joint is failing like any other."""
     failing, warned = [], []
     for r in rows:
         if not r["within_margin"]:
             continue
-        if r["joint"] in AT_UPSTREAM_LIMIT and r["distance_to_nearest_limit_rad"] >= -margin:
+        nearest_value = r["lower_limit_rad"] if r["nearest_limit"] == "lower" else r["upper_limit_rad"]
+        if r["joint"] in AT_UPSTREAM_LIMIT and abs(nearest_value - INHERITED_LIMIT_RAD) < 1e-9 and r["distance_to_nearest_limit_rad"] >= -margin:
             warned.append(r)
         else:
             failing.append(r)

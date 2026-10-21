@@ -1,14 +1,22 @@
 # SPDX-License-Identifier: MIT
 """M07 rejects non-finite joint positions and cannot pass on them (PR #14 review, Mohammad, twice; P27). No simulator, no ROS graph.
 
-THE RULE this pins (Alex's posted rule for M07, as P27 states it; point 2 assigns the non-finite case to this repository. His comment's own wording was not
-re-read when this was written):
-  - 16 limited joints are expected; `lift_joint` and the mimic `finger_joint2`s are excluded and RECORDED as not independently measured;
-  - the margin is 0.001 rad;
-  - WARN only for `openarm_{left,right}_finger_joint1` and `openarm_{left,right}_joint4` at an inherited upstream limit;
-  - FAIL for anything more than 0.001 rad beyond a physical limit, those four included;
-  - non-finite raw positions are rejected BEFORE the coverage count and before the extrema; a non-finite value never counts toward the 50-sample
-    minimum; the rejected readings are preserved; the check is FAIL, never PASS or WARN.
+ALEX'S RULE, quoted from the comment posted on PR #14 by BotshareAI on 20 Oct 2026 ("Proposed M07 rest-state rule (Alex decision, 16 Oct 2026). Om, please
+confirm or comment."; once Om confirms it goes into the decisions register as M07-REST-STATE, and it is a proposal until then):
+
+  1. Scope: derive the expected set from the combined model: all 16 limited arm and gripper joints under ros2_control. lift_joint and the mimic
+     finger_joint2 joints are recorded as not independently measured and are excluded from the measured set.
+  2. Evidence: use raw /arm/joint_states samples during the six-second simulated-time measurement window, after the six-second settle period. Each
+     expected joint must have at least 50 samples. A missing joint, fewer than 50 samples, or any non-finite position value (NaN or infinity) is FAIL;
+     invalid values must not count as valid samples.
+  3. Margin: each measured joint must remain at least 0.001 rad inside both URDF limits throughout the window. The margin and clamp epsilon are unchanged.
+  4. Exception: only openarm_{left,right}_finger_joint1 and openarm_{left,right}_joint4 may receive WARN when their measured positions violate the 0.001
+     rad margin at their inherited upstream limit. A reading more than 0.001 rad beyond either physical limit is FAIL, including for these four joints.
+     All other joints that violate the margin are FAIL.
+  5. WARN is a recorded limitation, not acceptance. It remains until the upstream limits or rest pose are corrected and the real arms' rest state is
+     checked on hardware during integration.
+  6. Evidence handling: retain invalid and incomplete measurements in the sidecar and report them as FAIL; they must never be converted into PASS or WARN.
+  ("Tushar, point 2 covers Mohamed's open finding on non-finite values.")
 
 Before (ba5b4ea): a NaN compares false with everything, so 50 NaNs per expected joint gave a coverage of 50, `min`/`max` of NaN, a distance of NaN,
 `within_margin` False and a PASS (reproduction a); 49 finite readings and one NaN counted 50 and passed too (reproduction b).
@@ -202,3 +210,17 @@ def test_any_other_joint_within_the_margin_of_a_limit_is_a_fail_and_a_far_one_is
     assert evaluate(readings, expected, limits)["result"] == "FAIL"
     readings[joint] = [limits[joint][0] + 2 * MARGIN] * MIN                         # outside the margin
     assert evaluate(readings, expected, limits)["result"] == "PASS"
+
+
+@pytest.mark.parametrize("joint", UPSTREAM_LIMIT_JOINTS)
+def test_the_far_end_of_the_range_is_not_an_inherited_limit_so_it_is_a_fail_even_for_the_four(expected, limits, mid, joint):
+    """Point 4 says WARN `at their inherited upstream limit`: the zero end. A joint4 resting at 2.4435 or a finger at +-0.7854 is within the margin of a
+    limit it did not inherit as a rest pose, and is FAIL like any other joint."""
+    lower, upper = limits[joint]
+    far = upper if lower == 0.0 else lower
+    inside = -1 if far == upper else 1
+    for offset in (0.0, 2e-4):
+        readings = good(expected, mid)
+        readings[joint] = [far + inside * offset] * MIN
+        result = evaluate(readings, expected, limits)
+        assert result["result"] == "FAIL" and result["failing_joints"] == [joint] and result["warned_joints"] == {}
