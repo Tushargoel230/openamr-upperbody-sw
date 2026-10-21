@@ -15,3 +15,6 @@ camera that frames the robot at all three stops. `xgrab.py` captures one window 
 What the shots show: the model as `moveit.launch.py` loads it, taken on platform-sw `d619012`. The lift column's two placeholder boxes are drawn
 solid red (the URDF gives them no material; I did not investigate whether that is RViz's default for a visual without one). A person has still
 not looked at the running simulator, so V01 stays WARN.
+
+**P25 (21 Oct 2026):** the red was the missing material. The three placeholder boxes now have one named material (rgba 0.78 0.64 0.45, tan) and the same
+capture at `L1000` / `bp050` draws them tan; the evidence is in `../../p25/` (`rviz/`, `gazebo/`, `colour_compare.json`). The P19 PNGs here are kept as the "before".

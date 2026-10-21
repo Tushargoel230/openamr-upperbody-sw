@@ -7,6 +7,8 @@ every item names the number to read and where to read it from, and the number it
 
 ## Status: WARN. The look at the mast found two defects; the eight items of the lift model are measured (P16, below) and V01 stays WARN
 
+*21 Oct 2026 (P25): looking at the renders of the lift model found five more things in the placeholder geometry; one is fixed and four are measured and wait for Alex. They are the last section of this page. V01 stays WARN. The statements below that the column has no collision geometry are the 14 Oct state (see `CHANGELOG.md`, b45d8f6).*
+
 **P14 looked at the mast (then item 1) and found two defects no automated check was examining.** The mast is gone, so that answer
 describes an object that no longer exists and is not counted as an answer for the lift model. **The eight items below were measured in P16
 (table at the end); V01 is still `WARN`, because `lift_mass_tl3_400` is null.** A closed finding is not an answered checklist, and a check whose value was finding defects is
@@ -136,3 +138,156 @@ magenta wire box that is an annotation, not model geometry.
 Findings of this pass: none of the eight reads outside its expected value. By eye, in the renders: at `L1175` and `L1350` the carriage and
 `arm_profile_link` float above the base with nothing drawn between them, which is what "no column geometry" looks like and is the reason
 the renders carry the annotation.
+
+## Recorded: the placeholder geometry, looked at (P25, 21 Oct 2026)
+
+V01 found five things in the renders of the lift model by looking, which is what V01 is for. **One was fixed; four are measured and wait for Alex.**
+V01 stays `WARN` (`lift_mass_tl3_400` is still null). Raw numbers: `evidence/p25/p25_measurements.json` (made by `evidence/p25/measure_p25.py`
+from the expanded URDF, both base plates, the three stops); captures: `evidence/p25/rviz/` and `evidence/p25/gazebo/`.
+**Nothing below changes a mount pose, a stop height, a joint or a frame.**
+
+| # | Finding | What was done | Status |
+|---|---|---|---|
+| 1 | The three placeholder boxes had no `<material>`: RViz drew them red, Gazebo black | one named material and a `<gazebo>` block per link | **FIXED** |
+| 2 | The column's two stages interpenetrate (identical 240 x 240 section), and M03 cannot see it | overlap volume and depth measured at six configurations; a way out proposed, not applied | **MEASURED**, waits on Alex |
+| 2b | The column section is square because its lateral side was set equal to the sourced fore-aft side | compared with intent; no number derived | **MEASURED**, waits on the supplier drawing |
+| 3 | The arm profile does not overlap the column (ADR-010 section 2) and does not stand on it either | gap and cantilever measured; the register entry quoted | **MEASURED**, a question for Alex |
+| 4 | `arm_profile_link`'s visual and collision have no `<origin>` | read against the mount poses | **CONFIRMED** not an omission |
+| 5 | `lift_column_base_joint`'s parent is `base_footprint` | dependents listed; a re-parent tried on a copy | **CONFIRMED**, not changed |
+
+### 1. Materials: fixed
+
+`lift_column_base_link`, `lift_carriage_link` and `arm_profile_link` use the material `placeholder_geometry`, rgba 0.78 0.64 0.45 1.0 (flat cardboard tan;
+nothing else in the combined robot uses it: the base is white and grey, the arms and sensors grey and black). Each link also has a `<gazebo reference>`
+block with the same ambient and diffuse, because a URDF material does not carry into the SDF the way it looks: with the URDF material alone `gz sdf -p`
+gives the column stages 0.975 0.8 0.5625 (the URDF colour times 1.25), and with neither the SDF has no material at all.
+
+**One consequence for Alex's file.** sdformat applies a link's `<gazebo><visual><material>` block only to a visual that has no name of its own. The two
+column visuals were named `placeholder_lift_column_*_stage`, and with that name the block was ignored (the arm profile's visual is unnamed and took it).
+The two visuals are now unnamed; their collisions keep the `placeholder_*` names. Nothing referenced the visual names (searched). `config_id` changes,
+because the URDF text does. `test_p25_placeholder_material.py` pins the colour in the URDF, in the `<gazebo>` block and in the SDF `gz sdf -p` makes; it
+fails on the old xacro and on a re-named column visual (both tried).
+
+**Same colour in both windows? Same colour definition and same hue; not the same pixels.** At `L1000`, `bp050` (lift joint read back as 0.000 m in both):
+
+| | URDF / SDF | RViz capture | Gazebo capture |
+|---|---|---|---|
+| median rgb of the box pixels | 0.78 0.64 0.45 | 0.733 0.600 0.424 (17 334 px) | 0.420 0.380 0.322 (8 501 px) |
+| hue | 34.5 deg | 34.2 deg | 36.0 deg |
+| saturation | 0.42 | 0.42 | 0.23 |
+| channel ratios (max = 1) | 1, 0.82, 0.58 | 1, 0.82, 0.58 | 1, 0.91, 0.77 |
+
+Before, the P19 RViz capture of the same configuration shows the boxes red (median 0.69 0 0, 15 514 px); a Gazebo capture before was not taken (the SDF carried no
+material). Both windows now draw a tan box, and RViz reproduces the URDF colour almost exactly. Gazebo's is the same hue and noticeably greyer and darker. The
+ratios Gazebo gives (1, 0.91, 0.77) are close to the URDF's raised to 1/2.2 (1, 0.91, 0.78), which is what a renderer that takes the rgba as linear light and
+sRGB-encodes the result would produce; that is a reading of the numbers, not something I checked in gz-rendering. I did not compensate the SDF numbers to hide
+it: the URDF and the `<gazebo>` block carry the same four numbers, and the test says so. If Alex wants the windows to match on screen, the way is a
+linear-light value in the `<gazebo>` block only, and that is a presentation choice for him.
+
+### 2. The column and carriage interpenetrate: measured
+
+`lift_column_base_link`'s box is 0.240 x 0.240 x 0.530 m, z 0.304 to 0.834. `lift_carriage_link`'s is 0.240 x 0.240 x 0.350 m centred 0.175 m below the
+carriage frame, so at `lift_joint` 0 it spans z 0.484 to 0.834: the same cross-section, fully inside the column. Axis-aligned, so the intersection is exact
+(cross-checked by 2 million seeded random points: 0.020160 against 0.020160 and 0.010080 against 0.010085 m3).
+
+| stop | `lift_joint` | z overlap (stroke still engaged) | overlap volume | penetration depth (shortest axis-aligned separation) |
+|---|---|---|---|---|
+| L1000 | 0.000 m | 0.350 m (z 0.484 to 0.834) | 0.020160 m3 (20.2 litres) | 0.240 m (sideways; 0.350 m vertically) |
+| L1175 | 0.175 m | 0.175 m (z 0.484 + 0.175 = 0.659 to 0.834) | 0.010080 m3 | 0.175 m (vertical) |
+| L1350 | 0.350 m | 0 (the carriage box's bottom face touches the column's top face at z 0.834) | 0 | 0 (contact, no overlap) |
+
+The numbers are the same on `bp000` and `bp050`: the plate moves the column axis (x 0.060 or 0.110) and both boxes with it. All six rows are in the JSON.
+
+**M03 cannot see this, and the reason is structural.** `lift_column_base_link` and `lift_carriage_link` are a pair across `lift_joint`, and the derivation labels
+every such neighbour `Adjacent` (SRDF line 243, `reason="Adjacent"`). M03's claim is that a disabled pair is "declared by upstream, a structural neighbour, or
+has no movable joint between its links and is clear"; a structural neighbour is disabled without being evaluated, so a collision between the two stages is not
+in anything M03 reads. **This is the same defect class as platform-sw #70's chassis/caster overlap**: collision shapes that overlap permanently where the real
+parts do not. #70's was caught, because those pairs are `ConstantTransform` and so are evaluated once; this one is two orders of magnitude deeper (0.175 to 0.350 m
+of vertical overlap against 2.4 mm) and cannot be caught the same way. It does no harm today: the pair is disabled in MoveIt and the SDF sets no `self_collide`
+(its default is off; I did not test contacts in the simulator). It is a model error that a different checker, or a change to the matrix, would report.
+
+**Not applied, proposed.** The real Hexalift is telescopic: the inner stage runs inside the outer one, so the *volumes* overlap in the real column too, and what is
+wrong is the model, which has no way to say "inside". A smaller inner section does not clear it while the outer stage's collision is a solid box: the inner box is
+inside the outer box's volume for z 0.484 + lift to 0.834 whatever its section (at 234.8 mm square the overlap at `L1000` is still 0.019296 m3 and the depth
+0.2348 m). Clearance of the kind #71 gave (2.6 mm) needs the outer stage's collision to be a hollow shell (four wall slabs of thickness t, open at the top) and the
+inner section to be at most
+
+    s_inner = 0.240 - 2 t - 2 x 0.0026 = 0.2348 - 2 t   (m, square)
+
+t, the housing wall, is in no document we hold, so there is no sourced number: the one value that invents nothing is the bound, **s_inner < 234.8 mm (t = 0)**,
+and anything smaller has to come from DOLD's drawing. Both sections are also relative to the invented lateral side (item 2b). Because M03 will not look at the
+pair, the regression has to be a test of the kind `test_m03_caster_clearance.py` is (old geometry fails, new geometry clears, analytic, no ROS); I did not write it.
+
+### 2b. The column section against design intent: measured and compared
+
+Our section is **0.240 x 0.240 m, aspect ratio 1.00 : 1** (fore-aft : lateral), drawn square. **Only the fore-aft side is sourced**: the register's LIFT entry
+(`decisions.yaml` line 1081) says "column 530 mm retracted, 880 mm extended, mounted with its 240 mm side fore-aft", and `datums.yaml` records the lateral side as
+"in no document we hold: it is set equal to x only so the placeholder inertia and the density bound can be evaluated" (`lift_column_section`, "the one invented
+number of the lift"; since `b45d8f6` it also sizes both collision boxes). The P25 prompt reports that Alex's published dark-store render (docs.openamrobot.ai,
+"Shoulder height 1000 mm, DOLD Hexalift V4") shows a column visibly narrower laterally than it is deep; **I did not look at that render**, and I derived no number
+from it. A render is evidence of intent, that the lateral side is probably less than 240 mm; it is not a dimension, and the datum stays `placeholder` until the
+supplier drawing gives one. **This is the same failure mode as the HFS6-60120 mast section** (DESIGN_LOG, DATUMS.md: `mast_section` was `[0.08, 0.08]`, a square
+invented for a profile whose part number says 60 x 120): a section drawn square because one side was known or assumed and the other was invented as equal. The
+difference is that for the mast neither side was sourced; here one is, which makes the invented side harder to notice. V01 found the mast by looking; the
+renders are what made this one visible.
+
+### 3. The arm profile against ADR-010 section 2: measured, a question for Alex
+
+`arm_profile_joint` is at (0.18, 0, 0.18) m from the carriage; the box is 0.12 x 0.06 x 0.34 m with no visual origin. On either base plate it spans, from the
+column axis, x 0.12 to 0.24 m, y -0.03 to +0.03 m, and 0.010 m above the carriage frame to 0.350 m above it.
+
+| stop | profile z range | gap to the column's top (fixed stage) | gap to the carriage box (moving stage) top | overlap volume | forward gap (rear face to column front face) |
+|---|---|---|---|---|---|
+| L1000 | 0.844 to 1.184 m | 0.010 m | 0.010 m | 0 | 0.000 m (flush) |
+| L1175 | 1.019 to 1.359 m | 0.185 m | 0.010 m | 0 | 0.000 m |
+| L1350 | 1.194 to 1.534 m | 0.360 m | 0.010 m | 0 | 0.000 m |
+
+So the profile does not overlap the column at any stop; it sits 10 mm above the carriage box's top face (the 10 mm adapter plate, not modelled), and its
+**entire footprint (0.12 x 0.06 m) is in front of the column's footprint**: the rear face of the profile is the plane of the column's front face, so none of it stands over
+the column's top face (footprint overlap 0 m2). Its centre is 0.180 m ahead of the column axis, 0.060 m ahead of the column's front face, and its far face is 0.120 m
+ahead of it. **Cantilever, at all three stops:** the horizontal offset is the same (the carriage goes straight up): centre 0.180 m, far face 0.240 m from the
+axis. What changes with the stop is how much inner stage is left in the housing (0.350, 0.175, 0 m of the 0.350 m stage) and how high the load stands above the
+housing's top: the profile's centre 0.180, 0.355 and 0.530 m, the arm mount points 0.166, 0.341 and 0.516 m (z 1.000, 1.175, 1.350 m from the floor).
+
+**The register entry.** `decisions.yaml`, ARM-MOUNT (P-03 rev19.0, 12 Oct 2026, item 19), lines 1127 and 1128:
+"arm mount point 0.180 m ahead of the lift column axis and 0.166 m above the column top plate" and
+"arm profile MISUMI HFS6-60120 (60 mm lateral, 120 mm fore-aft), 340 mm, end-tapped, standing on a 10 mm adapter plate on the column top".
+**The sentence the prompt and ADR-010 section 2 attribute to the register, "the arm profile overlaps the lift column (it does not sit on top), so the shoulder
+reaches 1000 mm without cutting into the chassis", is not in the register.** It is Alex's Slack post of 7 Oct (`findings/HW_DECISIONS_2026-10-07.md`, item 3, rev18.7), which
+ADR-010 quotes as "Register and Slack both"; `decisions.yaml` has no "overlap", "sit on top" or "not sit" wording at any of its 8 commits (`git show <commit>:decisions.yaml | grep`, `openAMRobot/.github` at `9d422aa`, the file last changed in `9109d3e`), and the
+rev19.0 ARM-MOUNT entry that replaced it says the opposite, "standing on ... the column top". The model matches neither statement: "standing on" is true in z (10 mm above)
+and not in x (the footprint is all in front), and "overlaps" is false (volume 0). LIFT's own arithmetic, "shoulder ... 304 + 530 or 880 + 166 mm", is the standing-on
+geometry. **The question for Alex:** which is the design, and what is the 10 mm adapter plate, since it has to reach at least 0.12 m past the column's front face to carry
+the profile. Nothing was changed.
+
+### 4. `arm_profile_link` has no `<origin>` on its visual or collision: confirmed, not an omission
+
+With no `<origin>` the box is centred on the link frame (URDF default: identity); the SDF shows the same, the visual at pose (0.18, 0, 0.18) in the carriage. That is consistent
+with the joint that places it: `arm_profile_joint`'s z is `adapter_plate_thickness + length / 2` = 0.010 + 0.170 = 0.180 and its x is `center_x_from_column_axis`, so the
+joint *is* the box centre by construction, and the missing origin is the other half of that choice. It is also consistent with the mount poses: the arm mount points (x
+0.180, y +-0.031, z 0.166 above the column top) are at the profile's centre in x, 156 mm above its bottom face (the box is 340 mm tall), and **1.0 mm outside its lateral faces** (the box is
++-0.030, the mounts +-0.031; the register's ARM-MOUNT mentions "one 1 mm spacer under each J1_A plate", which is probably this millimetre, though I did not check that), the same at all six configurations. The two column links do the opposite (frame at the base of the box, visual
+and collision offset by half the length), so the three boxes do not share a convention; that is a difference to know about, not an error.
+
+### 5. `lift_column_base_joint`'s parent is `base_footprint`, not `base_link`: confirmed, not changed
+
+The joint is (0.060, 0, 0.304) m from `base_footprint` at `bp000` (0.110 at `bp050`); `base_footprint_joint` puts `base_link` 0.098 m above it. **What depends on the
+choice:** the 0.304 (`base_plate_top_z`, "294 mm deck + 10 mm plate") and every height of the lift (register LIFT 304 + 530 or 880 + 166) are from the floor, which is
+`base_footprint`, so the shoulder height, E01's envelope, T05, and the calibration stops L1000 / L1175 / L1350 read straight off the tree; the tests
+and contract that assert the parent (`test_t03_tree.py`, `test_s4_sensors.py`, `frame_contract.yaml`'s two column entries and T04's reading of them);
+`openamrobot_upperbody.urdf.xacro` (the standalone wrapper), which declares `base_footprint` only and has no `base_link` to parent to; and Gazebo, where every
+fixed joint lumps into `base_footprint` either way. **What would change if it were re-parented to `base_link`:** tried on a copy of the expanded URDF, with the z origin lowered by
+0.098 to 0.206 m, **0 of 57 link poses in `base_footprint` change** (largest difference 0.0); without lowering it, 32 of 57 links (everything from the column up) move up by 0.098 m.
+So the change is a one-line joint edit plus the tests and contract above, a new coupling (the upper-body xacro would have to know platform-sw's 0.098 m, a datum
+the base owns), and a changed `config_id`. The one reason to want it is physical: the column is bolted to the chassis, which platform-sw places relative to `base_link`, so if
+the axle height datum ever moved, a column parented to the floor would stay put while the chassis it stands on moved. I did not derive the collision matrix for the
+re-parented tree (the `Adjacent` pair `base_link` / `lift_column_base_link` stays a direct neighbour, and the `ConstantTransform` pairs are unaffected by where a fixed
+joint hangs; expected unchanged, not run). Whether to do it is Alex's: it is his file and his heights-from-the-floor convention.
+
+### What now waits on Alex
+
+1. **The arm profile**: overlapping the column (the 7 Oct Slack post) or standing on its top on an adapter plate (the rev19.0 register): the model is neither, and the 10 mm adapter plate has to reach 0.12 m past the column's front face.
+2. **The column's nesting and wall**: how the two stages are to be represented (hollow outer shell, wall thickness t) so that the stages clear each other; the proposal needs DOLD's drawing.
+3. **The column's lateral side**: the supplier drawing; until then 240 mm is an invented number that is collision geometry.
+4. **The column's parent frame**: `base_footprint` (floor-referenced heights) or `base_link` (follows the chassis); and whether the standalone wrapper then declares `base_link`.
+5. **Acceptance of the two edits to his xacro** (the material and the unnamed column visuals), as for P15's opt-in parameters, and whether the Gazebo colour should be compensated to match RViz on screen.

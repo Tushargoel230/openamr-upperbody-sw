@@ -176,6 +176,15 @@ citations:
     revision: P-03-rev18.9
     quote: "register CONFIG-IDS, P-03 rev18.9"
 
+  - document: docs/v01_visual_check.md
+    decision: ARM-MOUNT
+    revision: P-03-rev19.0
+    quote: "`decisions.yaml`, ARM-MOUNT (P-03 rev19.0, 12 Oct 2026, item 19), lines 1127 and 1128"
+  - document: docs/v01_visual_check.md
+    decision: ARM-MOUNT
+    revision: P-03-rev19.0
+    quote: "rev19.0 ARM-MOUNT entry that replaced it says the opposite"
+
 scan:
   repo:
     - README.md

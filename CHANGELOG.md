@@ -15,6 +15,9 @@ All notable changes to this repository. Evidence for the description is static a
   converts to (1.25 times brighter in the SDF). The collisions keep their `placeholder_*` names. No pose, mount, stop height, frame or joint changed;
   `config_id` changes because the URDF text does. `test_p25_placeholder_material.py` pins the colour in the URDF, the `<gazebo>` block and the SDF
   that `gz sdf -p` produces.
+- **P25 runs on `1165166`, platform-sw `dfd44a5`: A6 x3 25 / 3 / 0; A7 x3 14 / 2 / 0, nothing moved against P24** (`evidence/p25/after_material_vs_p24.txt`; the 14
+  `config_id`s differ because the URDF text does). Run level: 3 of the 18 A7 runs on `dfd44a5` failed on the bridge crash, 17 percent. The V01 record of the placeholder geometry
+  (one fix, four measurements waiting on Alex) is the last section of `docs/v01_visual_check.md`; the numbers are in `evidence/p25/`.
 
 ### Changed (follow-ups to 49d2368, accepted by Alex on 16 Oct)
 
