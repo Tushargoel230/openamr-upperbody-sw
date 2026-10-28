@@ -35,7 +35,7 @@ the gz server's `controller_manager.pal_statistics` teardown lines were being pr
 
 ## How often (our launch tests; each is one headless launch with this stack)
 
-The `-11` column below is OBSERVED-NOT-RECORDED: it was read from the console at the time. The number of launches is four per recorded run.
+Two kinds of row, never added together. **Up to and including P23 the exit codes were read from the console at the time: OBSERVED-NOT-RECORDED** (no file carries them as data). **From P24 on they are RECORDED**: every A7 report lists the exit code of every process of every launch (`process_exits`), and the figures marked recorded below are derived from the committed reports under `evidence/reports/` (`20261020T12*`, `20261021T0857*` to `T0913*`, `20261021T13*`, `20261028T00*`), not from memory. The number of launches with this bridge is four per run.
 
 | set of runs | launches with this bridge | `parameter_bridge` exit -11 | exit -6 (SIGABRT, "corrupted double-linked list", a different, older symptom) |
 |---|---|---|---|
@@ -45,11 +45,16 @@ The `-11` column below is OBSERVED-NOT-RECORDED: it was read from the console at
 | 3 more runs, platform package at `dfd44a5`, a few hours later, same code | 12 | 0 | 1 |
 | 3 more runs, platform package at `dfd44a5`, a few hours later, with test-only changes | 12 | 0 | 1 |
 | 3 more runs, platform package at `dfd44a5`, the next day (P23), after a clean rebuild | 12 | **1** (run 1, in the **M07** launch test, the gripper test was clean; the console tail is `evidence/p23/a7_run1_console_tail.txt`) | not counted | not counted |
-| 3 more runs, platform package at `dfd44a5`, the next day (P24, exit codes now **recorded** in the report's `process_exits`), after a clean rebuild | 12 | **0** (recorded) | not counted |
+| 3 more runs, platform package at `dfd44a5`, the next day (P24, `15109f9`; exit codes now **recorded** in the report's `process_exits`), after a clean rebuild | 12 | **0** (RECORDED) | 0 (RECORDED) |
+| 3 runs, `dfd44a5`, P25 (`1165166`), RECORDED | 12 | **0** (RECORDED) | **1** (RECORDED: run 3, G01, `parameter_bridge-3`; the instance name was not checked) |
+| 3 runs, `dfd44a5`, P27 (`26f539c`), RECORDED | 12 | **0** (RECORDED) | 0 (RECORDED) |
+| 3 runs, `dfd44a5`, P28 (`a14a3ff`), RECORDED | 12 | **1** (RECORDED: run 2, G02, `parameter_bridge-3`, which in that launch is **`platform_bridge`**) | 0 (RECORDED) |
 
-Up to P23 that is **3 of 72 launches in total, 3 of 48 on the one platform package where it was seen** (observed; the P24 row is recorded and is not added); the four sets of three on that package gave 2, 0, 0 and 1, so we cannot say the
-rate depends on anything we changed or on the platform package. The first two crashes were in the same launch test (the gripper test, Bullet-Featherstone), in the same bridge instance; the third was in another launch test (M07's), and the console tail does not name the instance. We have not
-run a larger sample and have no claim about the true rate. **The only observed rate is 3 of 72 launches since P18, OBSERVED-NOT-RECORDED: the exit codes were read from the console, and the reports record only which checks failed (G02 and AUX twice, M07 and AUX once).** (An earlier figure from this project, about 1 in 7 G02 runs, appeared in a report with no evidence behind it and was never recorded; we searched our earlier reports and logs and found no SIGSEGV of this process in them. Please do not rely on it.)
+**Observed (OBSERVED-NOT-RECORDED, console, up to P23): -11 in 3 of 72 launches since P18, 3 of 48 on the one platform package where it was seen.** The four observed sets of three on that package gave 2, 0, 0 and 1, so we cannot say the rate depends on anything we changed or on the platform package. The first two observed crashes were in the same launch test (the gripper test, Bullet-Featherstone), in the same bridge instance (`base_joint_states_bridge`); the third was in another launch test (M07's), and the console tail does not name the instance. (An earlier figure from this project, about 1 in 7 G02 runs, appeared in a report with no evidence behind it and was never recorded; we searched our earlier reports and logs and found no SIGSEGV of this process in them. Please do not rely on it.)
+
+**Recorded (RECORDED, derived from `process_exits` of 12 committed A7 runs, P24, P25, P27 and P28, all on platform package `dfd44a5`): 48 launches with this bridge, 96 `parameter_bridge` processes. Exit -11 in 1 of 48 launches** (P28 run 2, the G02 launch, `parameter_bridge-3`); **exit -6 in 1 of 48 launches** (P25 run 3, the G01 launch, `parameter_bridge-3`); every other bridge process exited 0. The 1 recorded and the 3 observed are different bases and are **not added**: that would claim 4 of 120 launches, and the observed 72 and the recorded 48 do not overlap but were counted by different methods. We have no claim about the true rate.
+
+**The recorded crash was in `platform_bridge`, not in our bridge.** In the P28 G02 launch's own log `parameter_bridge-3` is the node `platform_bridge` (the platform package's bridge: clock, odom, tf, lidar, imu and the rest) and `base_joint_states_bridge` is `parameter_bridge-4`. So the observed crashes in our one-entry bridge are not the only form of this: the same exit at the same stage of the shutdown has now been recorded in the bridge that is not ours. That is one case.
 The exit -6 case, a heap-corruption abort of the same executable at the same moment, was seen before (the project's process guard allows it and says so), which suggests one
 underlying teardown problem with two outcomes, not two problems. That is a guess.
 

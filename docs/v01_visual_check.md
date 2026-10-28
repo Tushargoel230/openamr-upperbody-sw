@@ -330,3 +330,29 @@ of the outer box. Not closed: the stages' overlap in volume (needs the housing w
 inner section sits centred and the same way round (the drawing does not say; taken so), whether the plate's rear edge is flush with the column's rear face (derived from "240 of
 column plus 120 ahead", not stated), the column's parent frame and the acceptance of the xacro edits (Alex's), and `lift_mass_tl3_400` (null: V01 `WARN`). The density band of the lift
 mass had to be re-fitted (100 to 1600 kg/m3, was 1200) because the sourced section puts 11.7 kg at 1533 kg/m3: that is a judgement call recorded in the datum, not a measurement.
+
+## Sheet for a person: the six P28 captures (to be filled in by a human)
+
+**Nothing on this sheet has been filled in or inferred, and nothing here is closed.** The two right-hand columns are empty on purpose: V01 only turns from `WARN` when a person has looked and written down what they read. A reading is a number, not "looks fine".
+
+The six captures are in `evidence/p28/rviz/` (`rviz_<stop>_<plate>.png`, 1500 x 945, real RViz2 with the MotionPlanning display on the mock stack, fixed frame `base_link`, one fixed camera; each `.json` beside it records the lift joint read back from `/joint_states`: 0.000, 0.175 and 0.350 m for L1000, L1175 and L1350). They are stills: they can show what is drawn, not a TF reading, not a motion, not a controller. The arms are in the mock stack's initial joint state; I did not check that it is the `home` pose. Where an item needs a number from `tf2_echo`, run `ros2 launch openamrobot_upperbody_bringup view.launch.py base_plate:=bp000` (the checklist above says how) and read it there.
+
+**Part A, about ten minutes (items 1 to 4: what the stills can show).**
+
+| # | What to read | Expected | Where | Captures that show it | Your reading | PASS / FAIL (human) |
+|---|---|---|---|---|---|---|
+| 1 | the column and the carriage, three stops | `tf2_echo base_footprint lift_column_base_link`: x 0.060, z 0.304 at `bp000`, x 0.110 at `bp050`. `tf2_echo base_footprint openarm_left_base_link`: z **1.000 / 1.175 / 1.350** at L1000 / L1175 / L1350, x and y the same at all three (x 0.240 at `bp000`, 0.290 at `bp050`, y +0.031). Drawn: outer stage 0.240 x 0.060 x 0.530 m, inner stage 0.2095 x 0.051 x 0.350 m rising with the carriage | live (`tf2_echo`); the picture for the drawn part | `rviz_L1000_bp000.png`, `rviz_L1175_bp000.png`, `rviz_L1350_bp000.png` (the carriage height at the three stops); `rviz_L1000_bp050.png` against `rviz_L1000_bp000.png` (the 0.050 m shift) | | |
+| 2 | the arm profile, the adapter plate and the two mounts | profile box 0.120 fore-aft x 0.060 across x 0.340 m, centre 0.180 m ahead of the column axis, long side fore-aft. Plate 0.360 x 0.100 x 0.010 m under it: rear edge flush with the column's rear face, front edge level with the profile's front face (0.240 m from the axis), **gap between the plate's top and the profile's bottom 0.000**. `tf2_echo lift_carriage_link openarm_left_base_link`: x 0.180, y +0.031, z 0.166; the right one y -0.031 (62 mm apart) | live (`tf2_echo`); the picture for the plate and the profile | `rviz_L1350_bp000.png` and `rviz_L1350_bp050.png` (the profile is highest there); any other for the orientation | | |
+| 3 | the arms against each other, the profile and the base: contact count | **0** pairs of arm links whose drawn volumes overlap, at every stop and both plates (MoveIt's check on the collision geometry says 0 of 567 enabled pairs; `evidence/p28/v01_geometry.json`). Count what you see, and if it is not 0 write the two link names and how deep | the picture | all six | | |
+| 4 | the sensors: heights and directions | `tf2_echo base_footprint head_camera_mount_link`: z 1.223 + lift (1.223 at L1000, 1.573 at L1350), x 0.262 at `bp000` (0.312 at `bp050`); the optical frame 25 degrees down at `hp25`. Wrist cameras at (0, +-0.05, -0.03) from the hand base: say whether that is near the hand | live (`tf2_echo`); the stills only if the sensor frames are drawn in them (not checked) | `rviz_L1000_bp000.png` and `rviz_L1350_bp000.png` (the head camera at the two ends of the range) | | |
+
+**Part B, not in the ten minutes (items 5 to 8: no capture shows them).** They need a running simulator, a trajectory or a goal; listing them here so that nothing is dropped. Procedure and numbers are in "Items" above.
+
+| # | What to read | Expected | Where | Captures that show it | Your reading | PASS / FAIL (human) |
+|---|---|---|---|---|---|---|
+| 5 | driving: distance and offset | about 1.0 m and about 2.5 rad; `base_footprint` -> `lift_carriage_link` unchanged by driving (offset change 0.000); say whether RViz's and Gazebo's models are further apart than a wheel's width | live (simulator) | none | | |
+| 6 | an arm trajectory: what moves | `openarm_left_joint1/2/4` at the end 0.3 / -0.6 / 1.2 (within 0.02); right arm and wheels moved by less than 0.001 | live (simulator) | none | | |
+| 7 | the gripper: both fingers | `finger_joint1` and `finger_joint2` equal within 0.01; the right hand opposite in sign | live (simulator) | none | | |
+| 8 | MoveIt: a named pose, preview and execution | `hands_up`: final `openarm_left_joint4` 1.5 (within 0.01), real and Scene Robot end-effector within 0.01 m; `park` equal to `home`; grippers `closed` +0.7854 / -0.7854, `open` 0 | live (simulator, MoveIt) | none | | |
+
+Also for a person, and not answerable from a still: whether the stages, the plate and the profile look like the supplier's parts (they are boxes, and the two stages still overlap in volume), and whether the colour you see in RViz is the colour you see in Gazebo (P25 finding; Gazebo's is greyer and darker).
