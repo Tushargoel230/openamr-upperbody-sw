@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""P25: the three placeholder boxes (the two lift-column stages and arm_profile_link) have one named material with an explicit colour,
+"""P25 (P28: four boxes since the adapter plate became its own link): the placeholder boxes (the two lift-column stages, the adapter plate and arm_profile_link) have one named material with an explicit colour,
 in the URDF for RViz and in a <gazebo reference> block for Gazebo, and the two carry the same numbers.
 
 Why a test: a visual with no <material> is drawn red by RViz and black by Gazebo, so the two windows disagreed about the same box; and
@@ -19,7 +19,7 @@ import pytest
 
 from conftest import MATRIX, expand, expand_xml
 
-LINKS = ["lift_column_base_link", "lift_carriage_link", "arm_profile_link"]
+LINKS = ["lift_column_base_link", "lift_carriage_link", "adapter_plate_link", "arm_profile_link"]
 MATERIAL = "placeholder_geometry"
 
 

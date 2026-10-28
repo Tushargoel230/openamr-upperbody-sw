@@ -258,7 +258,9 @@ def test_t10_every_mass_of_ours_declares_a_density_band_and_sits_inside_it():
     for r in rows:
         assert r["band"][0] < r["band"][1] and r["within"], f"{r['datum']}: {r['density_kg_m3']} kg/m3 outside {r['band']} over {r['bounding_box']}"
     lift = next(r for r in rows if r["datum"] == "lift_mass_dold_v4_350")
-    assert lift["density_kg_m3"] == 383.4 or abs(lift["density_kg_m3"] - 383.4) < 0.1, lift
+    # P28: 11.7 kg over the SOURCED outer section 0.240 x 0.060 x 0.530 m (it was 383.4 over an invented 0.240 x 0.240); the band's upper bound was
+    # re-fitted from 1200 to 1600 for that, see the datum's reason
+    assert abs(lift["density_kg_m3"] - 1533.0) < 0.1, lift
 
 
 def test_t10_the_check_is_scoped_to_our_masses_not_upstreams():
@@ -269,9 +271,12 @@ def test_t10_the_check_is_scoped_to_our_masses_not_upstreams():
 def test_t10_the_density_check_flags_the_v01_f2_case_and_a_missing_band():
     """The mast of A6: 3.0 kg over 0.060 x 0.120 x 1.2365 m is 337 kg/m3. Against a band declared for an extrusion it is flagged."""
     datums = load_datums()["datums"]
-    datums["lift_mass_dold_v4_350"]["value"] = 1.0                 # a column of 1 kg over 0.24 x 0.24 x 0.53 m: 33 kg/m3
+    datums["lift_mass_dold_v4_350"]["value"] = 0.5                 # a column of 0.5 kg over 0.24 x 0.06 x 0.53 m: 66 kg/m3
     (row,) = density_findings(datums)
     assert not row["within"] and row["density_kg_m3"] < 100
+    datums["lift_mass_dold_v4_350"]["value"] = 25.0                # and 25 kg: 3276 kg/m3, denser than solid aluminium
+    (row,) = density_findings(datums)
+    assert not row["within"] and row["density_kg_m3"] > 2700
     datums = load_datums()["datums"]
     del datums["lift_mass_dold_v4_350"]["density_band"]
     (row,) = density_findings(datums)

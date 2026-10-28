@@ -274,9 +274,11 @@ def limitations(sidecars):
         "the lift is not under ros2_control and has no authority to be commanded (option B: effort 0, velocity 0): its state is the "
         "operating point of a run (the mock stub's lift_position in M01; joint_state_publisher's default zero in Gazebo, not read from the "
         "physics), and MoveIt plans the arms from it. The three lift stops are calibration IDs, not configuration IDs",
-        "the lift column has placeholder geometry since b45d8f6 (Alex's follow-up, accepted 16 Oct): a 240 x 240 mm box, visual and collision, on "
-        "each stage. The box is not the supplier's shape and its lateral side is invented (datum lift_column_section), so it is collision "
-        "geometry whose size nobody sourced; arm_profile_link, option B's 340 mm box, is the other collision body of the upper structure",
+        "the lift column is two boxes, visual and collision (since b45d8f6; P28 changed their sizes): the outer (fixed) stage 240 x 60 mm and the "
+        "inner (moving) stage 209.5 x 51 mm, from the DOLD Hexalift datasheet page 4 (datums lift_column_section, lift_inner_section; provisional, "
+        "read from a raster drawing). The boxes are not the supplier's shapes: the outer collision is solid, so the stages still overlap in volume, "
+        "and the inner stage's length is the stroke, not a datasheet figure. The adapter plate (360 x 100 x 10 mm, Alex, P-03 rev19.6 item 18) and "
+        "arm_profile_link, option B's 340 mm box, are the other collision bodies of the upper structure",
         "`park` is a placeholder copy of upstream's `home`, until the safe-pose definition lands under the manipulation action contract",
         "the gripper controller is still the deprecated position_controllers/GripperActionController serving GripperCommand (option 1 of "
         "ADR-009 point 4): this report does not choose between the three gripper interfaces (manipulation#11)",

@@ -224,10 +224,55 @@ def _lift_column_section_assertion(tmp_path):
     assert izz == pytest.approx(mass * (x * x + y * y) / 12)
 
 
+def _expansion_with(datum, value, tmp_path):
+    """The combined expansion with one datum replaced (the revision bumped so the guard is not the thing under test)."""
+    import xml.etree.ElementTree as ET
+
+    import yaml
+
+    from conftest import expand_xml
+    doc = load_datums()
+    doc["datums"][datum]["value"] = list(value)
+    doc["revision"] = "2099-01-01.a"
+    path = tmp_path / f"datums_{datum}.yaml"
+    path.write_text(yaml.safe_dump(doc))
+    return ET.fromstring(expand_xml(datums_file=str(path)))
+
+
+def _box(root, link, kind):
+    return tuple(float(v) for v in root.find(f"link[@name='{link}']/{kind}/geometry/box").get("size").split())
+
+
+def _lift_inner_section_assertion(tmp_path):
+    """x fore-aft first, y lateral second, on the box of the moving stage (the carriage's box), with the stroke as its length."""
+    from conftest import UPPERBODY
+    x, y = 0.200, 0.040
+    root = _expansion_with("lift_inner_section", (x, y), tmp_path)
+    stroke = UPPERBODY["column"]["dold_v4_350"]["stroke"]
+    for kind in ("visual", "collision"):
+        assert _box(root, "lift_carriage_link", kind) == pytest.approx((x, y, stroke)), f"the {kind} of the moving stage does not follow lift_inner_section"
+    assert _box(root, "lift_column_base_link", "collision")[:2] != pytest.approx((x, y)), "the fixed stage must not follow the inner section"
+
+
+def _adapter_plate_section_assertion(tmp_path):
+    """x fore-aft first, y lateral second, thickness from geometry.adapter_plate_thickness; the rear edge stays flush with the column's rear
+    face (the 360 is 240 of column plus 120 ahead), so the plate's centre moves with its length."""
+    from conftest import UPPERBODY
+    x, y = 0.300, 0.080
+    root = _expansion_with("adapter_plate_section", (x, y), tmp_path)
+    t = UPPERBODY["geometry"]["adapter_plate_thickness"]
+    for kind in ("visual", "collision"):
+        assert _box(root, "adapter_plate_link", kind) == pytest.approx((x, y, t))
+    origin = [float(v) for v in root.find("joint[@name='adapter_plate_joint']/origin").get("xyz").split()]
+    column_x = load_datums()["datums"]["lift_column_section"]["value"][0]
+    assert origin == pytest.approx([-column_x / 2 + x / 2, 0.0, t / 2])
+
+
 # one entry per dimension list in datums.yaml: how the xacro consumes it, asserted against an expansion. A list with no entry here
 # FAILS (test_t12_every_dimension_list_has_its_assignment_asserted): a pair of dimensions whose axes are only a note in prose is
 # the V01-F1 defect (the 90 degree mast profile, wrong for six steps and not seen by one test).
-AXIS_ASSERTIONS = {"lift_column_section": _lift_column_section_assertion}
+AXIS_ASSERTIONS = {"lift_column_section": _lift_column_section_assertion, "lift_inner_section": _lift_inner_section_assertion,
+                   "adapter_plate_section": _adapter_plate_section_assertion}
 AXES_BY_LENGTH = {2: ("x", "y"), 3: ("x", "y", "z")}
 
 

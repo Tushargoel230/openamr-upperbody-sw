@@ -167,9 +167,13 @@
     <!-- Derived by scripts/derive_acm.py (P12A) from the model's kinematic tree at bp000, lift_joint at 0: no sampling, no seed. A pair is
          disabled for exactly three reasons, upstream-declared (section 1), `Adjacent` (a structural neighbour) and
          `ConstantTransform` (no movable joint between the links, clear in the one evaluation that settles every configuration):
-         17 Adjacent and 58 ConstantTransform pairs here, none of them from a sampler.
+         18 Adjacent and 61 ConstantTransform pairs here, none of them from a sampler.
          Every other pair is enabled. Record: config/acm/acm_generation.yaml; the way to redo it: scripts/regenerate_acm.sh. -->
-    <disable_collisions link1="arm_profile_link" link2="lift_carriage_link" reason="Adjacent"/>
+    <disable_collisions link1="adapter_plate_link" link2="arm_profile_link" reason="Adjacent"/>
+    <disable_collisions link1="adapter_plate_link" link2="lift_carriage_link" reason="Adjacent"/>
+    <disable_collisions link1="adapter_plate_link" link2="openarm_left_base_link" reason="ConstantTransform"/>
+    <disable_collisions link1="adapter_plate_link" link2="openarm_right_base_link" reason="ConstantTransform"/>
+    <disable_collisions link1="arm_profile_link" link2="lift_carriage_link" reason="ConstantTransform"/>
     <disable_collisions link1="arm_profile_link" link2="openarm_left_base_link" reason="ConstantTransform"/>
     <disable_collisions link1="arm_profile_link" link2="openarm_right_base_link" reason="ConstantTransform"/>
     <disable_collisions link1="base_link" link2="bl_caster_link" reason="Adjacent"/>

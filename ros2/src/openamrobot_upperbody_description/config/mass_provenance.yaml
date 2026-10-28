@@ -23,10 +23,10 @@ groups:
     note: "Not verified by us, and not a datum (ADR-005: the base is platform-sw's). W01: KDL drops base_link's own inertia."
   lift:
     state: external_nominal
-    source: "datum lift_mass_dold_v4_350: the DOLD Hexalift V4 350 catalogue mass, 11.7 kg (Alex, rev19.0, 12 Oct 2026), on a placeholder box inertial (section lift_column_section, whose lateral side is not sourced) at mid-height of the retracted column; the catalogue does not split the mass between the fixed part and the moving stage"
+    source: "datum lift_mass_dold_v4_350: the DOLD Hexalift V4 350 catalogue mass, 11.7 kg (Alex, rev19.0, 12 Oct 2026), on a uniform-box inertial of the outer section (datum lift_column_section, 240 x 60 mm, DOLD datasheet page 4) at mid-height of the retracted column; the catalogue does not split the mass between the fixed part and the moving stage"
     owner: "Alex (F2S) for the figure; A6 (this repo) for the box"
     datum: lift_mass_dold_v4_350
-    note: "The mass is a supplier catalogue figure, not weighed here: another owner's number, not verified by us. The shape it sits on is a placeholder, which is why the datum lift_column_section stays placeholder."
+    note: "The mass is a supplier catalogue figure, not weighed here: another owner's number, not verified by us. The box it sits on is a model choice (a uniform box of the outer section, all of the mass on the fixed side), not the supplier's mass distribution; the datasheet (page 5) lists 11.7 kg for the V4, the same figure."
   openarm:
     state: external_nominal
     source: "upstream openarm_description's nominal link masses at the pinned commit (config/upstream_pins.yaml); arms and grippers, no body (ADR-008)"
