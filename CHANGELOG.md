@@ -5,6 +5,21 @@ All notable changes to this repository. Evidence for the description is static a
 
 ## [Unreleased]
 
+### Fixed (P29, 28 Oct 2026; test-only, one race and two false lines)
+
+- **The AUX race in `test_zz_a_reading_beyond_the_epsilon_is_not_hidden` (P28 A7 run 2: 42 != 41).** Root cause: the test compared `activations` read **before** switching the injected value to -1e-3 with
+  `activations` read **after**; the publisher keeps sending the in-epsilon noise (-2.5e-7) until the switch takes effect and each such message is a legitimate clamp, so one still in flight when the first number was
+  read made the two differ by one. Nothing beyond the epsilon was ever counted as a clamp; the baseline was wrong, not the clamp. Fix (test only): the baseline is the snapshot in which the first beyond-epsilon
+  reading has been counted (the clamp sees one publisher's messages in order, so every earlier noise message is counted by then), and a single-snapshot check that `max_magnitude_rad` is still the noise
+  (2.5e-7) is added: a 1e-3 reading counted as a clamp would put 1e-3 there. **As strict as before, and stricter for a reading hidden once**: against two broken clamps (every beyond-epsilon reading also counted
+  as a clamp; only the first) the new test fails on both, with the real clamp it passes, run alone 30 of 30 (`evidence/p29/`). No clamp, epsilon or margin was touched.
+- **Two false lines in the design folder** (`DATUMS.md` line 64, `VERIFICATION.md` lines 75 to 77) said the column's lateral side is invented; both now say it is sourced (240 x 60 outer, 209.5 x 51 inner, DOLD Hexalift
+  datasheet p.4). `VERIFICATION.md` line 78 still says V01's "0 of 478" has not been re-taken; it was (0 of 567, P28). It was outside the lines P29 may edit.
+- **The ros_gz draft** (`docs/issues/ros_gz-bridge_teardown_segfault.md`) has the P25, P27 and P28 rows from the committed reports. Recorded since P24: 48 launches with the bridge, -11 in 1 (P28 run 2, G02, `parameter_bridge-3`,
+  which is `platform_bridge`, not our bridge), -6 in 1 (P25 run 3, G01). Observed up to P23: 3 of 72. Reported separately, not added. Still **not filed** (no credential).
+- **A blank V01 sheet for a person** (`docs/v01_visual_check.md`, last section): items 1 to 8 with the expected value and the capture that shows it; the reading and PASS/FAIL columns are empty. V01 stays WARN.
+- **A7 x3 on `c84cfbd`: 14 / 2 / 0 each** (`evidence/p29/reports/`, not in `evidence/reports/`: see `evidence/p29/README.md`); no check changed result against the clean P28 run, no `parameter_bridge` -11 or -6. A6 was not re-run (test-only change).
+
 ### Changed (P28, 28 Oct 2026; Alex's column answer of 22 Oct, P-03 rev19.6 item 18)
 
 - **The lift column's lateral side is no longer invented.** `lift_column_section` was `[0.240, 0.240]`, placeholder: x was option B's own statement and y was set equal to it. It is now
