@@ -322,3 +322,21 @@ Three A6 and three A7 runs on `a14a3ff` (the lift column on the DOLD datasheet's
 - **A7 run 2: G02 and AUX.** G02 failed because `parameter_bridge-3` exited -11 (the shutdown SIGSEGV, not allow-listed, tracked upstream by the drafts in `docs/issues/`); recorded in the report's `process_exits`. AUX failed on `test_zz_a_reading_beyond_the_epsilon_is_not_hidden` (`test_joint_state_clamp_loop.py:146`, `42 != 41`): the test reads the clamp's activation counter, switches the injected value, and asserts the counter did not move, so one more in-epsilon reading clamped between the two reads fails it. It is a race in an existing test, AUX passed in the nine A7 runs of P24, P25 and P27 and in the other two A7 runs of P28 (the P26 and earlier runs were not re-counted); I did not investigate or change it (outside this step). Extracts: `../p28/a7_run2_failures.txt`.
 - **M03 (all three runs, PASS):** 99 disabled pairs (20 upstream, 38 `Adjacent` in total, 61 `ConstantTransform`), 567 of 666 enabled; no unjustified pair, no wrong label, no constant pair colliding at any stop.
 - **Process exits (recorded):** 24 `parameter_bridge` processes in the 12 simulator launches of the three A7 runs; one ended in -11 (run 2, G02).
+
+## P29
+
+Three A7 runs on `c84cfbd` (the AUX race fixed in the test, `4f2c3b4`; docs only after that), clean tree, platform-sw `dfd44a5`. A6 was not re-run: nothing it covers changed. Details in `../p29/README.md`.
+
+| file | run | result |
+|---|---|---|
+| `20261028T090816Z_a7.json` | A7 1 | 14 PASS, 2 WARN (M07, V01), 0 FAIL |
+| `20261028T091706Z_a7.json` | A7 2 | 14 PASS, 2 WARN (M07, V01), 0 FAIL |
+| `20261028T092556Z_a7.json` | A7 3 | 14 PASS, 2 WARN (M07, V01), 0 FAIL |
+
+- **Root cause of the P28 AUX failure.** `test_zz_a_reading_beyond_the_epsilon_is_not_hidden` compared the clamp's `activations` read before the injected value was switched with `activations` read after it. The publisher keeps sending in-epsilon noise until the switch lands and each such message is a legitimate clamp, so one in flight when the first number was read made the two differ by one (42 against 41). Nothing beyond the epsilon was counted as a clamp. It was a race in the test, not a clamp fault.
+- **Fix (`4f2c3b4`, test only).** The baseline is the snapshot in which the first beyond-epsilon reading has been counted, and `max_magnitude_rad` is checked within one snapshot. No clamp, epsilon or margin changed.
+- **30 of 30.** The test alone, 30 iterations of the clamp-on launch test, the testcase read from the xunit each time: 30 pass, none skipped (`../p29/clamp_loop_30.txt`).
+- **Two mutations, both caught.** A clamp that also counts every beyond-epsilon reading as a clamp fails (`85 != 43`); a clamp that counts only the first one fails (`0.001 != 2.5e-07`); the real clamp passes (`../p29/mutation_check.txt`). They were run with `launch_test` directly: under `colcon test` the install's `PYTHONPATH` hook wins and a mutation placed on `PYTHONPATH` does nothing.
+- **A7 x3: 14 / 2 / 0, each.** No check changed result against the clean P28 run; M03 99 disabled, 567 of 666 enabled in all three. The AUX failure did not occur.
+- **Process exits (recorded):** 24 `parameter_bridge` processes in the 12 simulator launches of the three runs: none ended in -11 (`../p29/run_exit_codes.txt`). Over P24 to P29, the 60 launches whose exit codes are recorded have one -11 (P28 run 2, G02, `parameter_bridge-3`, which is `platform_bridge` of openamr-platform-sw and not this branch's `base_joint_states_bridge`). The observed console figures (up to P23) are a different basis and are not added to it.
+- **Run level, now:** of the 27 A7 runs on `dfd44a5` of P19 to P29, 4 had a failed check on the bridge crash, 15 percent (3 observed, 1 recorded; kept apart in the PR body). The reports of this section were first committed in `evidence/p29/reports/` and moved here in P30, together with the PR body and ledger figures that derive from them.
