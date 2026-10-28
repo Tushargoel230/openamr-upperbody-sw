@@ -148,7 +148,7 @@ claims:
       startswith: 15109f9
   near: 15109f9
 - doc: docs/pr/PR14_BODY.md
-  claim: 3 of 21
+  claim: 4 of 24
   kind: json_count
   numerator:
     glob: evidence/reports/*_a7.json
@@ -174,9 +174,9 @@ claims:
   reason: 'arithmetic or a probability derived from other figures; the result is not itself written in any file under evidence/: 3 of the 12 A7 runs of P19 to P23
     (backed by the reports'' failed checks)'
 - doc: docs/pr/PR14_BODY.md
-  claim: 14 percent
+  claim: 17 percent
   kind: unbacked
-  reason: 'arithmetic or a probability derived from other figures; the result is not itself written in any file under evidence/: 3 of the 21 A7 runs on dfd44a5 (backed
+  reason: 'arithmetic or a probability derived from other figures; the result is not itself written in any file under evidence/: 4 of the 24 A7 runs on dfd44a5 (backed
     by the reports'' failed checks)'
 - doc: docs/pr/PR14_BODY.md
   claim: 3 of 48
@@ -396,9 +396,9 @@ claims:
   kind: unbacked
   reason: V01 item 8's own sentence; see evidence/v01/item_8_goal_vs_real_ee.json (checked by hand, not by this tool)
 - doc: report:dev
-  claim: 5 of 14
+  claim: 4 of 16
   kind: unbacked
-  reason: the report's own provenance block gives placeholder 5, provisional 8, verified 1; 14 is their sum, which is not itself written in the report
+  reason: the report's own provenance block gives placeholder 4, provisional 11, verified 1; 16 is their sum, which is not itself written in the report
 - doc: report:a7
   claim: 0 of 6000
   kind: unbacked
@@ -556,3 +556,8 @@ claims:
   kind: unbacked
   reason: a colcon test total or per-package count of Alex's run; the colcon logs are not under evidence/ (the committed reports carry per-check results, not colcon
     totals)
+- doc: docs/pr/PR14_BODY.md
+  claim: 0 of 567
+  kind: record
+  file: evidence/p28/README.md
+  contains: 0 of 567 enabled pairs colliding at all six configurations

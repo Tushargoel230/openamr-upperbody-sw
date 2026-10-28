@@ -153,6 +153,18 @@ citations:
     revision: P-03-rev19.0
     quote: "the register entries ARM-MOUNT, FRAMES-REP105 and NEAR-FIELD-FRAMES at P-03 rev19.0"
   - document: design:decisions/ADR-010-lift-replaces-indexed-mast.md
+    decision: ARM-MOUNT
+    revision: P-03-rev19.0
+    quote: "Its ARM-MOUNT entry at P-03 rev19.0"
+  - document: design:decisions/ADR-010-lift-replaces-indexed-mast.md
+    decision: ARM-MOUNT
+    revision: P-03-rev19.0
+    quote: "the ARM-MOUNT entry at P-03 rev19.0 says the opposite"
+  - document: design:decisions/ADR-010-lift-replaces-indexed-mast.md
+    decision: ARM-MOUNT
+    revision: P-03-rev19.0
+    quote: "The register's ARM-MOUNT entry (P-03-rev19.0 item 19"
+  - document: design:decisions/ADR-010-lift-replaces-indexed-mast.md
     decision: NEAR-FIELD-FRAMES
     revision: P-03-rev19.0
     quote: "the register entries ARM-MOUNT, FRAMES-REP105 and NEAR-FIELD-FRAMES at P-03 rev19.0"

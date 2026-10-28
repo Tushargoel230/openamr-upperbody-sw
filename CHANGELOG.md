@@ -5,6 +5,33 @@ All notable changes to this repository. Evidence for the description is static a
 
 ## [Unreleased]
 
+### Changed (P28, 28 Oct 2026; Alex's column answer of 22 Oct, P-03 rev19.6 item 18)
+
+- **The lift column's lateral side is no longer invented.** `lift_column_section` was `[0.240, 0.240]`, placeholder: x was option B's own statement and y was set equal to it. It is now
+  **`[0.240, 0.060]`, source `supplier`, status `provisional`**, from the DOLD Hexalift datasheet (version 2023_08_16, page 4, the dimensioned drawings: "Outer profile 240x60";
+  https://www.dold-mechatronik.de/documents/Datasheets/AluminumProfiles/TelescopicLifters/telescopic_lifters_en.pdf), and it matches option B drawing sheet 2 rev A. Provisional because
+  it is read from a raster drawing in a supplier datasheet, not from CAD. The note "the one invented number of the lift" is gone with it; the `placeholder` count of the datums goes from 5 to 4
+  (16 datums: 4 placeholder, 11 provisional, 1 verified). Datums revision `2026-10-28.a`, so every `config_id` changes.
+- **The carriage is the Hexalift's inner stage, and the datasheet gives its section.** New datum `lift_inner_section` `[0.2095, 0.051]` (supplier, provisional; the same drawing, "Inner profile
+  209.5x51"), replacing a second copy of the outer section on `lift_carriage_link`. **The placeholder case did not apply**: the section is in the datasheet, on page 4, as an embedded image the
+  PDF's text layer does not contain. Taken the same way round as the outer stage and centred (the drawing does not say); its length is still the 0.350 m stroke (the datasheet gives no stage length).
+  It nests in the outer section with 15.25 mm fore-aft and 4.5 mm lateral clearance each side. **It does not remove the overlap in volume**: the outer stage's collision is a solid box
+  (stage overlap 0.003740 m3 at L1000, was 0.020160; `evidence/p28/v01_geometry.json`).
+- **The adapter plate is its own link.** `adapter_plate_link`, **360 x 100 x 10 mm** (new datum `adapter_plate_section` `[0.360, 0.100]`, plan, provisional; Alex, 22 Oct, P-03 rev19.6 item 18; the 360 is 240 of
+  column plus 120 ahead of its front face, so its rear edge is flush with the column's rear face and its front edge is the arm profile's front face), visual and collision, on `lift_carriage_link`,
+  closing the 10 mm gap under the arm profile. **`arm_profile_link` is now the plate's child**, not the carriage's: the two faces touch by design, siblings that touch are a permanent collision in
+  the matrix derivation (it reported `adapter_plate_link <-> arm_profile_link` and wrote nothing), a parent and its child are a structural neighbour. The profile's pose from the carriage is unchanged
+  (`test_p28_lift_geometry.py`). Opt-in `adapter_plate` on option B's macro (default none, as `column_geometry`); `column_geometry` gains `inner_x` and `inner_y`.
+- **Collision matrix re-derived: 99 disabled pairs** (20 upstream + 18 `Adjacent` + 61 `ConstantTransform`), was 95; **567 of 666 pairs enabled** (37 geometry-bearing links), was 535 of 630. The four new
+  pairs are the plate's (with the carriage and the profile, `Adjacent`; with the two arm base links, `ConstantTransform`); `arm_profile_link` <-> `lift_carriage_link` moved from `Adjacent` to
+  `ConstantTransform` because the plate now lies between them. **Nesting the inner stage moved no pair**: the two stages are a pair across `lift_joint`, a structural neighbour, disabled without being evaluated.
+  M03 PASS in all three runs. The sampled information moves with the narrower column (for example `lift_column_base_link` <-> `openarm_right_ee_base_link` 64 to 35 of 2000 samples at L1000); it is information, not a result.
+- **The lift mass's density band was re-fitted, and that is a judgement call.** 11.7 kg over the sourced 0.240 x 0.060 x 0.530 m is 1533 kg/m3, outside the band 100 to 1200 whose upper bound was the datum author's 40 per cent
+  fill estimate over an invented square section. The band is now 100 to 1600 (reason in the datum, which says the check is weaker on the upper side); T10 pins 1533. The DOLD datasheet (page 5) lists 11.7 kg for the V4,
+  the catalogue figure the datum already had.
+- **Runs on `a14a3ff`, platform-sw `dfd44a5`: A6 x3 25 / 3 / 0; A7 x3 14 / 2 / 0, 12 / 2 / 2 (G02: the bridge -11 at shutdown, not allow-listed; AUX: a race in `test_zz_a_reading_beyond_the_epsilon_is_not_hidden`), 14 / 2 / 0.**
+  A first attempt on `25843dc` failed H01 (the new test file was in no CMake line) and was repeated from the start on the amended commit. V01 record: `docs/v01_visual_check.md`, last section; six RViz captures in `evidence/p28/rviz/`.
+
 ### Fixed (P27, 21 Oct 2026; the three reviewer findings on PR #14 at `ba5b4ea`)
 
 - **M07 rejects non-finite joint positions and FAILs on them (Mohammad, twice).** Before: a NaN compares false with everything, so 50 NaNs per expected joint

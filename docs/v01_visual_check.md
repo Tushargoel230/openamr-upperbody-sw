@@ -5,7 +5,9 @@ Numeric checks are not visual ones: the 80 mm square mast section passed every t
 **"Looks fine" does not clear it.** Answer each of the eight items below with what you **measured or counted**, not with how it looked:
 every item names the number to read and where to read it from, and the number it should be.
 
-## Status: WARN. The look at the mast found two defects; the eight items of the lift model are measured (P16, below) and V01 stays WARN
+## Status: WARN. The eight items of the lift model are measured (P16), the placeholder geometry was looked at (P25) and its geometry items are answered (P28, last section); V01 stays WARN
+
+*28 Oct 2026 (P28): Alex answered the column geometry on 22 Oct and the geometry items are answered in the last section: three close (the lateral side, the arm profile on its adapter plate, the carriage no longer a copy of the outer box), one does not (the two stages still overlap in volume), and V01 stays `WARN` because `lift_mass_tl3_400` is still null and because nobody has looked at a screen and answered the checklist. Read the P25 text below as the state before that answer.*
 
 *21 Oct 2026 (P25): looking at the renders of the lift model found five more things in the placeholder geometry; one is fixed and four are measured and wait for Alex. They are the last section of this page. V01 stays WARN. The statements below that the column has no collision geometry are the 14 Oct state (see `CHANGELOG.md`, b45d8f6).*
 
@@ -64,12 +66,15 @@ Look at both windows for each item. Gazebo shows what the physics built; RViz sh
 1. **The lift column and the carriage: three readings.** `tf2_echo base_footprint lift_column_base_link` reads **x 0.060, z 0.304**
    at `bp000` (x 0.110 at `bp050`). With `lift_joint` at 0, 0.175 and 0.350 m (the slider; calibration stops `L1000`, `L1175`,
    `L1350`), `tf2_echo base_footprint openarm_left_base_link` reads **z 1.000, 1.175 and 1.350**, and its x and y do not change
-   between the three (the carriage goes straight up). Record the nine numbers you read. The column has **no collision geometry** (its
-   lateral side is not sourced): if you see a column drawn, say what it is.
-2. **The arm profile and the two mounts: orientation and spacing.** From above in RViz (orbit to look straight down, TF display on),
+   between the three (the carriage goes straight up). Record the nine numbers you read. The column is drawn as two boxes since P28: the outer stage
+   **0.240 x 0.060 x 0.530 m** on `lift_column_base_link` and the inner stage **0.2095 x 0.051 x 0.350 m** on the carriage (the DOLD datasheet's sections; the
+   lengths are ours). Say whether what you see is a narrow column with a thinner stage rising out of it, and read the plate's box (`adapter_plate_link`,
+   **0.360 x 0.100 x 0.010 m**, rear edge flush with the column's rear face) under the arm profile.
+2. **The arm profile, the plate it stands on, and the two mounts: orientation and spacing.** From above in RViz (orbit to look straight down, TF display on),
    measure `arm_profile_link`'s box: **0.120 m fore-aft (x) by 0.060 m across (y)**, 0.340 m tall, its centre **0.180 m ahead** of the
    column axis. `tf2_echo lift_carriage_link openarm_left_base_link` reads **x 0.180, y +0.031, z 0.166** and the right one **y -0.031**:
-   the two arm bases are **62 mm** apart. Record which side of the box is the long one (V01-F1: it must be the fore-aft side).
+   the two arm bases are **62 mm** apart. Record which side of the box is the long one (V01-F1: it must be the fore-aft side). Since P28 the profile
+   stands on `adapter_plate_link` (its parent): its bottom face is the plate's top face (gap **0.000**) and its front face is the plate's front edge (**0.240 m** from the column axis).
 3. **The arms at the home pose: contact count.** At every joint zero and each of the three stops, count the pairs of arm links whose
    drawn volumes overlap (left against right, either against `arm_profile_link`, either against the base): the model's own
    collision check says **0** at all three stops and both base plates. Record your count per stop, and if it is not 0, the two link
@@ -291,3 +296,37 @@ joint hangs; expected unchanged, not run). Whether to do it is Alex's: it is his
 3. **The column's lateral side**: the supplier drawing; until then 240 mm is an invented number that is collision geometry.
 4. **The column's parent frame**: `base_footprint` (floor-referenced heights) or `base_link` (follows the chassis); and whether the standalone wrapper then declares `base_link`.
 5. **Acceptance of the two edits to his xacro** (the material and the unnamed column visuals), as for P15's opt-in parameters, and whether the Gazebo colour should be compensated to match RViz on screen.
+
+## Recorded: the geometry items, answered (P28, 28 Oct 2026)
+
+Alex answered on 22 Oct (P-03 rev19.6 item 18): the column section is the DOLD Hexalift's, and there is a 360 x 100 x 10 mm adapter plate under the arm profile. The
+inner stage's section is in the same datasheet (page 4, the two dimensioned drawings: "Outer profile 240x60", "Inner profile 209.5x51"; they are embedded images, the
+PDF's text layer does not carry them). Measured by script on the expanded URDF and with MoveIt's collision check at the six configurations (`evidence/p28/measure_p28.py`,
+`v01_geometry.json`); six real RViz2 captures in `evidence/p28/rviz/` (the lift joint read back from `/joint_states` equals the stop in all six). **I looked at two of the six
+captures (L1000/bp000 and L1350/bp050); nobody has gone through the checklist on a screen, so V01 stays `WARN` for that too.**
+
+| # | P25 finding | P28 answer | Status |
+|---|---|---|---|
+| 2b | the column's lateral side was invented (square 240 x 240) | `lift_column_section` is **0.240 x 0.060** (supplier, provisional): sourced, no longer invented | **CLOSED** |
+| 2 | the two stages interpenetrate (identical 240 x 240 section) | the carriage is the inner stage, **0.2095 x 0.051**, strictly smaller on both axes and nested in the outer section (margins 15.25 mm fore-aft, 4.5 mm each side laterally). Overlap volume **0.003740 m3 at L1000** (was 0.020160), **0.001870 at L1175** (was 0.010080), 0 at L1350; penetration depth **0.051 m** (was 0.240). Cross-checked by 2 million random points (0.003740) | **NOT CLOSED**: smaller, not gone. The outer stage's collision is a solid box, so the inner box is inside its volume whatever its section (P25's argument stands). A hollow outer needs the housing wall, which the datasheet does not give; what it does bound is that wall plus sliding clearance is at most **4.5 mm laterally** and **15.25 mm fore-aft** per side. The pair is a structural neighbour, so M03 still does not evaluate it |
+| 3 | the arm profile neither overlapped the column nor stood on it (ADR-010 §2 against the register) | the register says it stands on the plate, and the plate exists: `adapter_plate_link`, 0.360 x 0.100 x 0.010, **rear edge flush with the column's rear face (-0.120 from the axis), front edge +0.240**, bottom face on the carriage frame's plane. The profile (x +0.120 to +0.240) stands on it: **gap 0.000 m**, footprint inside the plate's, **front faces coincide**. The plate overhangs the column's front face by 0.120 m, which is all of the profile's footprint (the profile's footprint over the column's top face is 0 m2, as in P25: the plate carries it) | **CLOSED** (ADR-010 §2 corrected; the quotation was Slack's, not the register's) |
+| 4 | `arm_profile_link` has no `<origin>` | unchanged, and its joint is now relative to the plate (x 0.060, z 0.175 from the plate frame): its pose from the carriage is **(0.180, 0, 0.180), as before** | **CONFIRMED** |
+| 1 | the three boxes had no named colour | unchanged; the plate uses the same material | FIXED (P25) |
+| 5 | the column's parent frame (`base_footprint` or `base_link`) | not a geometry item, not changed | **WAITS on Alex** |
+| (P25 5) | acceptance of the edits to his xacro, and the Gazebo colour | P28 adds a third edit to his macro: opt-in `adapter_plate` and the profile re-parented under it, and a fourth parameter value for `column_geometry` (the inner section) | **WAITS on Alex** |
+
+The P16 items read again on the new geometry (frames from the expansion; the plate and the sections did not move a mount, a stop or a frame):
+
+| item | expected | measured at L1000 / L1175 / L1350, bp000 | verdict |
+|---|---|---|---|
+| 1 | column axis x 0.060, z 0.304; arm base z 1.000 / 1.175 / 1.350, x and y unchanged | arm bases (0.240, +-0.031, 1.000 / 1.175 / 1.350) from `base_footprint`, x and y the same at all three; the same at bp050 with x +0.050 | PASS |
+| 2 | profile 0.120 x 0.060 x 0.340, centre 0.180 ahead; bases (0.180, +-0.031, 0.166) | box 0.12 x 0.06 x 0.34, centre (0.180, 0, 0.180) from the carriage; bases unchanged | PASS |
+| 3 | 0 colliding enabled pairs at each stop and both plates | **0 of 567** enabled pairs colliding at all six configurations (MoveIt, lift held at the stop, every other joint at its default). 18 disabled pairs touch at L1000 and L1175, 17 at L1350: the `Adjacent` ones, among them the plate and the profile (face to face by design) and the two stages | PASS (on the collision geometry, as before) |
+| 4 | head camera mount z 1.223 + lift, x 0.262 | (0.262, 0, 1.223) at L1000 | PASS |
+| 5 to 8 | driving, a trajectory, the gripper, MoveIt | not repeated by hand. A7 on the new geometry: G01, M02 (named poses in Gazebo), M01 and M04 PASS in all three runs, G02 PASS in two of three (the third: the bridge crash at shutdown, `parameter_bridge-3` -11) | not re-measured |
+
+**What closes and what does not.** Closed: the lateral side (sourced), the arm profile standing on its plate (the model matches the register), the carriage no longer a second copy
+of the outer box. Not closed: the stages' overlap in volume (needs the housing wall), the inner stage's length (the datasheet gives none, it is the 0.350 m stroke), whether the
+inner section sits centred and the same way round (the drawing does not say; taken so), whether the plate's rear edge is flush with the column's rear face (derived from "240 of
+column plus 120 ahead", not stated), the column's parent frame and the acceptance of the xacro edits (Alex's), and `lift_mass_tl3_400` (null: V01 `WARN`). The density band of the lift
+mass had to be re-fitted (100 to 1600 kg/m3, was 1200) because the sourced section puts 11.7 kg at 1533 kg/m3: that is a judgement call recorded in the datum, not a measurement.

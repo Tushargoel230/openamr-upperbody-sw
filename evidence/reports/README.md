@@ -305,3 +305,20 @@ Three A6 and three A7 runs on `26f539c` (the M07 non-finite fix, Om's two tests,
 | `20261021T134303Z_a7.json` | A7 2 | 14 PASS, 2 WARN (M07, V01), 0 FAIL |
 | `20261021T135052Z_a7.json` | A7 3 | 14 PASS, 2 WARN (M07, V01), 0 FAIL |
 
+
+## P28
+
+Three A6 and three A7 runs on `a14a3ff` (the lift column on the DOLD datasheet's sections, the carriage as the inner stage, the adapter plate, the re-derived matrix), clean tree, platform-sw `dfd44a5`, datums revision `2026-10-28.a`. Details in `../p28/README.md`.
+
+| file | run | result |
+|---|---|---|
+| `20261028T002351Z_dev.json` | A6 1 | 25 PASS, 3 WARN, 0 FAIL |
+| `20261028T002738Z_dev.json` | A6 2 | 25 PASS, 3 WARN, 0 FAIL |
+| `20261028T003126Z_dev.json` | A6 3 | 25 PASS, 3 WARN, 0 FAIL |
+| `20261028T003921Z_a7.json` | A7 1 | 14 PASS, 2 WARN (M07, V01), 0 FAIL |
+| `20261028T004705Z_a7.json` | A7 2 | **12 PASS, 2 WARN, 2 FAIL (G02, AUX)** |
+| `20261028T005455Z_a7.json` | A7 3 | 14 PASS, 2 WARN (M07, V01), 0 FAIL |
+
+- **A7 run 2: G02 and AUX.** G02 failed because `parameter_bridge-3` exited -11 (the shutdown SIGSEGV, not allow-listed, tracked upstream by the drafts in `docs/issues/`); recorded in the report's `process_exits`. AUX failed on `test_zz_a_reading_beyond_the_epsilon_is_not_hidden` (`test_joint_state_clamp_loop.py:146`, `42 != 41`): the test reads the clamp's activation counter, switches the injected value, and asserts the counter did not move, so one more in-epsilon reading clamped between the two reads fails it. It is a race in an existing test, AUX passed in the nine A7 runs of P24, P25 and P27 and in the other two A7 runs of P28 (the P26 and earlier runs were not re-counted); I did not investigate or change it (outside this step). Extracts: `../p28/a7_run2_failures.txt`.
+- **M03 (all three runs, PASS):** 99 disabled pairs (20 upstream, 38 `Adjacent` in total, 61 `ConstantTransform`), 567 of 666 enabled; no unjustified pair, no wrong label, no constant pair colliding at any stop.
+- **Process exits (recorded):** 24 `parameter_bridge` processes in the 12 simulator launches of the three A7 runs; one ended in -11 (run 2, G02).
