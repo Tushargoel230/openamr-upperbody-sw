@@ -134,16 +134,29 @@ class TestClampInTheLoop(unittest.TestCase):
 
     @unittest.skipUnless(CLAMP == "true", "the clamp is on (tracking: openAMRobot/openamr-upperbody-sw#16)")
     def test_zz_a_reading_beyond_the_epsilon_is_not_hidden(self, proc_output):
-        before = self.stats()["activations"]
+        # The counts are compared within snapshots of the clamp's own state, never across the switch. The publisher keeps sending the in-epsilon
+        # noise (-2.5e-7) until the new value takes effect, so a reading read BEFORE the switch (the old `before`) is not a baseline: a noise
+        # message still in flight is a legitimate clamp that lands after it (P28 run 2: 42 != 41). The clamp sees one publisher's messages in
+        # order, so once the first beyond-epsilon reading has been counted every earlier noise message has been counted too, and from that
+        # snapshot on every reading is beyond the epsilon: no further activation may happen.
         type(self).value = -1e-3
-        self.client.spin_until(lambda: self.stats()["over_epsilon"] > 0, 15.0)
+        first = {}
+
+        def first_over_epsilon_seen():
+            first.update(self.stats())
+            return first["over_epsilon"] > 0
+
+        self.client.spin_until(first_over_epsilon_seen, 15.0)
+        self.assertGreater(first.get("over_epsilon", 0), 0, "no reading beyond the epsilon was ever counted")
         outcome = self.plan()
         self.assertFalse(outcome.success, "a joint 1e-3 rad past its limit must still be refused")
         self.assertTrue(proc_output.waitFor("from the starting state is outside bounds by", timeout=5), "move_group's log does not name the refusal")
         s = self.stats()
         self.assertGreater(s["over_epsilon"], 0)
         self.assertAlmostEqual(s["max_over_epsilon_rad"], 1e-3, delta=1e-12)
-        self.assertEqual(s["activations"], before, "nothing beyond the epsilon is counted as a clamp")
+        self.assertEqual(s["activations"], first["activations"], "a reading beyond the epsilon was counted as a clamp after the first one was seen")
+        # one snapshot, no baseline: a 1e-3 reading counted as a clamp (the first one included) would put 1e-3 here, the clamped ones are 2.5e-7
+        self.assertAlmostEqual(s["max_magnitude_rad"], -NOISE, delta=1e-15, msg="nothing beyond the epsilon is counted as a clamp")
 
 
 class TestProcessesAlive(unittest.TestCase):
